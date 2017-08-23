@@ -103,6 +103,36 @@ void manual(int i, const map<int, bool> &L0, const vector<minimizer_t> &index)
 	// print (" -- {}\n", jaccard);
 }
 
+int add_sliding(auto L, auto &boundary, auto key, auto val) 
+{
+	int diff = 0;
+	auto present = L.find(key);
+	if (key <= boundary->first) {
+		if (present == L.end()) {
+			diff = val - boundary->second;
+			boundary--;
+		} else {
+			diff = val - present->second;
+		}
+	}
+	L[key] = val;
+	return diff;
+}
+
+int remove_sliding(auto L, auto &boundary, auto key) 
+{
+	int diff = 0;
+	auto present = L.find(key);
+	if (present == L.end()) 
+		return diff;
+	if (key <= boundary->first) {
+		boundary++;
+		diff = int(boundary->second) - present->second;
+	}
+	L.erase(present);
+	return diff;
+}
+
 auto refine(int x, int y, int sketch_size, const map<int, bool> &L0, const vector<minimizer_t> &index)
 {
 	double tau = ::tau();
@@ -128,32 +158,14 @@ auto refine(int x, int y, int sketch_size, const map<int, bool> &L0, const vecto
 	int seed_i = -1, seed_jaccard;
 	if (jaccard >= tau * sketch_size)
 		seed_i = i, seed_jaccard = jaccard;
-	while (i < y) {
+	/*if (seed_i != -1)*/ while (i < y) {
 		if (index[idx_i].second < i + 1) {
-			auto it = L.find(index[idx_i].first);
-			if (it != L.end()) { // remove left one ONLY if it is not in L0
-				if (it->first <= sth->first) {
-					jaccard -= it->second;
-					sth++;
-					jaccard += sth->second;
-				}
-				L.erase(it);
-			}
+			jaccard += remove_sliding(L, sth, index[idx_i].first);
 			idx_i++;		
 		}
-
-		if (index[idx_j].second < j + 1) { // should we extend?
+		if (index[idx_j].second < j + 1) {
 			bool found = L0.find(index[idx_j].first) != L0.end();
-			auto inL = L.find(index[idx_j].first);
-			if (index[idx_j].first <= sth->first) {
-				if (found && !inL->second)
-					jaccard += found;
-				if (inL == L.end()) {
-					jaccard -= sth->second;
-					sth--;
-				}
-			}
-			L[index[idx_j].first] = found;
+			jaccard += add_sliding(L, sth, index[idx_j].first, found);
 			idx_j++;
 		}
 
@@ -164,7 +176,43 @@ auto refine(int x, int y, int sketch_size, const map<int, bool> &L0, const vecto
 		i++, j++;
 	}
 
+/*****************************************************************************************/
+	
 	//candidates.push_back(make_tuple(i, j, jaccard));
+
+ 	// L has all minimizers now
+ 	// we are mapping p, q to i, j
+ 	// int p, q;
+ 	// int idx_p, idx_q;
+ 	// idx_i/idx_j points to the first/last minimizer of B_i,j
+ 	// idx_p/idx_q points to the first/last minimizer of A
+ // 	while (true) {
+ // 		if (index[idx_q].second < q + 1) {
+ // 			bool found = index[idx_j].first
+ // 		}
+ // 		if (index[idx_j].second <= j + 1) { // should we extend?
+	// 		bool found = L0.find(index[idx_j].first) != L0.end();
+	// 		auto inL = L.find(index[idx_j].first);
+	// 		if (index[idx_j].first <= sth->first) {
+	// 			if (found && !inL->second)
+	// 				jaccard += found;
+	// 			if (inL == L.end()) {
+	// 				jaccard -= sth->second;
+	// 				sth--;
+	// 			}
+	// 		}
+	// 		L[index[idx_j].first] = found;
+	// 		idx_j++;
+	// 	} 
+
+	// 	if (jaccard >= tau * sketch_size && jaccard >= seed_jaccard) {
+	// 		seed_i = i, seed_jaccard = jaccard;
+	// 		break;
+	// 	}
+	// 	i++, j++;
+	// }
+
+
 	return make_pair(seed_i, seed_jaccard);
 }
 
