@@ -1,7 +1,6 @@
 #include <bits/stdc++.h>
 // #define FMT_HEADER_ONLY
 #include <fmt/format.h>
-#include <boost/math/distributions/binomial.hpp>
 using namespace std;
 using namespace fmt;
 
@@ -23,46 +22,13 @@ typedef unordered_map<uint32_t, list<int>> hash_t;
 const int KMER_SIZE = 16;
 static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
 
-const double ERROR_RATE = 0.25;
+const double ERROR_RATE = 0.75;
 const int WINDOW_SIZE = 16; // <-- Needs to be changed
+const int MIN_ALIGNMENT = 1000;
+const int SKETCH_SIZE = 2 * MIN_ALIGNMENT / WINDOW_SIZE;
 const int MIN_READ_SIZE = 1000;
 
 chrono::time_point<chrono::high_resolution_clock> t_start, t_end;
-string reference;
-unordered_map<int, int> ref_index;
-unordered_map<int, int> rev_ref_index;
-
-inline double tau(double error=ERROR_RATE)
-{
-	return 1 / (2 * exp(KMER_SIZE * error) - 1);
-}
-
-template<class X, class Y>
-inline bool in_map(const map<X, Y> &m, X k)
-{
-	return m.find(k) != m.end();
-}
-
-inline double j2md(float j)
-{
-	double d;
-	if (fabs(j) < 1e-8) d = 1;
-	else if (fabs(j - 1) < 1e-8) d = 0;
-	else d = (-1.0 / KMER_SIZE) * log(2.0 * j/(1 + j));
-	return 100 * (1 - d);
-}
-
-inline int estM(int s, double ci=0.75)
-{
-	int i = ceil(s * ::tau());
-	for (; i >= 0; i--)
-	{
-		int x = boost::math::quantile(boost::math::complement(boost::math::binomial(s, double(i) / s), (1.0 - ci) / 2));
-		if (j2md(double(x) / s) >= ERROR_RATE)
-			break;
-	}
-	return i ? i - 1 : 0;
-}
 
 auto get_minimizers(string s) 
 {
@@ -89,7 +55,6 @@ auto get_minimizers(string s)
 }
 
 // k-mer -> (pos)
-unsigned int THRESHOLD = 1<<31;
 auto get_hash (string s) 
 {
 	auto minimizers = get_minimizers(s);
@@ -97,21 +62,12 @@ auto get_hash (string s)
 	for (auto &x: minimizers) {
 		hash[x.first].push_back(x.second);
 	}
-
-	int ignore = (minimizers.size() * 0.001) / 100.0;
-    
-	map<int, int> hist;
-	for (auto &m: hash)
-		hist[m.second.size()] += 1;
-	int sum = 0;
-	for (auto i = hist.rbegin(); i != hist.rend(); i++) {
-		sum += i->second;
-		if (sum <= ignore) THRESHOLD = i->first;
-		else break;
-	}
-	print("threshold {}\n", THRESHOLD);
-
 	return make_pair(minimizers, hash);
+}
+
+inline double tau(double error = ERROR_RATE)
+{
+	return 1 / (2 * exp(KMER_SIZE * error) - 1);
 }
 
 auto get_minimizers(int p, const vector<minimizer_t> &index) 
@@ -127,6 +83,25 @@ auto get_minimizers(int p, const vector<minimizer_t> &index)
 	assert(index[mid].second >= p);
 	assert(!mid || index[mid-1].second < p);
 	return mid;
+}
+
+void manual(int i, const map<int, bool> &L0, const vector<minimizer_t> &index)
+{
+	auto L = L0;
+	int idx_i = get_minimizers(i, index), idx_j;
+	int ii = idx_i;
+	//print(">> {}  ", ii);
+	while (index[ii].second < i+MIN_READ_SIZE) {
+		//print("{:02X}  ", index[ii].first);
+		bool found = (L0.find(index[ii].first) != L0.end());
+		L[index[ii].first] = found;
+		ii++;
+	}
+	auto sth = next(L.begin(), L0.size() - 1);
+	int jaccard = sth->second;
+	for (auto it = L.begin(); it != sth; it++)
+		jaccard += it->second;
+	// print (" -- {}\n", jaccard);
 }
 
 int add_sliding(auto L, auto &boundary, auto key, auto val) 
@@ -159,6 +134,12 @@ int remove_sliding(auto L, auto &boundary, auto key)
 	return diff;
 }
 
+template<class X, class Y>
+inline bool in_map(const map<X, Y> &m, X k)
+{
+	return m.find(k) != m.end();
+}
+
 auto refine(
 	int p, // start of read A
 	int idx_p, int idx_q, // hash range for W(A)
@@ -167,7 +148,6 @@ auto refine(
 	const vector<minimizer_t> &index)
 {
 	double tau = ::tau();
-
 	int i = x, j = x + MIN_READ_SIZE;
 	print("x={}, y={}, span={}, s={}\n", x, y, y-x, L0.size());
 	
@@ -211,24 +191,11 @@ auto refine(
  	// idx_i/idx_j points to the first/last minimizer of B_i,j
  	// idx_p/idx_q points to the first/last minimizer of A
  	int prev_jaccard = jaccard;
- 	vector<tuple<int, int, int, int, int, int>> candidates;
- 	int last_n1 = 0, last_n2 = 0;
+ 	vector<tuple<int, int, int, int, int>> candidates;
  	while (true) {
- 		// print(">> p,q={},{} ({}) i,j={},{} ({}) jaccard={} s={} score={}\n",
- 		// 	p,q,q-p,i,j,j-i,jaccard,L0.size(), j2md(double(jaccard)/L0.size(), KMER_SIZE));
+ 		print(">> p,q={},{} ({}) i,j={},{} ({}) jaccard={} s={}\n",p,q,q-p,i,j,j-i,jaccard,L0.size());
  	// disallow overlaps
- 		if ((i < q && p < j) || (q - p > 1000000)) {
-			candidates.push_back(make_tuple(p, q - 1, i, j - 1,  j2md(double(prev_jaccard)/L0.size()), 0));
- 			break;
- 		}
-
- 		if (reference[q - 1] == 'N') last_n1++; else last_n1 = 0;
- 		if (reference[j - 1] == 'N') last_n2++; else last_n2 = 0;
- 		if (last_n1 > 10 || last_n2 > 10) {
- 			candidates.push_back(make_tuple(p, q - 1, i, j - 1,  j2md(double(prev_jaccard)/L0.size()), 1));
- 			break;
- 		}
-
+ 		if (i < q && p < j) break;
  	// extend right
  		// extend A
  		if (index[idx_q].second < q + 1) {
@@ -255,7 +222,7 @@ auto refine(
 		}
 
 	// If not, remember previous and try shring from the left
-		candidates.push_back(make_tuple(p, q - 1, i, j - 1,  j2md(double(prev_jaccard)/L0.size()), 2));
+		candidates.push_back(make_tuple(prev_jaccard, p, q - 1, i, j - 1));
 		// shrink A
 		if (index[idx_p].second < p + 1) {
  			auto h = index[idx_p].first;
@@ -281,6 +248,7 @@ auto refine(
 	// If not, return
 		break;
 	}
+
 	return candidates;
 }
 
@@ -292,13 +260,14 @@ auto search (int start, const hash_t &hash, const vector<minimizer_t> &index)
 	uint64_t ph = 1LL << 63;
 	int st = get_minimizers(start, index), mi;
 	for (mi = st; index[mi].second - start <= MIN_READ_SIZE; mi++) { // TODO count initial kmer overlap
+		print("{} -- {:02X} {} --- {}\n", mi, index[mi].first, index[mi].second, start);
 		auto &m = index[mi];
 		if (m.first == ph) 
 			continue;
 		L0[m.first] = 0;
 		ph = m.first;
 		auto ptr = hash.find(m.first);
-		if (ptr == hash.end() || ptr->second.size() >= THRESHOLD) 
+		if (ptr == hash.end()) 
 			continue;
 		for (auto &pos: ptr->second) {
 			// TODO Ignore iff hash has too many positions (high freq filter)
@@ -306,13 +275,14 @@ auto search (int start, const hash_t &hash, const vector<minimizer_t> &index)
 			if (!(pos < start - MIN_READ_SIZE || pos > start + 2 * MIN_READ_SIZE))
 				continue;
 			candidates.push_back(pos);
+			print(">>> {}\n", pos);
 		}
 	}
 	sort(candidates.begin(), candidates.end());
 	int M = ceil(L0.size() * tau());
 	print("{} candidates to look for (M={})\n", candidates.size(), M);
 
-	vector<vector<tuple<int, int, int, int, int, int>>> P;
+	vector<vector<tuple<int, int, int, int, int>>> P;
 	int px = -1, py = -1;
 	for (int i = 0; i <= (int)candidates.size() - M; i++) {
 		int j = i + (M - 1);
@@ -331,39 +301,33 @@ auto search (int start, const hash_t &hash, const vector<minimizer_t> &index)
 	return P;
 }
 
+inline double j2md(float j, int k)
+{
+	double d;
+	if (fabs(j) < 1e-8) d = 1;
+	else if (fabs(j - 1) < 1e-8) d = 0;
+	else d = (-1.0 / k) * log(2.0 * j/(1 + j));
+	return 100 * (1 - d);
+}
+
+
 int main(void)
 {
 // 2	chr1	88000	121417	chr1:235525	0	+	chr1	235525	267707	32182	...	32150	31941	209	133	76	0.993499	0.992727	0.006529	0.006532	33417
 // 4	chr1	91256	92392	chr1:521369	0	+	chr1	521369	522487	1118	...	1117	1092	25	18	7	0.977619	0.974130	0.022722	0.022781	1136
-// *rea2 6	chr1	92387	104808	chr1:573869	0	+	chr1	573869	586415	12546	...	12359	12175	184	121	63	0.985112	0.983679	0.015038	0.015056	12421
-// *rea2 10	chr1	92387	135370	chr1:224095998	0	+	chr1	224095998	224139533	43535	...	42819	42180	639	417	222	0.985077	0.983377	0.015074	0.015091	42983
-// *rea2 12	chr1	92387	136258	chr1:243174377	0	+	chr1	243174377	243218157	43780	...	43446	42679	767	507	260	0.982346	0.980338	0.017865	0.017891	43871
+// 6	chr1	92387	104808	chr1:573869	0	+	chr1	573869	586415	12546	...	12359	12175	184	121	63	0.985112	0.983679	0.015038	0.015056	12421
+// 10	chr1	92387	135370	chr1:224095998	0	+	chr1	224095998	224139533	43535	...	42819	42180	639	417	222	0.985077	0.983377	0.015074	0.015091	42983
+// 12	chr1	92387	136258	chr1:243174377	0	+	chr1	243174377	243218157	43780	...	43446	42679	767	507	260	0.982346	0.980338	0.017865	0.017891	43871
 
 	ifstream fin("chr1.fa");
-	string l;
-	string dna;
+	string l, dna;
 	while (getline(fin, l)) {
 		if (l[0] == '>') continue;
 		dna += l;
 	}
 	fin.close();
-
-	//dna = dna.substr(0, 4000000);
-	// for (int i = 0; i < dna.size(); i++) {
-	// 	rev_ref_index[i] = reference.size();
-	// 	if (isupper(dna[i])) {
-	// 		ref_index[reference.size()] = i;
-	// 		reference += dna[i];
-	// 	}
-	// }
 	transform(dna.begin(), dna.end(), dna.begin(), ::toupper);
-	reference = dna;
-
-	int X,Y;
-	X=88000,Y=121417; print("{}-{} ({}) ~ ", rev_ref_index[X],rev_ref_index[Y],rev_ref_index[Y]-rev_ref_index[X]);
-	X=235525,Y=267707; print("{}-{} ({}) \n", rev_ref_index[X],rev_ref_index[Y],rev_ref_index[Y]-rev_ref_index[X]);
-	X=91256,Y=92392; print("{}-{} ({}) ~ ", rev_ref_index[X],rev_ref_index[Y],rev_ref_index[Y]-rev_ref_index[X]);
-	X=521369,Y=522487; print("{}-{} ({}) \n", rev_ref_index[X],rev_ref_index[Y],rev_ref_index[Y]-rev_ref_index[X]);
+	dna = dna.substr(0, 4000000);
 
 	t_start = chrono::high_resolution_clock::now();
 
@@ -371,49 +335,20 @@ int main(void)
 		t_end = chrono::high_resolution_clock::now();
 		print("time: {:.2f}s\n", chrono::duration_cast<chrono::milliseconds>(t_end - t_start).count() / 1000.00), t_start = t_end;
 
-	auto pos = {88000, 91256, 92387};
-	for (auto &p: pos) {
-		auto mapping = search(p, hash.second, hash.first);
-			t_end = chrono::high_resolution_clock::now();
-			print("time: {:.2f}s\n", chrono::duration_cast<chrono::milliseconds>(t_end - t_start).count() / 1000.00), t_start = t_end;
+	auto mapping = search(88000, hash.second, hash.first);
+		t_end = chrono::high_resolution_clock::now();
+		print("time: {:.2f}s\n", chrono::duration_cast<chrono::milliseconds>(t_end - t_start).count() / 1000.00), t_start = t_end;
 
+	print("{} mappings in total\n", mapping.size()); //3654?
+	for (auto &p: mapping) /*if (p.second > .5)*/ {
 		print("----------------------------------\n");
-		print("{} mappings in total\n", mapping.size()); //3654?
-		int MA=0;
-		for (auto &p: mapping) /*if (p.second > .5)*/ {
-			for (auto &pp: p) {
-				print("mapping: {}-{} ({}) to {}-{} ({}), id={}%, reason={}\n",
-					get<0>(pp), get<1>(pp), get<1>(pp)-get<0>(pp),
-					get<2>(pp), get<3>(pp), get<3>(pp)-get<2>(pp),
-					get<4>(pp), get<5>(pp)
-				);
-			
-				// auto fo = fopen(format("_S_MA{}_A.fa", MA).c_str(), "w");
-				// fputs(">SEQ_A\n", fo);
-				// fputs(reference.substr(get<0>(pp), get<1>(pp)-get<0>(pp)).c_str(), fo);
-				// fclose(fo);
-				// fo = fopen(format("_S_MA{}_B.fa", MA).c_str(), "w");
-				// fputs(">SEQ_B\n", fo);
-				// fputs(reference.substr(get<2>(pp), get<3>(pp)-get<2>(pp)).c_str(), fo);
-				// fclose(fo);
-				// auto _ = system(format("blat _S_MA{0}_A.fa _S_MA{0}_B.fa _S_out{0}.psl", MA).c_str());
-				// _ = system(format("tail -n+6 _S_out{0}.psl | cut -f1,2,10-17", MA).c_str());
-				// ifstream ifs(format("_S_out{0}.psl", MA).c_str());
-				// getline(ifs, l);
-				// getline(ifs, l);
-				// getline(ifs, l);
-				// getline(ifs, l);
-				// getline(ifs, l);
-				// getline(ifs, l);
-				// int ma, as, ae, bs, be;
-				// sscanf(l.c_str(), "%d %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %d %d %*s %*s %d %d",
-				// 	&ma, &as, &ae, &bs, &be);
-
-				// print("BLAT reports match={}, {}-{} to {}-{}\n", (100.0*ma)/(get<1>(pp)-get<0>(pp)), as, ae, bs, be);
-			}
-			MA++;
+		for (auto &pp: p) {
+			print("mapping: {}-{} ({}) to {}-{} ({}), id {}\n",
+				get<0>(pp), get<1>(pp), get<1>(pp)-get<0>(pp),
+				get<2>(pp), get<3>(pp), get<3>(pp)-get<2>(pp),
+				get<4>(pp)
+			);
 		}
-		print("\n\n");
 	}
 
 	return 0;
