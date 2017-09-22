@@ -5,6 +5,9 @@
 #include "search.h"
 using namespace std;
 
+#include <boost/icl/interval_map.hpp>
+#include <boost/icl/interval_set.hpp>
+
 /// http://www.biorxiv.org/content/biorxiv/early/2017/03/24/103812.full.pdf
 
 void refine(int p, int idx_p, int idx_q, // query start and W(query) range
@@ -13,7 +16,10 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             const Hash &ref_hash, 
             const Hash &query_hash,
             vector<Hit> &hits, // Output
-            bool allow_overlaps=true);
+            bool allow_overlaps=false);
+
+typedef boost::icl::discrete_interval<int> INTERVAL;
+boost::icl::interval_map<int, boost::icl::interval_set<int>> TREE;
 
 vector<Hit> search (int query_start, 
                     const Hash &ref_hash, 
@@ -26,6 +32,9 @@ vector<Hit> search (int query_start,
     uint64_t prev_hash = 1LL << 63;
     int st = query_hash.find_minimizers(query_start);
     int mi = st;
+
+    auto pf = TREE.find(query_start);
+
     for (; query_hash.minimizers[mi].second - query_start <= MIN_READ_SIZE; mi++) { 
         /// ^^ TODO count initial kmer overlap
 
@@ -40,8 +49,12 @@ vector<Hit> search (int query_start,
         for (auto &pos: ptr->second) {
             // Make sure to have at least 1 kb spacing if reference = query
             // TODO: handle reverse complements
-            if (!allow_overlaps && (!(pos < query_start - MIN_READ_SIZE || pos > query_start + 2 * MIN_READ_SIZE)))
+            if (!allow_overlaps && pos < query_start + 2 * MIN_READ_SIZE)
                 continue;
+
+            if (pf != TREE.end() && pf->second.find(pos) != pf->second.end()) // check overlap!
+                continue;
+
             candidates.push_back(pos);
         }
     }
@@ -66,6 +79,13 @@ vector<Hit> search (int query_start,
     for (auto &t: T) {
         refine(query_start, st, mi, t.first, t.second, L0, ref_hash, query_hash, hits, allow_overlaps);
     }
+
+    for (auto &h: hits) {
+        TREE += make_pair(INTERVAL(h.p, h.q), 
+            boost::icl::interval_set<int>({INTERVAL(h.i, h.j)}));
+    }
+    TREE -= INTERVAL(0, query_start);
+
     return hits;
 }
 

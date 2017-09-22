@@ -66,19 +66,22 @@ int main(int argc, char **argv)
         TIME("Query hashing time", t_start);
 
     auto pos = {88000, 91256, 92387};
-    for (auto &i : pos) { // int i = 0; i < dna.size(); i += 1000) {
-        auto mapping = search(i, ref_hash, query_hash);
-            TIME("Mapping time", t_start);
+    for (int i = 0; i < query.size(); i += 250) {
+        if (query[i] == 'N') continue; // TODO hack
 
-        prn("{} mappings in total", mapping.size()); //3654?
+        auto mapping = search(i, ref_hash, query_hash);
+        //    TIME("Mapping time", t_start);
+
+        // prn("{} mappings in total", mapping.size()); //3654?
         for (auto &pp: mapping) /*if (p.second > .5)*/ {    
-            prn("mapping: Q {}-{} ({}) to R {}-{} ({}), id={}%, reason={}",
-                pp.p, pp.q, pp.q - pp.p,
-                pp.i, pp.j, pp.j - pp.i,
+            prn("{} Q {} {} R {} {} {} {}",
+                i,
+                pp.p, pp.q, // pp.q - pp.p,
+                pp.i, pp.j, // pp.j - pp.i,
                 pp.id, int(pp.break_criteria)
             );
         }
-        prnn("\n");
+        // prnn("\n");
     }
 
     return 0;
