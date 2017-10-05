@@ -65,8 +65,13 @@ int main(int argc, char **argv)
     auto query_hash = Hash(query);
         TIME("Query hashing time", t_start);
 
-    auto pos = {88000, 91256, 92387};
-    for (int i = 0; i < query.size(); i += 250) {
+    auto pos = {121350751, 121361171};
+    // #   (121361171-121418375, 121418376, 121472478),
+    // #   (121350751, 121391239, 121444958, 121485446)), 40k-->57k
+
+    //for (auto i: pos) {
+    //for (int i = 121000000; i < 121370000; i += 250) {
+    for (int i = 17667000; i < query.size(); i += 250) {
         if (query[i] == 'N') continue; // TODO hack
 
         auto mapping = search(i, ref_hash, query_hash);
@@ -74,13 +79,15 @@ int main(int argc, char **argv)
 
         // prn("{} mappings in total", mapping.size()); //3654?
         for (auto &pp: mapping) /*if (p.second > .5)*/ {    
-            prn("{} Q {} {} R {} {} {} {}",
+            prn("{} LEN {} {} Q {} {} R {} {} {} {}",
                 i,
+                pp.q - pp.p, pp.j - pp.i,
                 pp.p, pp.q, // pp.q - pp.p,
                 pp.i, pp.j, // pp.j - pp.i,
                 pp.id, int(pp.break_criteria)
             );
         }
+        break;
         // prnn("\n");
     }
 

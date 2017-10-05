@@ -46,11 +46,13 @@ inline double tau(double error=ERROR_RATE)
 
 inline double j2md(float j)
 {
-    double d;
-    if (std::fabs(j) < 1e-8) d = 1;
-    else if (std::fabs(j - 1) < 1e-8) d = 0;
-    else d = (-1.0 / KMER_SIZE) * std::log(2.0 * j/(1 + j));
-    return 100 * (1 - d);
+    if (std::fabs(j) < 1e-8) {
+        return 100;
+    } else if (std::fabs(j - 1) < 1e-8) {
+        return 0;
+    } else {
+        return 100 * (1 - (-1.0 / KMER_SIZE) * std::log(2.0 * j/(1 + j)));
+    }
 }
 
 int estM(int s, double ci=0.75);
