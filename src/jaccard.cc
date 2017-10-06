@@ -8,7 +8,7 @@ using namespace std;
 inline void TIME(string msg, auto &start)
 {
     auto end = chrono::high_resolution_clock::now();
-    prn("{}: {:.2f}s", 
+    eprn("{}: {:.2f}s", 
         msg, 
         chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.00);
     start = end;
@@ -22,37 +22,40 @@ inline void TIME(string msg, auto &start)
 
 int main(int argc, char **argv)
 {
-    if (argc != 4) exit(1);
+    if (argc < 3) exit(1);
 
-    prn("* Sedef (Jaccard idea), ver {} *", GITVER);
+    eprn("* Sedef (Jaccard idea), ver {} *", GITVER);
     
     auto t_start = chrono::high_resolution_clock::now();
 
     string ref_path = argv[1];
     string query_path = argv[2];
-    bool is_complement = tolower(argv[3][0]) == 'y';
+    bool is_complement = (argc > 3 && tolower(argv[3][0]) == 'y');
 
     string line, reference, query;
 
     ifstream fin;
 
     fin.open(ref_path.c_str());
+    string ref_chr;
     while (getline(fin, line)) {
         if (line[0] != '>') reference += line;
+        else ref_chr = line.substr(1);
     }
     fin.close();
     fin.clear();
 
     transform(reference.begin(), reference.end(), reference.begin(), ::toupper);
     if (is_complement) {
-        exit(1); // TODO implement nicely
         reverse(reference.begin(), reference.end());
         for (auto &c: reference) c = (c == 'A' ? 'T' : (c == 'C' ? 'G' : (c == 'G' ? 'C' : (c == 'T' ? 'A' : c))));
     }
 
     fin.open(query_path.c_str());
+    string query_chr;
     while (getline(fin, line)) {
         if (line[0] != '>') query += line;
+        else query_chr = line.substr(1);
     }
     fin.close();
     transform(query.begin(), query.end(), query.begin(), ::toupper);
@@ -65,29 +68,41 @@ int main(int argc, char **argv)
     auto query_hash = Hash(query);
         TIME("Query hashing time", t_start);
 
-    auto pos = {121350751, 121361171};
+    // auto pos = {121350751, 121361171};
     // #   (121361171-121418375, 121418376, 121472478),
     // #   (121350751, 121391239, 121444958, 121485446)), 40k-->57k
 
     //for (auto i: pos) {
     //for (int i = 121000000; i < 121370000; i += 250) {
-    for (int i = 17667000; i < query.size(); i += 250) {
-        if (query[i] == 'N') continue; // TODO hack
 
-        auto mapping = search(i, ref_hash, query_hash);
+    bool allow_overlaps = (ref_path != query_path) || is_complement;
+    eprn("Allowing overlaps: {}", allow_overlaps);
+
+    for (int i = 0; i < query.size(); i += 250) {
+        while (query[i] == 'N') i++;
+        while (i % 250 != 0) i++;
+
+        auto mapping = search(i, ref_hash, query_hash, allow_overlaps);
         //    TIME("Mapping time", t_start);
 
         // prn("{} mappings in total", mapping.size()); //3654?
         for (auto &pp: mapping) /*if (p.second > .5)*/ {    
-            prn("{} LEN {} {} Q {} {} R {} {} {} {}",
-                i,
-                pp.q - pp.p, pp.j - pp.i,
-                pp.p, pp.q, // pp.q - pp.p,
-                pp.i, pp.j, // pp.j - pp.i,
-                pp.id, int(pp.break_criteria)
+            // BEDPE
+            if (is_complement) {
+                pp.i = ref_hash.seq.size() - pp.i + 1;
+                pp.j = ref_hash.seq.size() - pp.j + 1;
+                swap(pp.i, pp.j);
+            }
+            prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{}\t{}\t{}\t{}\t{}\t{}",
+                query_chr, pp.p, pp.q, 
+                ref_chr, pp.i, pp.j,
+                pp.id, 
+                "+", is_complement ? "-" : "+",
+                // Optional fields
+                int(pp.break_criteria),
+                pp.q - pp.p, pp.j - pp.i
             );
         }
-        break;
         // prnn("\n");
     }
 

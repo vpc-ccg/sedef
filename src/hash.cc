@@ -55,7 +55,7 @@ Hash::Hash (const string &s): seq(s)
         if (sum <= ignore) threshold = i->first;
         else break;
     }
-    prn("Index cut-off threshold: {}", threshold);
+    eprn("Index cut-off threshold: {}", threshold);
 }
 
 int Hash::find_minimizers(int p) const
@@ -68,7 +68,8 @@ int Hash::find_minimizers(int p) const
         if (minimizers[mid].second < p) lo = mid + 1;
         else hi = mid;
     }
-    assert(minimizers[mid].second >= p);
+    assert(minimizers[mid].second >= p || mid == minimizers.size() - 1); // if last one, well, what can we do...
     assert(!mid || minimizers[mid-1].second < p);
+    if (minimizers[mid].second < p) mid++; // zadnji, nema rjesenja
     return mid;
 }

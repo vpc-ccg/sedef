@@ -8,6 +8,9 @@
 #define prn(f, ...)    fmt::print(f "\n", __VA_ARGS__)
 #define prnn(...)      fmt::print(__VA_ARGS__)
 
+#define eprn(f, ...)    fmt::print(stderr, f "\n", __VA_ARGS__)
+#define eprnn(...)      fmt::print(stderr, __VA_ARGS__)
+
 const int    KMER_SIZE = 16;
 static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
 
