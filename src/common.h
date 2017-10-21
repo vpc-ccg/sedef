@@ -11,10 +11,10 @@
 #define eprn(f, ...)    fmt::print(stderr, f "\n", __VA_ARGS__)
 #define eprnn(...)      fmt::print(stderr, __VA_ARGS__)
 
-const int    KMER_SIZE = 16;
+const int    KMER_SIZE = 14;
 static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
 
-const double ERROR_RATE = 0.25;
+const double ERROR_RATE = 0.10;
 const int    WINDOW_SIZE = 16; // <-- Needs to be changed
 const int    MIN_READ_SIZE = 1000;
 
@@ -44,7 +44,7 @@ inline bool in_map(const std::map<X, Y> &m, X k)
 
 inline double tau(double error=ERROR_RATE)
 {
-    return 1 / (2 * std::exp(KMER_SIZE * error) - 1);
+    return (3.0 / 7) / (2 * std::exp(KMER_SIZE * error) - 1);
 }
 
 inline double j2md(float j)

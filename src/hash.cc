@@ -11,11 +11,13 @@ auto get_minimizers(const string &s)
     minimizers.reserve((2 * s.size()) / WINDOW_SIZE);
     deque<minimizer_t> window;
     uint32_t h = 0;
+    const uint32_t MASK = (1 << (2 * KMER_SIZE)) - 1;
     int last_n = - KMER_SIZE - WINDOW_SIZE;
     for (int i = 0; i < s.size(); i++) {
         if (s[i] == 'N') last_n = i;
 
         h = (h << 2) | qdna(s[i]); 
+        h &= MASK;
         if (i < KMER_SIZE) continue;
 
         auto hh = make_pair(bool(last_n >= (i - KMER_SIZE + 1) - WINDOW_SIZE), h);   

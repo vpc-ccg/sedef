@@ -11,6 +11,8 @@ struct SlidingMap {
 
 public:
     SlidingMap(std::map<K, V> m): store(m) {}
+    SlidingMap() {} 
+    
 
     int add(K key, V val) 
     {
@@ -18,10 +20,10 @@ public:
         auto present = store.find(key);
         if (key <= boundary->first) {
             if (present == store.end()) {
-                diff = val - boundary->second;
+                diff = val.second - boundary->second.second;
                 boundary--;
             } else {
-                diff = val - present->second;
+                diff = val.second - present->second.second;
             }
         }
         store[key] = val;
@@ -36,7 +38,7 @@ public:
             return diff;
         if (key <= boundary->first) {
             boundary++;
-            diff = boundary->second - present->second;
+            diff = boundary->second.second - present->second.second;
         }
         store.erase(present);
         return diff;
@@ -46,11 +48,12 @@ public:
 struct Hit {
     int p, q; // query range
     int i, j; // reference range
-    double id; // identity score
+    double id, init_id; // identity score
     char break_criteria; /* criteria which prevented further extends 
         0: overlap
         1: trailing Ns
         2: extend right failed */
+    vector<pair<int, int>> matches; // coordinates of seed matches
 };
 
 vector<Hit> search (int query_start, 

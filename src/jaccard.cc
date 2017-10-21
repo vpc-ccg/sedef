@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 {
     if (argc < 3) exit(1);
 
-    eprn("* Sedef (Jaccard idea), ver {} *", GITVER);
+    eprn("🍁  🐚  SEDEF 🐚  (Jaccard idea), ver {} 🍁", GITVER);
     
     auto t_start = chrono::high_resolution_clock::now();
 
@@ -78,9 +78,15 @@ int main(int argc, char **argv)
     bool allow_overlaps = (ref_path != query_path) || is_complement;
     eprn("Allowing overlaps: {}", allow_overlaps);
 
-    for (int i = 0; i < query.size(); i += 250) {
+
+    // for (int i = 0, j = 0; i <= query.size(); i += 250, j++) {
+    for (int i = 16085070; i < 16560104; i++) {
         while (query[i] == 'N') i++;
         while (i % 250 != 0) i++;
+        if (i % 5000 == 0) {
+            double perc = 100.0 * i / double(query.size());
+            eprnn("\r   {} {:.1f}% ({})", string(int(perc / 2) + 1, '-'), perc, i);
+        }
 
         auto mapping = search(i, ref_hash, query_hash, allow_overlaps);
         //    TIME("Mapping time", t_start);
@@ -93,18 +99,26 @@ int main(int argc, char **argv)
                 pp.j = ref_hash.seq.size() - pp.j + 1;
                 swap(pp.i, pp.j);
             }
-            prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{}\t{}\t{}\t{}\t{}\t{}",
+            //if (pp.init_id < 95) continue;
+            // prn("---{}", pp.matches.size());
+            prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 query_chr, pp.p, pp.q, 
                 ref_chr, pp.i, pp.j,
                 pp.id, 
                 "+", is_complement ? "-" : "+",
                 // Optional fields
                 int(pp.break_criteria),
-                pp.q - pp.p, pp.j - pp.i
+                pp.q - pp.p, pp.j - pp.i,
+                pp.init_id
             );
+            // for (auto &m: pp.matches)
+                // prnn("{},{};", m.first, m.second);
+            // prnn("\n");
         }
+        //break;
         // prnn("\n");
     }
+    eprnn("\n");
 
     return 0;
 }

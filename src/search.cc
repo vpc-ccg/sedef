@@ -16,20 +16,32 @@ typedef boost::icl::discrete_interval<int> INTERVAL;
 boost::icl::interval_map<int, boost::icl::interval_set<int>> TREE;
 
 
-inline bool in_map_n(const std::map<hash_t, char> &m, const hash_t &k)
+inline bool in_map_n(const auto &m, const hash_t &k)
 { 
     return !k.first && m.find(k) != m.end();
 }
 
+inline pair<int, bool> in_map_nc(const auto &m, const hash_t &k, int ref_pos)
+{ 
+    if (k.first) return {ref_pos, false};
+    auto p = m.find(k);
+    if (p == m.end()) return {ref_pos, false};
+    if (ref_pos == -1) return {p->second.first, true};
+    return {ref_pos, true};
+}
+
+
 void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             int x, int y, // window to check for the initial MIN_READ_SIZE match
             int initial_match_length,
-            map<hash_t, char> L0, // W(query)
+            //map<hash_t, char> 
+            auto L0, // W(query)
             const Hash &ref_hash, 
             const Hash &query_hash,
             vector<Hit> &hits, // Output
             bool allow_overlaps=false)
 {
+    // chr22   16050000        16051868        chr22   48680215        48682083
     double tau = ::tau();
 
     // prn("*** {} to {}/{} ***", p, x, y);
@@ -42,10 +54,11 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     int i = x, 
         j = x + initial_match_length;
 
-    // L0 is |W(reference)| 
-    // L  is |W(reference) + W(query)|
-    // L[h] is 1 iff h is in |W(reference) & W(query)|
-    SlidingMap<hash_t, char> L(L0);
+    // L0 is |W(query)| and L0[h] is {location of h in the query, false}
+    // L  is |W(reference) + W(query)| 
+    // L[h] is {location of h in the reference, true} iff h is in |W(reference) & W(query)|
+    SlidingMap<hash_t, pair<int, bool>> L; // matches: ref---query!
+    for (auto &p: L0) L.store[p.first] = {-1, false};
     int idx_i = ref_hash.find_minimizers(i);
     if (idx_i == ref_hash.minimizers.size()) {
         return;
@@ -53,27 +66,26 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     int idx_j = idx_i;
     while (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j) {
         // do not set 1 to N hashes
-        L.store[ref_hash.minimizers[idx_j].first] = in_map_n(L0, ref_hash.minimizers[idx_j].first);
+        L.store[ref_hash.minimizers[idx_j].first] = in_map_nc(L0, ref_hash.minimizers[idx_j].first, ref_hash.minimizers[idx_j].second);
         idx_j++;
     }
 
     L.boundary = next(L.store.begin(), L0.size() - 1);
-    int jaccard = L.boundary->second;
+    int jaccard = L.boundary->second.second;
     for (auto it = L.store.begin(); it != L.boundary; it++)
-        jaccard += it->second;
+        jaccard += it->second.second;
     // prn("ja={}|||{}", jaccard, L0.size());
-// Extend it up to MIN_READ_SIZE (initial match)
+    // Extend it up to MIN_READ_SIZE (initial match)
     int seed_i = -1, seed_jaccard;
     if (jaccard >= tau * L0.size())
         seed_i = i, seed_jaccard = jaccard;
-    // if (seed_i != -1) ??! 
-    while (i < y) {
+    if (seed_i != -1) while (i < y) {
         if (idx_i < ref_hash.minimizers.size() && ref_hash.minimizers[idx_i].second < i + 1) {
             jaccard += L.remove(ref_hash.minimizers[idx_i].first);
             idx_i++;        
         }
         if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) {
-            jaccard += L.add(ref_hash.minimizers[idx_j].first, in_map_n(L0, ref_hash.minimizers[idx_j].first));
+            jaccard += L.add(ref_hash.minimizers[idx_j].first, in_map_nc(L0, ref_hash.minimizers[idx_j].first, ref_hash.minimizers[idx_j].second));
             idx_j++;
         }
         if (jaccard >= tau * L0.size() && jaccard >= seed_jaccard) {
@@ -82,9 +94,11 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
         }
         i++, j++;
     }
+    if (seed_i == -1)
+        return;
     // prn("ja={} se_i={} se_ja={}", jaccard, seed_i, seed_jaccard);
 
-// Keep extending it as much as we can
+    // Keep extending it as much as we can
 
     // L has all minimizers now
     // we are mapping query[p, q] to ref[i, j]
@@ -92,6 +106,7 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     // idx_i/idx_j points to the first/last minimizer of REF_i,j
     // idx_p/idx_q points to the first/last minimizer of QUERY_p,q
     double prev_jaccard = double(jaccard) / L0.size();
+    double init_jaccard = prev_jaccard;
     int last_n1 = 0, 
         last_n2 = 0;
 
@@ -101,6 +116,13 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     int best_q = q;
     int best_j = j;
     char reason = 0;
+    vector<pair<int, int>> best_matches;
+    for (auto &p: L.store) if (p.second.second) {
+        assert(L0.find(p.first) != L0.end());
+        best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
+    }
+    // prn("init best match: {}", best_matches.size());
+
 
     while (q < query_hash.seq.size() && j < ref_hash.seq.size()) {
         // prn(">> p,q={},{} ({}) i,j={},{} ({}) jaccard={} s={} score={}",
@@ -116,33 +138,24 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             break;
         }
 
-    // - if we have more than 10 Ns in either query or, terminate
-        // if (query_hash.seq[q - 1] == 'N') last_n1++; else last_n1 = 0;
-        // if (ref_hash.seq[j - 1] == 'N') last_n2++; else last_n2 = 0;
-        // // TODO: Find better ways to handle Ns
-        // if (last_n1 > 10 || last_n2 > 10) {
-        //     // hits.push_back({p, q - 1, i, j - 1, j2md(prev_jaccard), 1});
-        //     reason = 1;
-        //     break;
-        // }
-
     // - try extending to the right
         // extend query
         if (query_hash.minimizers[idx_q].second < q + 1) {
             auto h = query_hash.minimizers[idx_q].first;
             if (!in_map(L0, h)) {
-                L0[h] = 0;
-                jaccard += L.add(h, in_map_n(L.store, h));
+                L0[h] = {query_hash.minimizers[idx_q].second, false};
+                // check is h in L now
+                jaccard += L.add(h, in_map_nc(L.store, h, -1));
                 L.boundary++; // |W(A)| increases
-                jaccard += L.boundary->second;
+                jaccard += L.boundary->second.second;
             }
             idx_q++;
         }
         q++;
         // extend reference
         if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) { 
-            auto h = ref_hash.minimizers[idx_j].first;
-            jaccard += L.add(h, in_map_n(L0, h));
+            auto h = ref_hash.minimizers[idx_j];
+            jaccard += L.add(h.first, in_map_nc(L0, h.first, h.second));
             idx_j++;
         } 
         j++;
@@ -151,13 +164,13 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             best_j = j;
             best_q = q;
             recover = 0;
+            best_matches.clear();
+            for (auto &p: L.store) if (p.second.second) {
+                assert(L0.find(p.first) != L0.end());
+                best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
+            }
             continue;
         } 
-
-    // - if jaccard is not enough, remember previous case and try shrinking it from the left
-    //   TODO: better criteria for this...
-        //if (recover == 0)
-        //    hits.push_back({p, q - 1, i, j - 1, j2md(prev_jaccard), 2});
 
         // 1. keep extending some times...
         if (recover < RECOVER_BP) {
@@ -169,61 +182,8 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
         break;
     }
 
-    // can we get new with shrinking?
-    // shrinking je subset tricky slucaja
-    // q = best_q, j = best_j;
-    //shrink query
-    //do we need this? won't next steps solve this?
-    // int SHRINK = MIN_READ_SIZE / 4; // = 250
-    // while (true) {
-    //     while (query_hash.minimizers[idx_p].second < p + SHRINK) {
-    //         auto h = query_hash.minimizers[idx_p].first;
-    //         L0.erase(h);
-    //         jaccard += L.remove(h);
-    //         jaccard -= L.boundary->second;
-    //         L.boundary--;
-    //         idx_p++;
-    //     }
-    //     p += SHRINK;
-    //     // shrink reference
-    //     while (ref_hash.minimizers[idx_i].second < i + SHRINK) {
-    //         auto h = ref_hash.minimizers[idx_i].first;
-    //         jaccard += L.remove(h);
-    //         idx_i++;
-    //     }
-    //     i += SHRINK;
-
-
-    //     while (query_hash.minimizers[idx_q].second < q + SHRINK) {
-    //         auto h = query_hash.minimizers[idx_q].first;
-    //         if (!in_map(L0, h)) {
-    //             L0[h] = 0;
-    //             jaccard += L.add(h, in_map_n(L.store, h));
-    //             L.boundary++; // |W(A)| increases
-    //             jaccard += L.boundary->second;
-    //         }
-    //         idx_q++;
-    //     }
-    //     q += SHRINK;
-    //     while (ref_hash.minimizers[idx_j].second < j + SHRINK) { 
-    //         auto h = ref_hash.minimizers[idx_j].first;
-    //         jaccard += L.add(h, in_map_n(L0, h));
-    //         idx_j++;
-    //     } 
-    //     j += SHRINK;
-
-    //     if (jaccard >= tau * L0.size()) {
-    //         prev_jaccard = double(jaccard) / L0.size();
-    //         best_j = j;
-    //         best_q = q;
-    //         recover = 0;
-    //         continue;
-    //     } else {
-    //         break;
-    //     }
-    // }
-
-    hits.push_back({p, best_q, i, best_j, j2md(prev_jaccard), reason});
+    // prn("bmatch # {}", best_matches.size());
+    hits.push_back({p, best_q, i, best_j, j2md(prev_jaccard), j2md(init_jaccard), reason, best_matches});
     TREE += make_pair(INTERVAL(p, best_q), 
             boost::icl::interval_set<int>({INTERVAL(i, best_j)}));
     if (allow_overlaps) 
@@ -236,8 +196,7 @@ vector<Hit> search (int query_start,
                     const Hash &query_hash, 
                     bool allow_overlaps) 
 {
-
-    map<hash_t, char> L0;
+    map<hash_t, pair<int, bool>> L0;
     int st = query_hash.find_minimizers(query_start);
     if (st == query_hash.minimizers.size())
         return vector<Hit>();
@@ -255,7 +214,7 @@ vector<Hit> search (int query_start,
         if (mi != st && m.first == query_hash.minimizers[mi - 1].first) 
             continue;
         
-        L0[m.first] = 0;
+        L0[m.first] = {m.second, false};
         // If it is N hash, ignore it
         if (m.first.first)
             continue;
@@ -306,7 +265,7 @@ vector<Hit> search (int query_start,
         return vector<Hit>();
     }
     int M = ceil(L0.size() * tau());
-    // prn("{} candidates to evaluate (M={})", candidates.size(), M);
+    // eprn("{} candidates to evaluate (M={}, L0={}, tau={})", candidates.size(), M, L0.size(), tau());
 
     // Find all locations in the `candidates` so that
     // MIN_READ_SIZE read covers at least M (= s * tau) hashes
@@ -343,6 +302,19 @@ vector<Hit> search (int query_start,
         return tie(a.i, a.j) < tie(a.i, a.j);   // larger intervals at the top! then by other ints
     });
     for (auto &h: hits) { // brute force, but maybe easier than doing full interval thing
+            auto &pp=h;
+            // prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{}\t{}\t{}\t{}\t{}\t{}\t{}\tBM;{}",
+            //     ">>>>>", pp.p, pp.q, 
+            //     "<<<<<", pp.i, pp.j,
+            //     pp.id, 
+            //     "+", "+",
+            //     // Optional fields
+            //     int(pp.break_criteria),
+            //     pp.q - pp.p, pp.j - pp.i,
+            //     pp.init_id,
+            //     pp.matches.size()
+            // );
+
         bool add = true;
         for (int j = hits_real.size() - 1; j >= 0; j--) {
             auto &ph = hits_real[j];
