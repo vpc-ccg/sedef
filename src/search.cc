@@ -7,14 +7,74 @@ using namespace std;
 
 #include <boost/icl/interval_map.hpp>
 #include <boost/icl/interval_set.hpp>
+#include <edlib.h>
 
 /// http://www.biorxiv.org/content/biorxiv/early/2017/03/24/103812.full.pdf
 
-const int MAX_MATCH = 1 * 1000 * 1000; // 1 MB at most!
+/*
+504a505
+> chr1  40020441    40021507    chr1    40021508    40022596
+512a514
+> chr1  55002548    55003748    chr1    241083029   241084244
+*/
+
+const int MAX_MATCH = 1 * 500 * 1000; // 1 MB at most!
 
 typedef boost::icl::discrete_interval<int> INTERVAL;
 boost::icl::interval_map<int, boost::icl::interval_set<int>> TREE;
 
+int QGRAM_NORMAL_FAILED = 0;
+int QGRAM_SPACED_FAILED = 0;
+int EDIT_FAILED = 0;
+
+void printAlignment(const char* query, const char* target,
+                    const unsigned char* alignment, const int alignmentLength,
+                    const int position, const EdlibAlignMode modeCode) 
+{
+    int tIdx = -1;
+    int qIdx = -1;
+    if (modeCode == EDLIB_MODE_HW) {
+        tIdx = position;
+        for (int i = 0; i < alignmentLength; i++) {
+            if (alignment[i] != EDLIB_EDOP_INSERT)
+                tIdx--;
+        }
+    }
+    for (int start = 0; start < alignmentLength; start += 50) {
+        // target
+        eprnn("T: ");
+        int startTIdx;
+        for (int j = start; j < start + 50 && j < alignmentLength; j++) {
+            if (alignment[j] == EDLIB_EDOP_INSERT)
+                eprnn("-");
+            else
+                eprnn("{}", target[++tIdx]);
+            if (j == start)
+                startTIdx = tIdx;
+        }
+        eprnn(" ({} - {})\n", max(startTIdx, 0), tIdx);
+
+        // match / mismatch
+        eprnn("   ");
+        for (int j = start; j < start + 50 && j < alignmentLength; j++) {
+            eprnn(alignment[j] == EDLIB_EDOP_MATCH ? "|" : " ");
+        }
+        eprnn("\n");
+
+        // query
+        eprnn("Q: ");
+        int startQIdx = qIdx;
+        for (int j = start; j < start + 50 && j < alignmentLength; j++) {
+            if (alignment[j] == EDLIB_EDOP_DELETE)
+                eprnn("-");
+            else
+                eprnn("{}", query[++qIdx]);
+            if (j == start)
+                startQIdx = qIdx;
+        }
+        eprnn(" ({} - {})\n\n", max(startQIdx, 0), qIdx);
+    }
+}
 
 inline bool in_map_n(const auto &m, const hash_t &k)
 { 
@@ -30,6 +90,111 @@ inline pair<int, bool> in_map_nc(const auto &m, const hash_t &k, int ref_pos)
     return {ref_pos, true};
 }
 
+inline int min_qgram(int l, int q) {
+    return l * (1 - MAX_GAP_ERROR - q * MAX_EDIT_ERROR) - (GAP_FREQUENCY * l + 1) * (q - 1);
+}
+
+auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
+{
+    const int QG = 5;
+    const uint64_t QSZ = (1 << (2 * QG)); 
+    const uint64_t MASK = QSZ - 1;
+
+    vector<int> qgram_p(QSZ, 0);
+    vector<int> qgram_r(QSZ, 0);
+    
+    int maxlen = max(q_len, r_len);
+    int minqg = min_qgram(maxlen, QG);
+
+    for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
+        qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
+        if (qi - q_pos >= QG - 1) qgram_p[qgram] += 1;
+    }
+    for (uint64_t qi = r_pos, qgram = 0; qi < r_pos + r_len; qi++) {
+        qgram = ((qgram << 2) | qdna(r[qi])) & MASK;
+        if (qi - r_pos >= QG - 1) qgram_r[qgram] += 1;
+    }
+    int dist = 0;
+    for (uint64_t qi = 0; qi < QSZ; qi++)  {
+        dist += min(qgram_p[qi], qgram_r[qi]);
+        qgram_p[qi] = qgram_r[qi] = 0;
+    }
+
+    if (dist < minqg) {
+        QGRAM_NORMAL_FAILED++;
+        return make_pair(-1, -1);
+    }
+
+    // auto patterns = vector<string>{"x-xxx", "xxx-x", "xx-xx", "x--xxx", "xx--xx", "xxx--x", "xx-x-x", "x-x--xx", "x-x-x-x"};
+    // auto dists = vector<int>(patterns.size(), 0);
+    // for (int pi = 0; pi < patterns.size(); pi++) {
+    //     auto &pattern = patterns[pi];
+    //     for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len - pattern.size(); qi++) {
+    //         for (int i = 0; i < pattern.size(); i++) if (pattern[i] != '-')
+    //             qgram = ((qgram << 2) | qdna(q[qi + i])) & MASK;
+    //         qgram_p[qgram] += 1;
+    //     }
+    //     for (uint64_t qi = r_pos, qgram = 0; qi < r_pos + r_len - pattern.size(); qi++) {
+    //         for (int i = 0; i < pattern.size(); i++) if (pattern[i] != '-')
+    //             qgram = ((qgram << 2) | qdna(r[qi + i])) & MASK;
+    //         qgram_r[qgram] += 1;
+    //     }
+    //     for (uint64_t qi = 0; qi < QSZ; qi++)  {
+    //         dists[pi] += min(qgram_p[qi], qgram_r[qi]);
+    //         qgram_p[qi] = qgram_r[qi] = 0;
+    //     }
+    //     if (dists[pi] < minqg) { // this should be worked upon a little bit
+    //         QGRAM_SPACED_FAILED++;
+    //         // eprn("wohooo {}", pattern);
+    //         return make_pair(-1, -1);
+    //     }
+    // }
+
+
+    // vector<int> qgram_p(QSZ, 0);
+    // vector<int> qgram_i(QSZ, 0);
+
+    // const int MASK = QSZ - 1;
+    // for (int qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
+    //     qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
+    //     if (qi - q_pos >= QG) qgram_p[qgram] += 1;
+    // }
+    // for (int qi = r_pos, qgram = 0; qi < r_pos + r_len; qi++) {
+    //     qgram = ((qgram << 2) | qdna(r[qi])) & MASK;
+    //     if (qi - r_pos >= QG) qgram_i[qgram] += 1;
+    // }
+    // int dist = 0;
+    // for (int qi = 0; qi < QSZ; qi++) 
+    //     dist += min(qgram_p[qi], qgram_i[qi]);
+
+    // int maxlen = max(q_len, r_len);
+    // int maxedit = maxlen / 4 + 10;
+    // if (dist < maxlen - QSZ * maxedit - (QSZ - 1))
+    //     return make_pair(-1, -1);
+
+
+    int edist = 0;
+    // auto result = edlibAlign(
+    //     q.c_str() + q_pos, q_len,
+    //     r.c_str() + r_pos, r_len,
+    //     edlibNewAlignConfig(maxlen * .40, EDLIB_MODE_HW, EDLIB_TASK_DISTANCE, 0, 0)
+    // );
+    // auto edist = result.editDistance;
+    // edlibFreeAlignResult(result);
+    // if (edist == -1) {
+    //     return -1;
+    // }
+
+    return make_pair(dist, edist);
+    // if (result.editDistance == -1 > DL/4 && dist >= DL - QG + 1 - QG * (DL / 4)) {
+    //     eprn("\n--- {}: ed {} qg {}/{} jac {}", DL, result.editDistance, 
+    //         dist, DL - QG + 1 - QG * (DL / 4), prev_jaccard_p);
+    //     // char* cigar = edlibAlignmentToCigar(result.alignment, result.alignmentLength, EDLIB_CIGAR_STANDARD);
+    //     printAlignment(q.c_str() + q_pos, ref_hash.seq.c_str() + r_pos, result.alignment, 
+    //         result.alignmentLength, *result.endLocations, EDLIB_MODE_NW);
+    //     exit(0);
+    // }
+}
 
 void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             int x, int y, // window to check for the initial MIN_READ_SIZE match
@@ -41,7 +206,8 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             vector<Hit> &hits, // Output
             bool allow_overlaps=false)
 {
-    // chr22   16050000        16051868        chr22   48680215        48682083
+// > chr22 21033606 21034790    chr22   21038016    21039210
+// chr22   21032636    21038019    chr22   21417024    21411669
     double tau = ::tau();
 
     // prn("*** {} to {}/{} ***", p, x, y);
@@ -57,8 +223,8 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     // L0 is |W(query)| and L0[h] is {location of h in the query, false}
     // L  is |W(reference) + W(query)| 
     // L[h] is {location of h in the reference, true} iff h is in |W(reference) & W(query)|
-    SlidingMap<hash_t, pair<int, bool>> L; // matches: ref---query!
-    for (auto &p: L0) L.store[p.first] = {-1, false};
+    SlidingMap<hash_t, bool> L(L0); // matches: ref---query!
+    // for (auto &p: L0) L.store[p.first] = {-1, false};
     int idx_i = ref_hash.find_minimizers(i);
     if (idx_i == ref_hash.minimizers.size()) {
         return;
@@ -66,26 +232,28 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     int idx_j = idx_i;
     while (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j) {
         // do not set 1 to N hashes
-        L.store[ref_hash.minimizers[idx_j].first] = in_map_nc(L0, ref_hash.minimizers[idx_j].first, ref_hash.minimizers[idx_j].second);
+        L.store[ref_hash.minimizers[idx_j].first] = in_map_n(L0, ref_hash.minimizers[idx_j].first);
         idx_j++;
     }
 
     L.boundary = next(L.store.begin(), L0.size() - 1);
-    int jaccard = L.boundary->second.second;
+    int jaccard = L.boundary->second;
     for (auto it = L.store.begin(); it != L.boundary; it++)
-        jaccard += it->second.second;
+        jaccard += it->second;
     // prn("ja={}|||{}", jaccard, L0.size());
     // Extend it up to MIN_READ_SIZE (initial match)
-    int seed_i = -1, seed_jaccard;
+    int seed_i = -1, seed_jaccard = 0;
     if (jaccard >= tau * L0.size())
         seed_i = i, seed_jaccard = jaccard;
-    if (seed_i != -1) while (i < y) {
+    // prn("[{} {}] ja={} se_i={} se_ja={}", x, y, jaccard, seed_i, seed_jaccard);
+    //if (seed_i != -1) 
+    while (i < y) {
         if (idx_i < ref_hash.minimizers.size() && ref_hash.minimizers[idx_i].second < i + 1) {
             jaccard += L.remove(ref_hash.minimizers[idx_i].first);
             idx_i++;        
         }
         if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) {
-            jaccard += L.add(ref_hash.minimizers[idx_j].first, in_map_nc(L0, ref_hash.minimizers[idx_j].first, ref_hash.minimizers[idx_j].second));
+            jaccard += L.add(ref_hash.minimizers[idx_j].first, in_map_n(L0, ref_hash.minimizers[idx_j].first));
             idx_j++;
         }
         if (jaccard >= tau * L0.size() && jaccard >= seed_jaccard) {
@@ -96,7 +264,6 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     }
     if (seed_i == -1)
         return;
-    // prn("ja={} se_i={} se_ja={}", jaccard, seed_i, seed_jaccard);
 
     // Keep extending it as much as we can
 
@@ -107,6 +274,8 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     // idx_p/idx_q points to the first/last minimizer of QUERY_p,q
     double prev_jaccard = double(jaccard) / L0.size();
     double init_jaccard = prev_jaccard;
+    int prev_jaccard_p = jaccard;
+    int init_jaccard_p = jaccard;
     int last_n1 = 0, 
         last_n2 = 0;
 
@@ -116,59 +285,59 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     int best_q = q;
     int best_j = j;
     char reason = 0;
-    vector<pair<int, int>> best_matches;
-    for (auto &p: L.store) if (p.second.second) {
-        assert(L0.find(p.first) != L0.end());
-        best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
-    }
+    // vector<pair<int, int>> best_matches;
+    // for (auto &p: L.store) if (p.second.second) {
+    //     assert(L0.find(p.first) != L0.end());
+    //     best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
+    // }
     // prn("init best match: {}", best_matches.size());
-
 
     while (q < query_hash.seq.size() && j < ref_hash.seq.size()) {
         // prn(">> p,q={},{} ({}) i,j={},{} ({}) jaccard={} s={} score={}",
         //     p,q,q-p,i,j,j-i,jaccard,L0.size(), j2md(double(jaccard)/L0.size()));
     
-    // - disallow overlaps or too long matches
+        // - disallow overlaps or too long matches
         int max_match = MAX_MATCH;
         if (!allow_overlaps) 
-            max_match = min(max_match, int((1.0 / ERROR_RATE + .5) * abs(p - i)));
+            max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(p - i)));
         if (max(q - p, j - i) > max_match) {
             // hits.push_back({p, q - 1, i, j - 1,  j2md(prev_jaccard), 0});
             reason = 0;
             break;
         }
 
-    // - try extending to the right
+        // - try extending to the right
         // extend query
         if (query_hash.minimizers[idx_q].second < q + 1) {
             auto h = query_hash.minimizers[idx_q].first;
             if (!in_map(L0, h)) {
-                L0[h] = {query_hash.minimizers[idx_q].second, false};
+                L0[h] = 0; // {query_hash.minimizers[idx_q].second, false};
                 // check is h in L now
-                jaccard += L.add(h, in_map_nc(L.store, h, -1));
+                jaccard += L.add(h, in_map_n(L.store, h));
                 L.boundary++; // |W(A)| increases
-                jaccard += L.boundary->second.second;
+                jaccard += L.boundary->second;
             }
             idx_q++;
         }
         q++;
         // extend reference
         if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) { 
-            auto h = ref_hash.minimizers[idx_j];
-            jaccard += L.add(h.first, in_map_nc(L0, h.first, h.second));
+            auto &h = ref_hash.minimizers[idx_j];
+            jaccard += L.add(h.first, in_map_n(L0, h.first));
             idx_j++;
         } 
         j++;
         if (jaccard >= tau * L0.size()) {
             prev_jaccard = double(jaccard) / L0.size();
+            prev_jaccard_p = jaccard;
             best_j = j;
             best_q = q;
             recover = 0;
-            best_matches.clear();
-            for (auto &p: L.store) if (p.second.second) {
-                assert(L0.find(p.first) != L0.end());
-                best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
-            }
+            // best_matches.clear();
+            // for (auto &p: L.store) if (p.second.second) {
+            //     assert(L0.find(p.first) != L0.end());
+            //     best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
+            // }
             continue;
         } 
 
@@ -182,13 +351,17 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
         break;
     }
 
+    auto edist = filter(query_hash.seq, p, best_q - p + 1, ref_hash.seq, i, best_j - i + 1);
+    if (edist.first < 0)
+        return;
+
     // prn("bmatch # {}", best_matches.size());
-    hits.push_back({p, best_q, i, best_j, j2md(prev_jaccard), j2md(init_jaccard), reason, best_matches});
+    hits.push_back({p, best_q, i, best_j, j2md(prev_jaccard), j2md(init_jaccard), reason, make_pair(init_jaccard_p, prev_jaccard_p), edist.second});
     TREE += make_pair(INTERVAL(p, best_q), 
             boost::icl::interval_set<int>({INTERVAL(i, best_j)}));
-    if (allow_overlaps) 
-        TREE += make_pair(INTERVAL(i, best_j),
-            boost::icl::interval_set<int>({INTERVAL(p, best_q)}));
+    // if (allow_overlaps) 
+    //     TREE += make_pair(INTERVAL(i, best_j),
+    //         boost::icl::interval_set<int>({INTERVAL(p, best_q)}));
 }
 
 vector<Hit> search (int query_start, 
@@ -196,7 +369,7 @@ vector<Hit> search (int query_start,
                     const Hash &query_hash, 
                     bool allow_overlaps) 
 {
-    map<hash_t, pair<int, bool>> L0;
+    map<hash_t, bool> L0;
     int st = query_hash.find_minimizers(query_start);
     if (st == query_hash.minimizers.size())
         return vector<Hit>();
@@ -214,7 +387,7 @@ vector<Hit> search (int query_start,
         if (mi != st && m.first == query_hash.minimizers[mi - 1].first) 
             continue;
         
-        L0[m.first] = {m.second, false};
+        L0[m.first] = false;
         // If it is N hash, ignore it
         if (m.first.first)
             continue;
@@ -284,6 +457,8 @@ vector<Hit> search (int query_start,
             T.back().second = y;
         }
     }
+
+    // eprn("{} candidates to refine", T.size());
 
     vector<Hit> hits, hits_real;
     // for (int t = 1; t < T.size(); t++) 

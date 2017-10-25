@@ -20,10 +20,10 @@ public:
         auto present = store.find(key);
         if (key <= boundary->first) {
             if (present == store.end()) {
-                diff = val.second - boundary->second.second;
+                diff = val - boundary->second;
                 boundary--;
             } else {
-                diff = val.second - present->second.second;
+                diff = val - present->second;
             }
         }
         store[key] = val;
@@ -38,7 +38,7 @@ public:
             return diff;
         if (key <= boundary->first) {
             boundary++;
-            diff = boundary->second.second - present->second.second;
+            diff = boundary->second - present->second;
         }
         store.erase(present);
         return diff;
@@ -53,7 +53,8 @@ struct Hit {
         0: overlap
         1: trailing Ns
         2: extend right failed */
-    vector<pair<int, int>> matches; // coordinates of seed matches
+    pair<int, int> jaccard; // coordinates of seed matches
+    int edist;
 };
 
 vector<Hit> search (int query_start, 

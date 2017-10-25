@@ -1,9 +1,9 @@
 CC=g++
-CFLAGS=-c -std=c++14 
+CFLAGS=-c -std=c++14  -I edlib/edlib/include
 LDFLAGS=
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
-SOURCES:=$(wildcard src/*.cc) fmt/fmt/format.cc
+SOURCES:=$(wildcard src/*.cc) fmt/fmt/format.cc edlib/edlib/src/edlib.cc
 OBJECTS=$(SOURCES:.cc=.o)
 EXECUTABLE=sedef-jaccard
 

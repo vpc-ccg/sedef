@@ -14,9 +14,13 @@
 const int    KMER_SIZE = 14;
 static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
 
-const double ERROR_RATE = 0.10;
-const int    WINDOW_SIZE = 16; // <-- Needs to be changed
-const int    MIN_READ_SIZE = 1000;
+const double MAX_GAP_ERROR  = 0.25;
+const double MAX_EDIT_ERROR = 0.10;
+const double GAP_FREQUENCY  = 0.005;
+
+const int    WINDOW_SIZE    = 16; // <-- Needs to be changed
+const int    MIN_READ_SIZE  = 1000;
+
 
 /// Helper functions
 
@@ -42,9 +46,9 @@ inline bool in_map(const std::map<X, Y> &m, X k)
 
 /// Jaccard helper functions
 
-inline double tau(double error=ERROR_RATE)
+inline double tau(double error=MAX_EDIT_ERROR)
 {
-    return (3.0 / 7) / (2 * std::exp(KMER_SIZE * error) - 1);
+    return (1 - MAX_GAP_ERROR) / (2 * std::exp(KMER_SIZE * error) - 1);
 }
 
 inline double j2md(float j)
@@ -54,7 +58,7 @@ inline double j2md(float j)
     } else if (std::fabs(j - 1) < 1e-8) {
         return 0;
     } else {
-        return 100 * (1 - (-1.0 / KMER_SIZE) * std::log(2.0 * j/(1 + j)));
+        return 100 * (1 - (-1.0 / KMER_SIZE) * std::log(2.0 * j / (1 + j)));
     }
 }
 
