@@ -19,12 +19,6 @@ inline void TIME(string msg, auto &start)
     start = end;
 }
 
-// 2    chr1    88000   121417  chr1:235525 0   +   chr1    235525  267707  32182   ... 32150   31941   209 133 76  0.993499    0.992727    0.006529    0.006532    33417
-// 4    chr1    91256   92392   chr1:521369 0   +   chr1    521369  522487  1118    ... 1117    1092    25  18  7   0.977619    0.974130    0.022722    0.022781    1136
-// *rea2 6  chr1    92387   104808  chr1:573869 0   +   chr1    573869  586415  12546   ... 12359   12175   184 121 63  0.985112    0.983679    0.015038    0.015056    12421
-// *rea2 10 chr1    92387   135370  chr1:224095998  0   +   chr1    224095998   224139533   43535   ... 42819   42180   639 417 222 0.985077    0.983377    0.015074    0.015091    42983
-// *rea2 12 chr1    92387   136258  chr1:243174377  0   +   chr1    243174377   243218157   43780   ... 43446   42679   767 507 260 0.982346    0.980338    0.017865    0.017891    43871
-
 int main(int argc, char **argv)
 {
     if (argc < 3) exit(1);
@@ -79,8 +73,12 @@ int main(int argc, char **argv)
 
     /// TODO optimize if ref == query
     // query = query.substr(0, 10000000);
-    auto query_hash = Hash(query);
-        TIME("Query hashing time", t_start);
+    auto &query_hash = ref_hash; 
+    Hash _q;
+    if (query_path != ref_path || query.size() != reference.size() || is_complement) {
+        _q = Hash(query);
+        query_hash = _q;
+    }
 
     bool allow_overlaps = (ref_path != query_path) || is_complement;
     eprn("Allowing overlaps: {}", allow_overlaps);
@@ -109,22 +107,22 @@ int main(int argc, char **argv)
             }
             //if (pp.init_id < 95) continue;
             // prn("---{}", pp.matches.size());
-            prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{:.0f}\t{}\t{}\t{}\t{}\t{}\t{:.0f}\t{}\t{}",
+            prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{:.0f}\t{}\t{}\t{}\t{}",
                 query_chr, pp.p, pp.q, 
                 ref_chr, pp.i, pp.j,
                 pp.id, 
                 "+", is_complement ? "-" : "+",
                 // Optional fields
                 int(pp.break_criteria),
-                pp.q - pp.p, pp.j - pp.i,
-                pp.init_id,
-                pp.jaccard.first, pp.jaccard.second
+                pp.q - pp.p //, pp.j - pp.i,
+                // pp.init_id,
+                // pp.jaccard.first, pp.jaccard.second
             );
-            // edlib_conf.k = max(pp.q - pp.p, pp.j - pp.i) / 3;
+            // edlib_conf.k = max(pp.q - pp.p, pp.j - pp.i) / 2;
             // auto result = edlibAlign(
             //     query_hash.seq.c_str() + pp.p, pp.q - pp.p,
             //     ref_hash.seq.c_str() + pp.i, pp.j - pp.i,
-            //     edlibNewAlignConfig(-1, EDLIB_MODE_HW, EDLIB_TASK_PATH, 0, 0)
+            //     edlib_conf
             // );
             // char* cigar = edlibAlignmentToCigar(result.alignment, result.alignmentLength, EDLIB_CIGAR_STANDARD);
             // prn("{}\t{}", result.editDistance, cigar);

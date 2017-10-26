@@ -94,18 +94,22 @@ inline int min_qgram(int l, int q) {
     return l * (1 - MAX_GAP_ERROR - q * MAX_EDIT_ERROR) - (GAP_FREQUENCY * l + 1) * (q - 1);
 }
 
+inline int min_qgram_lo(int l, int q) {
+    return l * (1 - MAX_GAP_ERROR - q * (MAX_EDIT_ERROR/2)) - (GAP_FREQUENCY * l + 1) * (q - 1);
+}
+
+
+vector<int> qgram_p, qgram_r;
 auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
 {
-    const int QG = 5;
-    const uint64_t QSZ = (1 << (2 * QG)); 
-    const uint64_t MASK = QSZ - 1;
-
-    vector<int> qgram_p(QSZ, 0);
-    vector<int> qgram_r(QSZ, 0);
-    
     int maxlen = max(q_len, r_len);
-    int minqg = min_qgram(maxlen, QG);
+    int QG = 5;
+    uint64_t QSZ = (1 << (2 * QG)); 
+    uint64_t MASK = QSZ - 1;
 
+    int minqg = min_qgram(maxlen, QG);
+    assert(minqg >= 10);
+    
     for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
         qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
         if (qi - q_pos >= QG - 1) qgram_p[qgram] += 1;
@@ -124,32 +128,40 @@ auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, i
         QGRAM_NORMAL_FAILED++;
         return make_pair(-1, -1);
     }
-
-    // auto patterns = vector<string>{"x-xxx", "xxx-x", "xx-xx", "x--xxx", "xx--xx", "xxx--x", "xx-x-x", "x-x--xx", "x-x-x-x"};
-    // auto dists = vector<int>(patterns.size(), 0);
+   
+    // w=50; k=5; s=11; k=8 -->7
+    // auto patterns = vector<tuple<string, int, int>> {
+    //     make_tuple("#####....#", 6, 4), 
+    //     make_tuple("#####...##", 7, 3),
+    // };
     // for (int pi = 0; pi < patterns.size(); pi++) {
-    //     auto &pattern = patterns[pi];
+    //     // int QG = get<1>(patterns[pi]);
+    //     int minqg = min_qgram(maxlen, QG);
+    //     uint64_t QSZ = (1 << (2 * QG)); 
+    //     uint64_t MASK = QSZ - 1;
+
+    //     auto &pattern = get<0>(patterns[pi]);
     //     for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len - pattern.size(); qi++) {
-    //         for (int i = 0; i < pattern.size(); i++) if (pattern[i] != '-')
+    //         for (int i = 0; i < pattern.size(); i++) if (pattern[i] != '.')
     //             qgram = ((qgram << 2) | qdna(q[qi + i])) & MASK;
     //         qgram_p[qgram] += 1;
     //     }
     //     for (uint64_t qi = r_pos, qgram = 0; qi < r_pos + r_len - pattern.size(); qi++) {
-    //         for (int i = 0; i < pattern.size(); i++) if (pattern[i] != '-')
+    //         for (int i = 0; i < pattern.size(); i++) if (pattern[i] != '.')
     //             qgram = ((qgram << 2) | qdna(r[qi + i])) & MASK;
     //         qgram_r[qgram] += 1;
     //     }
+    //     int qdist = 0;
     //     for (uint64_t qi = 0; qi < QSZ; qi++)  {
-    //         dists[pi] += min(qgram_p[qi], qgram_r[qi]);
+    //         qdist += min(qgram_p[qi], qgram_r[qi]);
     //         qgram_p[qi] = qgram_r[qi] = 0;
     //     }
-    //     if (dists[pi] < minqg) { // this should be worked upon a little bit
+    //     if (qdist < minqg - get<2>(patterns[pi])) { // this should be worked upon a little bit
     //         QGRAM_SPACED_FAILED++;
     //         // eprn("wohooo {}", pattern);
     //         return make_pair(-1, -1);
     //     }
     // }
-
 
     // vector<int> qgram_p(QSZ, 0);
     // vector<int> qgram_i(QSZ, 0);
@@ -185,7 +197,7 @@ auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, i
     //     return -1;
     // }
 
-    return make_pair(dist, edist);
+    return make_pair(0, 0);
     // if (result.editDistance == -1 > DL/4 && dist >= DL - QG + 1 - QG * (DL / 4)) {
     //     eprn("\n--- {}: ed {} qg {}/{} jac {}", DL, result.editDistance, 
     //         dist, DL - QG + 1 - QG * (DL / 4), prev_jaccard_p);
@@ -369,6 +381,12 @@ vector<Hit> search (int query_start,
                     const Hash &query_hash, 
                     bool allow_overlaps) 
 {
+
+    if (!qgram_p.size()) {
+        qgram_p = vector<int>(1<<(2*8),0);
+        qgram_r = vector<int>(1<<(2*8),0);
+    }
+
     map<hash_t, bool> L0;
     int st = query_hash.find_minimizers(query_start);
     if (st == query_hash.minimizers.size())
@@ -481,7 +499,7 @@ vector<Hit> search (int query_start,
             // prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{}\t{}\t{}\t{}\t{}\t{}\t{}\tBM;{}",
             //     ">>>>>", pp.p, pp.q, 
             //     "<<<<<", pp.i, pp.j,
-            //     pp.id, 
+            //     pp.id, cat 
             //     "+", "+",
             //     // Optional fields
             //     int(pp.break_criteria),

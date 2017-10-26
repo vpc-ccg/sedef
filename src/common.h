@@ -14,7 +14,7 @@
 const int    KMER_SIZE = 14;
 static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
 
-const double MAX_GAP_ERROR  = 0.25;
+const double MAX_GAP_ERROR  = 0.15;
 const double MAX_EDIT_ERROR = 0.10;
 const double GAP_FREQUENCY  = 0.005;
 

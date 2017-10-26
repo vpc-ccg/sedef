@@ -31,6 +31,7 @@ struct Hash {
     unordered_map<hash_t, list<int>, pair_hash> index;
 
 public:
+    Hash() {};
     Hash(const string &s);
     // Find first minimizer at loci p
     int find_minimizers(int p) const;
