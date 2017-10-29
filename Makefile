@@ -1,10 +1,10 @@
 CC=g++
-CFLAGS=-c -std=c++14  -I edlib/edlib/include
-LDFLAGS=
+CFLAGS=-c
+LDFLAGS=-static
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
-SOURCES:=$(wildcard src/*.cc) fmt/fmt/format.cc edlib/edlib/src/edlib.cc
-OBJECTS=$(SOURCES:.cc=.o)
+SOURCES:=$(wildcard src/*.cc) fmt/fmt/format.cc 
+OBJECTS=$(SOURCES:.cc=.o) patterns.o
 EXECUTABLE=sedef-jaccard
 
 all: CFLAGS+=-g -O2
@@ -36,3 +36,6 @@ $(EXECUTABLE): $(OBJECTS)
 clean:
 	find . -name '*.o' -delete
 	rm -rf $(EXECUTABLE) $(TESTEXE) gmon.out* 
+
+patterns.o:
+	ld -r -b binary -o patterns.o patterns.bin

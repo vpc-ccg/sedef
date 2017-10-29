@@ -1,11 +1,13 @@
 /// 786
 
-#include <bits/stdc++.h>
+#include <vector>
+#include <string>
+#include <deque>
 #include "common.h"
 #include "hash.h"
 using namespace std;
 
-auto get_minimizers(const string &s)
+vector<minimizer_t> get_minimizers(const string &s)
 {
     vector<minimizer_t> minimizers;
     minimizers.reserve((2 * s.size()) / WINDOW_SIZE);
@@ -20,14 +22,13 @@ auto get_minimizers(const string &s)
         h &= MASK;
         if (i < KMER_SIZE) continue;
 
-        auto hh = make_pair(bool(last_n >= (i - KMER_SIZE + 1) - WINDOW_SIZE), h);   
-        //assert(hh.first==true)     ;
+        hash_t hh = make_pair(bool(last_n >= (i - KMER_SIZE + 1) - WINDOW_SIZE), h);   
         while (!window.empty() && (window.back().first >= hh))
             window.pop_back();
         while (!window.empty() && window.back().second <= (i - KMER_SIZE + 1) - WINDOW_SIZE)
             window.pop_front();
         // Do not add minimizers with N
-        window.push_back({hh, i - KMER_SIZE + 1});
+        window.push_back(make_pair(hh, i - KMER_SIZE + 1));
 
         if (i - KMER_SIZE + 1 < WINDOW_SIZE) continue;
         if (!minimizers.size() || window.front() != minimizers.back()) {
@@ -39,20 +40,21 @@ auto get_minimizers(const string &s)
 
 Hash::Hash (const string &s): seq(s)
 {
+    eprn("Hashing {} bps", s.size());
     minimizers = get_minimizers(s);
     
-    for (auto &x: minimizers) {
-        index[x.first].push_back(x.second);
+    for (int i = 0; i < minimizers.size(); i++) {
+        index[minimizers[i].first].push_back(minimizers[i].second);
     }
 
     int ignore = (minimizers.size() * 0.001) / 100.0;
     
     map<int, int> hist;
-    for (auto &m: index)
-        hist[m.second.size()] += 1;
+    for (map<hash_t, list<int>, MapCompare>::iterator i = index.begin(); i != index.end(); i++)
+        hist[i->second.size()] += 1;
     int sum = 0;
     threshold = 1 << 31;
-    for (auto i = hist.rbegin(); i != hist.rend(); i++) {
+    for (map<int, int>::reverse_iterator i = hist.rbegin(); i != hist.rend(); i++) {
         sum += i->second;
         if (sum <= ignore) threshold = i->first;
         else break;

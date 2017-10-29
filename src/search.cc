@@ -1,106 +1,74 @@
 /// 786
+/// Based on http://www.biorxiv.org/content/biorxiv/early/2017/03/24/103812.full.pdf
 
-#include <bits/stdc++.h>
+#include <list>
+#include <queue>
+#include <vector>
+#include <string>
+#include <cmath>
+#include <queue>
 #include "common.h"
 #include "search.h"
 using namespace std;
 
 #include <boost/icl/interval_map.hpp>
 #include <boost/icl/interval_set.hpp>
-#include <edlib.h>
 
-/// http://www.biorxiv.org/content/biorxiv/early/2017/03/24/103812.full.pdf
-
-/*
-504a505
-> chr1  40020441    40021507    chr1    40021508    40022596
-512a514
-> chr1  55002548    55003748    chr1    241083029   241084244
-*/
-
-const int MAX_MATCH = 1 * 500 * 1000; // 1 MB at most!
 
 typedef boost::icl::discrete_interval<int> INTERVAL;
-boost::icl::interval_map<int, boost::icl::interval_set<int>> TREE;
+typedef boost::icl::interval_map<int, set<pair<INTERVAL, INTERVAL> > > SUBTREE_t;
+typedef boost::icl::interval_map<int, SUBTREE_t> TREE_t;
+TREE_t TREE;
+
+
+const int MAX_MATCH = 1 * 500 * 1000; // 0.5 MB at most!
+const int RIGHT_ALLOWANCE = 750; /// TODO more mathy formulation
 
 int QGRAM_NORMAL_FAILED = 0;
 int QGRAM_SPACED_FAILED = 0;
-int EDIT_FAILED = 0;
+int CORE_FAILED = 0;
 
-void printAlignment(const char* query, const char* target,
-                    const unsigned char* alignment, const int alignmentLength,
-                    const int position, const EdlibAlignMode modeCode) 
-{
-    int tIdx = -1;
-    int qIdx = -1;
-    if (modeCode == EDLIB_MODE_HW) {
-        tIdx = position;
-        for (int i = 0; i < alignmentLength; i++) {
-            if (alignment[i] != EDLIB_EDOP_INSERT)
-                tIdx--;
-        }
-    }
-    for (int start = 0; start < alignmentLength; start += 50) {
-        // target
-        eprnn("T: ");
-        int startTIdx;
-        for (int j = start; j < start + 50 && j < alignmentLength; j++) {
-            if (alignment[j] == EDLIB_EDOP_INSERT)
-                eprnn("-");
-            else
-                eprnn("{}", target[++tIdx]);
-            if (j == start)
-                startTIdx = tIdx;
-        }
-        eprnn(" ({} - {})\n", max(startTIdx, 0), tIdx);
 
-        // match / mismatch
-        eprnn("   ");
-        for (int j = start; j < start + 50 && j < alignmentLength; j++) {
-            eprnn(alignment[j] == EDLIB_EDOP_MATCH ? "|" : " ");
-        }
-        eprnn("\n");
-
-        // query
-        eprnn("Q: ");
-        int startQIdx = qIdx;
-        for (int j = start; j < start + 50 && j < alignmentLength; j++) {
-            if (alignment[j] == EDLIB_EDOP_DELETE)
-                eprnn("-");
-            else
-                eprnn("{}", query[++qIdx]);
-            if (j == start)
-                startQIdx = qIdx;
-        }
-        eprnn(" ({} - {})\n\n", max(startQIdx, 0), qIdx);
-    }
-}
-
-inline bool in_map_n(const auto &m, const hash_t &k)
-{ 
+inline bool in_map_n(const map<hash_t, bool> &m, const hash_t &k) { 
     return !k.first && m.find(k) != m.end();
-}
-
-inline pair<int, bool> in_map_nc(const auto &m, const hash_t &k, int ref_pos)
-{ 
-    if (k.first) return {ref_pos, false};
-    auto p = m.find(k);
-    if (p == m.end()) return {ref_pos, false};
-    if (ref_pos == -1) return {p->second.first, true};
-    return {ref_pos, true};
 }
 
 inline int min_qgram(int l, int q) {
     return l * (1 - MAX_GAP_ERROR - q * MAX_EDIT_ERROR) - (GAP_FREQUENCY * l + 1) * (q - 1);
 }
 
-inline int min_qgram_lo(int l, int q) {
-    return l * (1 - MAX_GAP_ERROR - q * (MAX_EDIT_ERROR/2)) - (GAP_FREQUENCY * l + 1) * (q - 1);
+inline bool hits_cmp(const Hit &a, const Hit &b) {
+    if (a.q != b.q) return a.q > b.q; // .p are all equal
+    return make_pair(a.i, a.j) < make_pair(a.i, a.j);   // larger intervals at the top! then by other ints
+}
+
+inline bool check_overlap (TREE_t::const_iterator &pf, int pf_pos, int pfp_pos) {
+    SUBTREE_t::const_iterator pfp;
+    if (pf != TREE.end() && (pfp = pf->second.find(pfp_pos)) != pf->second.end()) { // check overlap!
+        for (set<pair<INTERVAL, INTERVAL> >::iterator it = pfp->second.begin(); it != pfp->second.end(); it++) {
+            int sA = it->first.lower(),  eA = it->first.upper();
+            int sB = it->second.lower(), eB = it->second.upper();
+            assert(eA - sA == eB - sB);
+            if (eA - sA > MIN_READ_SIZE * 1.5 && eA - pf_pos >= RIGHT_ALLOWANCE && eB - pfp_pos >= RIGHT_ALLOWANCE)
+                return false;
+        }
+    }
+    return true;
+}
+
+inline void add_to_tree(INTERVAL a, INTERVAL b) {
+    set<pair<INTERVAL, INTERVAL> > s;
+    s.insert(make_pair(a, b));
+    boost::icl::interval_map<int, set<pair<INTERVAL, INTERVAL> > > iss;
+    iss += make_pair(b, s);
+    TREE += make_pair(a, iss);
 }
 
 
+AHOAutomata *aho = NULL;
 vector<int> qgram_p, qgram_r;
-auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
+
+pair<int, int> filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
 {
     int maxlen = max(q_len, r_len);
     int QG = 5;
@@ -135,7 +103,6 @@ auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, i
     //     make_tuple("#####...##", 7, 3),
     // };
     // for (int pi = 0; pi < patterns.size(); pi++) {
-    //     // int QG = get<1>(patterns[pi]);
     //     int minqg = min_qgram(maxlen, QG);
     //     uint64_t QSZ = (1 << (2 * QG)); 
     //     uint64_t MASK = QSZ - 1;
@@ -158,85 +125,52 @@ auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, i
     //     }
     //     if (qdist < minqg - get<2>(patterns[pi])) { // this should be worked upon a little bit
     //         QGRAM_SPACED_FAILED++;
-    //         // eprn("wohooo {}", pattern);
     //         return make_pair(-1, -1);
     //     }
     // }
 
-    // vector<int> qgram_p(QSZ, 0);
-    // vector<int> qgram_i(QSZ, 0);
+    map<int, int> hits;
+    assert(q_len == r_len);
+    int common = 0;
+    aho->search(q.c_str() + q_pos, q_len, hits, 1);
+    aho->search(r.c_str() + r_pos, r_len, hits, 2);
+    for (map<int, int>::iterator it = hits.begin(); it != hits.end(); it++)
+        if (it->second == 3) common++;
 
-    // const int MASK = QSZ - 1;
-    // for (int qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
-    //     qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
-    //     if (qi - q_pos >= QG) qgram_p[qgram] += 1;
-    // }
-    // for (int qi = r_pos, qgram = 0; qi < r_pos + r_len; qi++) {
-    //     qgram = ((qgram << 2) | qdna(r[qi])) & MASK;
-    //     if (qi - r_pos >= QG) qgram_i[qgram] += 1;
-    // }
-    // int dist = 0;
-    // for (int qi = 0; qi < QSZ; qi++) 
-    //     dist += min(qgram_p[qi], qgram_i[qi]);
+    double boundary = (3.0/4) * (q_len / 50.0);
+    if (common < boundary) {
+        CORE_FAILED++;
+        return make_pair(-1, -1);
+    }
 
-    // int maxlen = max(q_len, r_len);
-    // int maxedit = maxlen / 4 + 10;
-    // if (dist < maxlen - QSZ * maxedit - (QSZ - 1))
-    //     return make_pair(-1, -1);
-
-
-    int edist = 0;
-    // auto result = edlibAlign(
-    //     q.c_str() + q_pos, q_len,
-    //     r.c_str() + r_pos, r_len,
-    //     edlibNewAlignConfig(maxlen * .40, EDLIB_MODE_HW, EDLIB_TASK_DISTANCE, 0, 0)
-    // );
-    // auto edist = result.editDistance;
-    // edlibFreeAlignResult(result);
-    // if (edist == -1) {
-    //     return -1;
-    // }
-
-    return make_pair(0, 0);
-    // if (result.editDistance == -1 > DL/4 && dist >= DL - QG + 1 - QG * (DL / 4)) {
-    //     eprn("\n--- {}: ed {} qg {}/{} jac {}", DL, result.editDistance, 
-    //         dist, DL - QG + 1 - QG * (DL / 4), prev_jaccard_p);
-    //     // char* cigar = edlibAlignmentToCigar(result.alignment, result.alignmentLength, EDLIB_CIGAR_STANDARD);
-    //     printAlignment(q.c_str() + q_pos, ref_hash.seq.c_str() + r_pos, result.alignment, 
-    //         result.alignmentLength, *result.endLocations, EDLIB_MODE_NW);
-    //     exit(0);
-    // }
+    return make_pair(dist, common);
 }
 
 void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             int x, int y, // window to check for the initial MIN_READ_SIZE match
             int initial_match_length,
             //map<hash_t, char> 
-            auto L0, // W(query)
+            map<hash_t, bool> L0, // W(query)
             const Hash &ref_hash, 
             const Hash &query_hash,
             vector<Hit> &hits, // Output
             bool allow_overlaps=false)
 {
-// > chr22 21033606 21034790    chr22   21038016    21039210
-// chr22   21032636    21038019    chr22   21417024    21411669
     double tau = ::tau();
 
-    // prn("*** {} to {}/{} ***", p, x, y);
-    auto pf = TREE.find(p);
-    boost::icl::interval_set<int>::iterator pfp;
-    if (pf != TREE.end() && (pfp = pf->second.find(x)) != pf->second.end()) { // check overlap!
+    // eprn(">> eval {} vs {}", p, x);
+
+    TREE_t::const_iterator pf = TREE.find(p);
+    if (!check_overlap(pf, p, x)) {
         return;
     }
-
+    
     int i = x, 
         j = x + initial_match_length;
-
     // L0 is |W(query)| and L0[h] is {location of h in the query, false}
     // L  is |W(reference) + W(query)| 
     // L[h] is {location of h in the reference, true} iff h is in |W(reference) & W(query)|
-    SlidingMap<hash_t, bool> L(L0); // matches: ref---query!
-    // for (auto &p: L0) L.store[p.first] = {-1, false};
+    SlidingMap<hash_t, bool> L(L0); // matches: ref -> query!
     int idx_i = ref_hash.find_minimizers(i);
     if (idx_i == ref_hash.minimizers.size()) {
         return;
@@ -248,17 +182,18 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
         idx_j++;
     }
 
-    L.boundary = next(L.store.begin(), L0.size() - 1);
+    L.boundary = L.store.begin();
+    std::advance(L.boundary, L0.size() - 1);
+    
     int jaccard = L.boundary->second;
-    for (auto it = L.store.begin(); it != L.boundary; it++)
+    for (map<hash_t, bool>::iterator it = L.store.begin(); it != L.boundary; it++)
         jaccard += it->second;
-    // prn("ja={}|||{}", jaccard, L0.size());
+
     // Extend it up to MIN_READ_SIZE (initial match)
     int seed_i = -1, seed_jaccard = 0;
     if (jaccard >= tau * L0.size())
         seed_i = i, seed_jaccard = jaccard;
     // prn("[{} {}] ja={} se_i={} se_ja={}", x, y, jaccard, seed_i, seed_jaccard);
-    //if (seed_i != -1) 
     while (i < y) {
         if (idx_i < ref_hash.minimizers.size() && ref_hash.minimizers[idx_i].second < i + 1) {
             jaccard += L.remove(ref_hash.minimizers[idx_i].first);
@@ -274,11 +209,11 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
         }
         i++, j++;
     }
-    if (seed_i == -1)
+    if (seed_i == -1) {
         return;
+    }
 
-    // Keep extending it as much as we can
-
+    // Now keep extending it as much as we can
     // L has all minimizers now
     // we are mapping query[p, q] to ref[i, j]
     int q = p + initial_match_length;
@@ -288,40 +223,26 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     double init_jaccard = prev_jaccard;
     int prev_jaccard_p = jaccard;
     int init_jaccard_p = jaccard;
-    int last_n1 = 0, 
-        last_n2 = 0;
-
+    
     const int RECOVER_BP = 250; // We allow 250bp extra extend just in case!
     int recover = 0;
 
     int best_q = q;
     int best_j = j;
     char reason = 0;
-    // vector<pair<int, int>> best_matches;
-    // for (auto &p: L.store) if (p.second.second) {
-    //     assert(L0.find(p.first) != L0.end());
-    //     best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
-    // }
-    // prn("init best match: {}", best_matches.size());
-
-    while (q < query_hash.seq.size() && j < ref_hash.seq.size()) {
-        // prn(">> p,q={},{} ({}) i,j={},{} ({}) jaccard={} s={} score={}",
-        //     p,q,q-p,i,j,j-i,jaccard,L0.size(), j2md(double(jaccard)/L0.size()));
-    
+    while (q < query_hash.seq.size() && j < ref_hash.seq.size()) {    
         // - disallow overlaps or too long matches
         int max_match = MAX_MATCH;
         if (!allow_overlaps) 
             max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(p - i)));
         if (max(q - p, j - i) > max_match) {
-            // hits.push_back({p, q - 1, i, j - 1,  j2md(prev_jaccard), 0});
             reason = 0;
             break;
         }
 
         // - try extending to the right
-        // extend query
-        if (query_hash.minimizers[idx_q].second < q + 1) {
-            auto h = query_hash.minimizers[idx_q].first;
+        if (query_hash.minimizers[idx_q].second < q + 1) { // extend query
+            hash_t h = query_hash.minimizers[idx_q].first;
             if (!in_map(L0, h)) {
                 L0[h] = 0; // {query_hash.minimizers[idx_q].second, false};
                 // check is h in L now
@@ -332,9 +253,8 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             idx_q++;
         }
         q++;
-        // extend reference
-        if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) { 
-            auto &h = ref_hash.minimizers[idx_j];
+        if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) { // extend reference
+            const minimizer_t &h = ref_hash.minimizers[idx_j];
             jaccard += L.add(h.first, in_map_n(L0, h.first));
             idx_j++;
         } 
@@ -345,35 +265,23 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
             best_j = j;
             best_q = q;
             recover = 0;
-            // best_matches.clear();
-            // for (auto &p: L.store) if (p.second.second) {
-            //     assert(L0.find(p.first) != L0.end());
-            //     best_matches.push_back({p.second.first, L0[p.first].first}); // ref-query
-            // }
             continue;
         } 
 
-        // 1. keep extending some times...
         if (recover < RECOVER_BP) {
             recover++;
             continue;
         }
-
         reason = 2;
         break;
     }
 
-    auto edist = filter(query_hash.seq, p, best_q - p + 1, ref_hash.seq, i, best_j - i + 1);
+    pair<int, int> edist = filter(query_hash.seq, p, best_q - p + 1, ref_hash.seq, i, best_j - i + 1);
     if (edist.first < 0)
         return;
 
-    // prn("bmatch # {}", best_matches.size());
-    hits.push_back({p, best_q, i, best_j, j2md(prev_jaccard), j2md(init_jaccard), reason, make_pair(init_jaccard_p, prev_jaccard_p), edist.second});
-    TREE += make_pair(INTERVAL(p, best_q), 
-            boost::icl::interval_set<int>({INTERVAL(i, best_j)}));
-    // if (allow_overlaps) 
-    //     TREE += make_pair(INTERVAL(i, best_j),
-    //         boost::icl::interval_set<int>({INTERVAL(p, best_q)}));
+    hits.push_back(Hit(p, best_q, i, best_j, j2md(prev_jaccard), j2md(init_jaccard), reason, make_pair(init_jaccard_p, prev_jaccard_p), edist));
+    add_to_tree(INTERVAL(p, best_q), INTERVAL(i, best_j));
 }
 
 vector<Hit> search (int query_start, 
@@ -385,6 +293,7 @@ vector<Hit> search (int query_start,
     if (!qgram_p.size()) {
         qgram_p = vector<int>(1<<(2*8),0);
         qgram_r = vector<int>(1<<(2*8),0);
+        aho = new AHOAutomata();
     }
 
     map<hash_t, bool> L0;
@@ -394,14 +303,13 @@ vector<Hit> search (int query_start,
     int mi = st;
     //prn("{}\n", mi);
     
-    auto pf = TREE.find(query_start);
-    boost::icl::interval_set<int>::iterator pfp;
+    TREE_t::const_iterator pf = TREE.find(query_start);
 
     // Iterate through all unique hashes in query[query_start: query_start + MIN_READ_SIZE]
     // `candidates` is a list of positions in the reference which match the query hashes
     vector<int> candidates;
     for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= MIN_READ_SIZE; mi++) { 
-        auto &m = query_hash.minimizers[mi];
+        const minimizer_t &m = query_hash.minimizers[mi];
         if (mi != st && m.first == query_hash.minimizers[mi - 1].first) 
             continue;
         
@@ -410,43 +318,17 @@ vector<Hit> search (int query_start,
         if (m.first.first)
             continue;
         // Is this hash in the reference? Is this hash high-call hash as well?
-        auto ptr = ref_hash.index.find(m.first);
+        map<hash_t, list<int>, MapCompare>::const_iterator ptr = ref_hash.index.find(m.first);
         if (ptr == ref_hash.index.end() || ptr->second.size() >= ref_hash.threshold) 
             continue;
         // Iterate through positions in the reference with this hash
-        for (auto &pos: ptr->second) {
+        for (list<int>::const_iterator PI = ptr->second.begin(); PI != ptr->second.end(); PI++) {
+            int pos = *(PI);
             // Make sure to have at least 1 kb spacing if reference = query
-            // TODO: handle reverse complements
             if (!allow_overlaps && pos < query_start + 2 * MIN_READ_SIZE)
                 continue;
-
-            int initial_match_length = MIN_READ_SIZE;
-            if (pf != TREE.end() && (pfp = pf->second.find(pos)) != pf->second.end()) // check overlap!
-            {
-                continue; // should be extended on the right later on!
-
-                // prn("{} - {}", pf->first.lower(), pf->first.upper());
-                // prn("{} < {}", pfp->lower(), pfp->upper());
-
-                // int sA = pf->first.lower(), eA = pf->first.upper();
-                // int sB = pfp->lower(),      eB = pfp->upper();
-
-                // they need to have AT LEAST
-                // int endA = eA - query_start; 
-                // assert(endA > 0);
-                // int endB = eB - pos; 
-                // assert(endB > 0);
-                // initial_match_length = min(endA, endB) + MIN_READ_SIZE;
-                
-                // if (initial_match_length > MAX_MATCH) continue;
-
-                // if (abs(abs(sA - query_start) - abs(sB - pos)) < MIN_READ_SIZE) {
-                //     continue;
-                // } else {
-                //     initial_match_length = min(abs(eA - query_start), abs(eB - pos));
-                // }
-            }
-
+            if (!check_overlap(pf, query_start, pos)) 
+                continue;
             candidates.push_back(pos);
         }
     }
@@ -460,28 +342,20 @@ vector<Hit> search (int query_start,
 
     // Find all locations in the `candidates` so that
     // MIN_READ_SIZE read covers at least M (= s * tau) hashes
-    vector<pair<int, int>> T = {{-1, -1}};
+    vector<pair<int, int> > T; T.push_back(make_pair(-1,-1));
     for (int i = 0; i <= (int)candidates.size() - M; i++) {
         int j = i + (M - 1);
-
-        // int newM = ceil(candidates[i].second * tau());
-        // int j = i + (newM - 1);
 
         if (candidates[j] - candidates[i] < MIN_READ_SIZE) {
             int x = max(0, candidates[j] - MIN_READ_SIZE + 1), 
                 y = candidates[i] + 1;
             if (x >= T.back().second)
-                T.push_back({x, y});
+                T.push_back(make_pair(x, y));
             T.back().second = y;
         }
     }
 
-    // eprn("{} candidates to refine", T.size());
-
     vector<Hit> hits, hits_real;
-    // for (int t = 1; t < T.size(); t++) 
-    //     prn("{} {}-{}", query_start,  T[t].first, T[t].second);
-    // Extend each candidate!
     for (int t = 1; t < T.size(); t++) {
         refine(
             query_start, st, mi, 
@@ -490,27 +364,12 @@ vector<Hit> search (int query_start,
             L0, ref_hash, query_hash, hits, allow_overlaps
         );
     }
-    sort(hits.begin(), hits.end(), [](const auto &a, const auto &b) {
-        if (a.q != b.q) return a.q > b.q; // .p are all equal
-        return tie(a.i, a.j) < tie(a.i, a.j);   // larger intervals at the top! then by other ints
-    });
-    for (auto &h: hits) { // brute force, but maybe easier than doing full interval thing
-            auto &pp=h;
-            // prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{}\t{}\t{}\t{}\t{}\t{}\t{}\tBM;{}",
-            //     ">>>>>", pp.p, pp.q, 
-            //     "<<<<<", pp.i, pp.j,
-            //     pp.id, cat 
-            //     "+", "+",
-            //     // Optional fields
-            //     int(pp.break_criteria),
-            //     pp.q - pp.p, pp.j - pp.i,
-            //     pp.init_id,
-            //     pp.matches.size()
-            // );
-
+    sort(hits.begin(), hits.end(), hits_cmp);
+    for (int HI = 0; HI < hits.size(); HI++) { // brute force, but maybe easier than doing full interval thing
+        const Hit &h = hits[HI];
         bool add = true;
         for (int j = hits_real.size() - 1; j >= 0; j--) {
-            auto &ph = hits_real[j];
+            const Hit &ph = hits_real[j];
             if (h.i >= ph.i && h.j <= ph.j) { // if full match
                 add = false;
                 break;
@@ -518,11 +377,6 @@ vector<Hit> search (int query_start,
         }
         if (add) hits_real.push_back(h);
     }
-    // hits = hits_real;
-    // for (auto &h: hits_real) {
-    //     TREE += make_pair(INTERVAL(h.p, h.q), 
-    //         boost::icl::interval_set<int>({INTERVAL(h.i, h.j)}));
-    // }
     reverse(hits_real.begin(), hits_real.end()); // smaller to larger
     TREE -= INTERVAL(0, query_start);
 
