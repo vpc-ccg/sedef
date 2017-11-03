@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-c
+CFLAGS=-c -I fmt -I boost_1_65_1
 LDFLAGS=-static
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
