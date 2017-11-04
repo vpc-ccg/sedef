@@ -1,11 +1,11 @@
 CC=g++
-CFLAGS=-c -I fmt -I boost_1_65_1
-LDFLAGS=-static
+CFLAGS=-c -I fmt -I . -std=c++14 -I src
+LDFLAGS=
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
-SOURCES:=$(wildcard src/*.cc) fmt/fmt/format.cc 
+SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) parse.cc
 OBJECTS=$(SOURCES:.cc=.o) patterns.o
-EXECUTABLE=sedef-jaccard
+EXECUTABLE=sedef
 
 all: CFLAGS+=-g -O2
 all: $(SOURCES) $(EXECUTABLE)

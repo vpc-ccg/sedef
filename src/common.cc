@@ -1,20 +1,31 @@
 /// 786
 
+#include <time.h>
+#include <sstream>
+
 #include "common.h"
-#include <boost/math/distributions/binomial.hpp>
+using namespace std;
 
-int estM(int s, double ci)
+vector<string> &split(const string &s, char delim, vector<string> &elems) 
 {
-    using namespace boost::math;
-
-    int i = ceil(s * ::tau());
-    for (; i >= 0; i--)
-    {
-        int x = quantile(complement(binomial(s, double(i) / s), (1.0 - ci) / 2));
-        if (j2md(double(x) / s) >= MAX_GAP_ERROR)
-            break;
+    stringstream ss(s);
+    string item;
+    while(getline(ss, item, delim)) {
+        elems.push_back(item);
     }
-    return i ? i - 1 : 0;
+    return elems;
 }
 
+vector<string> split(const string &s, char delim) 
+{
+    vector<string> elems;
+    return split(s, delim, elems);
+}
 
+double current_time()
+{
+    timespec tv;
+    clock_gettime(CLOCK_REALTIME, &tv);
+
+    return (tv.tv_sec*1000000000 + tv.tv_nsec) / 1000000000.0;
+}

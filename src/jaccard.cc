@@ -8,6 +8,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
+
 #include "common.h"
 #include "search.h"
 using namespace std;
@@ -16,21 +18,8 @@ extern int QGRAM_NORMAL_FAILED;
 extern int QGRAM_SPACED_FAILED;
 extern int CORE_FAILED;
 
-int main(int argc, char **argv)
+void jaccard_search(string ref_path, string query_path, bool is_complement)
 {
-    if (argc < 3) exit(1);
-
-    eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁", 0);
-    eprn("🐚       S   E   D   E   F       🐚", 0);
-    eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁", 0);
-    eprnn("   🖥  {}; arguments: ", GITVER);
-    for (int i = 0; i < argc; i++) eprnn(" {}", argv[i]);
-    eprnn("\n");
-    
-    string ref_path = argv[1];
-    string query_path = argv[2];
-    bool is_complement = (argc > 3 && tolower(argv[3][0]) == 'y');
-
     string line, reference, query;
 
     ifstream fin;
@@ -119,6 +108,4 @@ int main(int argc, char **argv)
     eprn("Fails: cores         {:10n}\n"
          "       q-gram normal {:10n}\n"
          "       q-gram spaced {:10n}", CORE_FAILED, QGRAM_NORMAL_FAILED, QGRAM_SPACED_FAILED);
-
-    return 0;
 }

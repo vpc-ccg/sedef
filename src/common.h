@@ -3,9 +3,10 @@
 #pragma once 
 
 #include <map>
-#include <fmt/format.h>
-#include <boost/math/distributions/binomial.hpp>
+#include <vector>
+#include <string>
 
+#include "extern/format.h"
 #define prn(f, ...)    fmt::print(f "\n", __VA_ARGS__)
 #define prnn(...)      fmt::print(__VA_ARGS__)
 
@@ -42,6 +43,7 @@ static char dna_lookup[128] = {
     3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,2,0,0,0,0,0,0,0,0,
     0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0
 };
+
 inline char qdna(char c) 
 {
     return dna_lookup[c];
@@ -72,3 +74,7 @@ inline double j2md(float j)
 }
 
 int estM(int s, double ci=0.75);
+std::vector<std::string> split(const std::string &s, char delim);
+
+double current_time();
+
