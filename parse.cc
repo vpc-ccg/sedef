@@ -4,18 +4,11 @@
 #include "common.h"
 #include "fasta.h"
 #include "align.h"
+#include "search.h"
 
 #include "extern/ksw2.h"
 
 using namespace std;
-
-static char rdna[128] = {
-	'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'T', 'N', 'G', 'N', 'N', 'N', 'C', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'A', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 't', 'N', 'g', 'N', 'N', 'N', 'c', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'N', 'N', 'N', 'N', 'a', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N'
-};
 
 // ints are - if rev compl
 typedef tuple<string, int, int> loc_t;
@@ -26,14 +19,20 @@ string seq(FastaReference &fr, loc_t l)
 	int b = get<2>(l);
 	bool rc = 0;
 	if (a<0) {
-		a=-a-2; b=-b-2;
+		a=-a; b=-b;
 		swap(a,b);
+		a--;
+		b--;
 		rc=1;
+	} else {
+		a--;
+		// a-=1;
+		// b-=1;
 	}
     string s = fr.getSubSequence(get<0>(l), a, b-a);
     if (rc) {
         reverse(s.begin(), s.end());
-        for (auto &c: s) c = rdna[c];
+        for (auto &c: s) c = rdna(c);
     }
     return s;
 }
@@ -123,7 +122,7 @@ void prn_aln (auto result, int qa, int qb, int WD=2000)
 	}
 }
 
-pair<double, double> get_err(auto result)
+pair<pair<int,int>,pair<double,double>> get_err(auto result)
 {
 	int len = get<2>(result).size();
 	int gaps = 0, mismatches = 0;
@@ -134,7 +133,8 @@ pair<double, double> get_err(auto result)
 	}
 	double gap_err = 100*gaps/double(len);
 	double mis_err = 100*mismatches/double(len);
-	return {mis_err, gap_err};
+	// return {mis_err, gap_err};
+	return make_pair(make_pair(gaps, mismatches), make_pair(mis_err, gap_err));
 }
 
 pair<pair<int, int>, pair<int, int>> trim(string &a, string &b, deque<pair<char, int>> &cigar) 
@@ -144,28 +144,28 @@ pair<pair<int, int>, pair<int, int>> trim(string &a, string &b, deque<pair<char,
 	while (cigar.size()) {
 		if (cigar[0].first == 'D') {
 			a = a.substr(cigar[0].second);
-			prn("  Trim: removing {} at beginning of A1", cigar[0].second);
+			// prn("  Trim: removing {} at beginning of A1", cigar[0].second);
 			fa += cigar[0].second;
 			cigar.pop_front();
 			continue;
 		}
 		if (cigar[0].first == 'I') {
 			b = b.substr(cigar[0].second);
-			prn("  Trim: removing {} at beginning of A2", cigar[0].second);
+			// prn("  Trim: removing {} at beginning of A2", cigar[0].second);
 			fb += cigar[0].second;
 			cigar.pop_front();
 			continue;
 		}
 
 		if (cigar.back().first == 'D') {
-			prn("  Trim: removing {} at the back of A1", cigar.back().second);
+			// prn("  Trim: removing {} at the back of A1", cigar.back().second);
 			ga -= cigar.back().second;
 			a = a.substr(0, a.size() - cigar.back().second);
 			cigar.pop_back();
 			continue;
 		}
 		if (cigar.back().first == 'I') {
-			prn("  Trim: removing {} at the back of A2", cigar.back().second);
+			// prn("  Trim: removing {} at the back of A2", cigar.back().second);
 			gb -= cigar.back().second;
 			b = b.substr(0, b.size() - cigar.back().second);
 			cigar.pop_back();
@@ -242,15 +242,54 @@ pair<pair<int, int>,pair<int, int>> find_match_in_alignment(auto result, loc_t A
 	return make_pair(mloc1, mloc2);
 }
 
-bool check (FastaReference &fr, loc_t A1, loc_t A2, loc_t B1, loc_t B2, string cigarstr) 
+string regenerate_cigar(auto r)
 {
-	prnn("Preflight check:\n");
+	// prn("CIGAR:{}\n{}\n{}", get<0>(r), get<1>(r), get<2>(r));
+	string cigar = "";
+	int sz = 0;
+	char op = 0, top;
+	for (int i = 0; i < get<2>(r).size(); i++) {
+		if (get<0>(r)[i] == '-') {
+			top = 'I';
+		} else if (get<1>(r)[i] == '-') {
+			top = 'D';
+		// } else if (!ceq(get<0>(r)[i], get<1>(r)[i])) {
+		// 	top = 'X';
+		} else {
+			// top = '=';
+			top = 'M';
+		}
 
+		if (op != top) {
+			if (op) cigar += fmt::format("{}{}", sz, op);
+			op = top, sz = 0;
+		}
+		sz++;
+	}
+	cigar += fmt::format("{}{}", sz, op);
+	return cigar;
+}
+
+void print_pair(loc_t A, loc_t B, string cigar, auto err)
+{
+	char rc = '+';
+	prnn("{}\t{}\t{}\t", get<0>(A), get<1>(A), get<2>(A));
+	if (get<1>(B) < 0) {
+		swap(get<1>(B), get<2>(B));
+		get<1>(B) *= -1;
+		get<2>(B) *= -1;
+		rc = '-';
+	}
+	prnn("{}\t{}\t{}\t", get<0>(B), get<1>(B), get<2>(B));
+	prn("NA\t0\t+\t{}\t{}\t{}\t{:.2f}\t{}\t{}", rc, err.first.first, err.first.second, 
+		err.second.first, err.second.second, cigar);
+}
+
+bool check (FastaReference &fr, loc_t A1, loc_t A2, const string &cigarstr) 
+{
 	auto a = seq(fr, A1);
 	auto b = seq(fr, A2);
-	
-	// auto ha = a, hb = b;
-	
+		
 	auto cigar = cigar_to_deq(cigarstr);
 	auto tr = trim(a, b, cigar);
 	get<1>(A1) += tr.first.first;  
@@ -258,30 +297,33 @@ bool check (FastaReference &fr, loc_t A1, loc_t A2, loc_t B1, loc_t B2, string c
 	get<2>(A1) -= tr.second.first;
 	get<2>(A2) -= tr.second.second;
 
-	prnn("  * 1: "); prna(A1, B1);
-	prnn("  * 2: "); prna(A2, B2);		
+	// prnn("  * 1: "); prna(A1, B1);
+	// prnn("  * 2: "); prna(A2, B2);		
 	
 	auto err_aln = check_err(a, b, cigar);
 
-	if (err_aln.first.first + err_aln.first.second <= 25) return true;
+	// if (err_aln.first.second.first + err_aln.first.second.second <= 25) {
+	// 	print_pair(A1, A2, regenerate_cigar(err_aln.second), err_aln.first);
+	// 	return true;
+	// }
 
-	prn("  * len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-		get<0>(err_aln.second).size(), 
-		err_aln.first.first, err_aln.first.second, 
-		err_aln.first.first + err_aln.first.second);
+	// prn("  * len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
+	// 	get<0>(err_aln.second).size(), 
+	// 	err_aln.first.first, err_aln.first.second, 
+	// 	err_aln.first.first + err_aln.first.second);
 
-	auto match = find_match_in_alignment(err_aln.second, A1, A2, B1, B2);
-	prn("  * >> B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
-		"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
-		get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
-		match.first.first, match.first.second,
-		match.second.first, match.second.second);
+	// auto match = find_match_in_alignment(err_aln.second, A1, A2, B1, B2);
+	// prn("  * >> B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
+	// 	"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
+	// 	get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
+	// 	match.first.first, match.first.second,
+	// 	match.second.first, match.second.second);
 
 	// prn_aln(err_aln.second, get<1>(A1), get<1>(A2), 100);
 
 	// find maximal matches
 	auto ncos = max_sum(err_aln.second, 1000); 
-	if (ncos.size() == 0) prnn("  !! NO MATCHES !!\n");
+	// if (ncos.size() == 0) return false; // prnn("  !! NO MATCHES !!\n");
 	// returns list of max matchings of span at least 750
 	// format: [((i, j) span in edit string, (a, b) start pos in strings)]
 	// TODO check this for error!!! 	
@@ -293,7 +335,7 @@ bool check (FastaReference &fr, loc_t A1, loc_t A2, loc_t B1, loc_t B2, string c
 		get<2>(ea.second) = get<2>(ea.second).substr(nco.first, nco.second - nco.first);
 		ea.first = get_err(ea.second);
 
-		if (ea.first.first + ea.first.second > 25) continue;
+		if (ea.first.second.first + ea.first.second.second > 25) continue;
 
 		auto n_A1 = A1;
 		get<1>(n_A1) += ncop.second.first;  // shift A1
@@ -305,64 +347,33 @@ bool check (FastaReference &fr, loc_t A1, loc_t A2, loc_t B1, loc_t B2, string c
 		get<2>(n_A2) = get<1>(n_A2);
 		for (auto c: get<1>(ea.second)) if (c != '-') get<2>(n_A2)++;
 
-		prnn("  + 1: "); prna(n_A1, B1);
-		prnn("  + 2: "); prna(n_A2, B2);		
+		int nlow0 = 0, nlow1 = 0;
+		for (auto c: get<0>(ea.second)) if (isupper(c)) nlow0++;
+		for (auto c: get<1>(ea.second)) if (isupper(c)) nlow1++;
 
-		prn("  + len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-			get<0>(ea.second).size(), 
-			ea.first.first, ea.first.second, 
-			ea.first.first + ea.first.second);
+		if (nlow0 < 500) continue;
+		if (nlow1 < 500) continue;
 
-		match = find_match_in_alignment(ea.second, n_A1, n_A2, B1, B2);
-		prn("  + !! B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
-			"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
-			get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
-			match.first.first, match.first.second,
-			match.second.first, match.second.second);
-		prn_aln(ea.second, get<1>(n_A1), get<1>(n_A2));
+		// if (min(nlow1, nlow0) < 50) continue; 
+
+		print_pair(n_A1, n_A2, regenerate_cigar(ea.second), ea.first);
+
+		// prnn("  + 1: "); prna(n_A1, B1);
+		// prnn("  + 2: "); prna(n_A2, B2);		
+
+		// prn("  + len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
+		// 	get<0>(ea.second).size(), 
+		// 	ea.first.first, ea.first.second, 
+		// 	ea.first.first + ea.first.second);
+
+		// match = find_match_in_alignment(ea.second, n_A1, n_A2, B1, B2);
+		// prn("  + !! B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
+		// 	"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
+		// 	get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
+		// 	match.first.first, match.first.second,
+		// 	match.second.first, match.second.second);
+		// prn_aln(ea.second, get<1>(n_A1), get<1>(n_A2));
 	}
-
-	// 	//
-	// 	//
-
-	// 	auto nerr = get_err(ea.second);
-	// 	prn(">=== NEW {}-{} ===<", nco.first, nco.second);
-	// 	prn("len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-	// 		nco.second - nco.first, nerr.first, nerr.second, nerr.first+nerr.second);
-	// 	prn_aln(ea.second, ncos.second[INC].first+get<1>(A1), ncos.second[INC].second+get<1>(A2));
-
-	// }
-
-
-	// prn_aln(err_aln.second, get<1>(A1), get<1>(A2));
-
-
-	// prnn("Alt:\n");
-	// cigarstr = xalign(a, b, 1,-10,40,1);
-	// cigar = cigar_to_deq(cigarstr);
-	// err_aln = check_err(a, b, cigar, true, get<1>(A1), get<1>(A2));
-
-	// auto ncos = max_sum(err_aln.second);	
-
-	// auto wa = seq(fr, B1);
-	// auto wb = seq(fr, B2);
-	// auto wcigstr = xalign(wa, wb);
-	// auto wcigar = cigar_to_deq(wcigstr);
-	// check_err(wa, wb, wcigar, true, get<1>(B1), get<1>(B2));
-
-	// if (ncos.first.size() == 0) prnn("NO HITS !!!!!!!\n");
-	// for (int INC=0;INC<ncos.first.size();INC++) {
-	// 	auto &nco = ncos.first[INC];
-	// 	auto ea = err_aln;
-	// 	get<0>(ea.second) = get<0>(ea.second).substr(nco.first, nco.second - nco.first);
-	// 	get<1>(ea.second) = get<1>(ea.second).substr(nco.first, nco.second - nco.first);
-	// 	get<2>(ea.second) = get<2>(ea.second).substr(nco.first, nco.second - nco.first);
-	// 	auto nerr = get_err(ea.second);
-	// 	prn(">=== NEW {}-{} ===<", nco.first, nco.second);
-	// 	prn("len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-	// 		nco.second - nco.first, nerr.first, nerr.second, nerr.first+nerr.second);
-	// 	prn_aln(ea.second, ncos.second[INC].first+get<1>(A1), ncos.second[INC].second+get<1>(A2));
-	// }
 
 	return false; // (err.first.first+err.first.second <= 25);
 }
@@ -376,13 +387,177 @@ loc_t make_loc(string chr, int a, int b, bool rc)
 	}
 }
 
-void parse_debug(int argc, char **argv)
+void parse(int argc, char **argv)
+{
+	FastaReference fr(argv[1]);
+
+	ifstream fin(argv[2]);
+	string s;
+	eprnn("Starting...\n");
+	while (getline(fin, s)) {
+		auto sp = split(s, '\t');
+
+		// Reverse...
+		int q = sp[9][0] == '-';
+		loc_t A1 = make_loc(sp[0], atoi(sp[1].c_str()), atoi(sp[2].c_str()), false);
+		loc_t A2 = make_loc(sp[3], atoi(sp[4].c_str()), atoi(sp[5].c_str()), q);
+
+		// eprn("{} {} {} {}", sp[3], sp[4], sp[5], q);
+
+		// int q = sp[19][0] == '-';
+		// loc_t A1 = make_loc(sp[10], atoi(sp[11].c_str()), atoi(sp[12].c_str()), false);
+		// loc_t A2 = make_loc(sp[13], atoi(sp[14].c_str()), atoi(sp[15].c_str()), q);
+
+
+		check(fr, A1, A2, sp[16]);
+	}
+}
+
+
+
+
+
+
+// void parse(int argc, char **argv)
+// {
+// 	AHOAutomata ah;
+	
+// 	// for (int IT = 0; IT < 1000000; IT++) {
+// 	ifstream fin("data/hg19/chr1.fa");
+// 	string ref, s;
+// 	getline(fin, s);
+// 	while (getline(fin, s)) {
+// 		for (auto c: s) ref += toupper(c);
+// 	}
+// 	for (int IT = 0; IT < ref.size() - 750; IT +=1000) {
+// 		// randomize string
+
+// 		string a = ref.substr(IT, 750);
+// 		int q=0; for (auto c: a) if (c == 'N') q++;
+// 		if (q>50) continue;
+
+// 		// string a;
+// 		// for (int i = 0; i < 750; i++) {
+// 		// 	a += "ACGT"[rand() % 4];
+// 		// }
+
+// 		string b = a;
+// 		for (int i = 0; i < 750; i++) {
+// 			int chance = rand() % 10;
+// 			if (chance < 1) {
+// 				char n = "ACGT"[rand() % 4];
+// 				while (b[i] == n) n = "ACGT"[rand() % 4];
+// 				b[i] = n;
+// 			}
+// 		}
+
+// 		map<int, int> hits;
+// 	    int common = 0;
+// 	    ah.search(a.c_str(), a.size(), hits, 1);
+// 	    ah.search(b.c_str(), a.size(), hits, 2);
+// 	    for (auto it = hits.begin(); it != hits.end(); it++)
+// 	        if (it->second == 3) common++;
+
+// 	    //double boundary = (3.0/4) * (q_len / 50.0);
+// 	    prn("{}", common);
+// 	}
+// }
+
+
+
+
+
+bool check (FastaReference &fr, loc_t A1, loc_t A2, loc_t B1, loc_t B2, const string &cigarstr) 
+{
+	auto a = seq(fr, A1);
+	auto b = seq(fr, A2);
+		
+	auto cigar = cigar_to_deq(cigarstr);
+	auto tr = trim(a, b, cigar);
+	get<1>(A1) += tr.first.first;  
+	get<1>(A2) += tr.first.second; 
+	get<2>(A1) -= tr.second.first;
+	get<2>(A2) -= tr.second.second;
+
+	prnn("  * 1: "); prna(A1, B1);
+	prnn("  * 2: "); prna(A2, B2);		
+	
+	auto err_aln = check_err(a, b, cigar);
+
+	if (err_aln.first.second.first + err_aln.first.second.second <= 25) {
+		return true;
+	}
+
+	prn("  * len={}; mis={:.1f}; gap={}; total={}", 
+		get<0>(err_aln.second).size(), 
+		err_aln.first.second.first, err_aln.first.second.second, 
+		err_aln.first.second.first + err_aln.first.second.second);
+
+	auto match = find_match_in_alignment(err_aln.second, A1, A2, B1, B2);
+	prn("  * >> B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
+		"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
+		get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
+		match.first.first, match.first.second,
+		match.second.first, match.second.second);
+
+	prn_aln(err_aln.second, get<1>(A1), get<1>(A2), 100);
+
+	// find maximal matches
+	auto ncos = max_sum(err_aln.second, 1000); 
+	// if (ncos.size() == 0) return false; // prnn("  !! NO MATCHES !!\n");
+	// returns list of max matchings of span at least 750
+	// format: [((i, j) span in edit string, (a, b) start pos in strings)]
+	// TODO check this for error!!! 	
+	for (auto ncop: ncos) {
+		auto ea = err_aln;
+		auto &nco = ncop.first;
+		get<0>(ea.second) = get<0>(ea.second).substr(nco.first, nco.second - nco.first);
+		get<1>(ea.second) = get<1>(ea.second).substr(nco.first, nco.second - nco.first);
+		get<2>(ea.second) = get<2>(ea.second).substr(nco.first, nco.second - nco.first);
+		ea.first = get_err(ea.second);
+
+		if (ea.first.second.first + ea.first.second.second > 25) continue;
+
+		auto n_A1 = A1;
+		get<1>(n_A1) += ncop.second.first;  // shift A1
+		get<2>(n_A1) = get<1>(n_A1);
+		for (auto c: get<0>(ea.second)) if (c != '-') get<2>(n_A1)++;
+
+		auto n_A2 = A2;
+		get<1>(n_A2) += ncop.second.second; // shift A2
+		get<2>(n_A2) = get<1>(n_A2);
+		for (auto c: get<1>(ea.second)) if (c != '-') get<2>(n_A2)++;
+
+		// print_pair(n_A1, n_A2, regenerate_cigar(ea.second), ea.first);
+
+		prnn("  + 1: "); prna(n_A1, B1);
+		prnn("  + 2: "); prna(n_A2, B2);		
+
+		prn("  + len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
+			get<0>(ea.second).size(), 
+			ea.first.second.first, ea.first.second.second, 
+			ea.first.second.first + ea.first.second.second);
+
+		match = find_match_in_alignment(ea.second, n_A1, n_A2, B1, B2);
+		prn("  + !! B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
+			"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
+			get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
+			match.first.first, match.first.second,
+			match.second.first, match.second.second);
+		prn_aln(ea.second, get<1>(n_A1), get<1>(n_A2));
+	}
+
+	return false; // (err.first.first+err.first.second <= 25);
+}
+
+
+void parsex(int argc, char **argv)
 {
 	eprnn("parsiiiing!\n");
 
-	FastaReference fr("data/hg19/hg19.fa");
+	FastaReference fr(argv[1]);
 
-	ifstream fin(argv[1]);
+	ifstream fin(argv[2]);
 	string s;
 	int _q = 0, i = 0;
 	while (getline(fin, s)) {
@@ -409,26 +584,6 @@ void parse_debug(int argc, char **argv)
 		if (_q > 10) break;
 	}
 }
-
-void parse(int argc, char **argv)
-{
-	FastaReference fr(argv[1]);
-
-	ifstream fin(argv[2]);
-	string s;
-	while (getline(fin, s)) {
-		auto sp = split(s, '\t');
-
-		// Reverse...
-		int q = sp[9][0] == '-';
-		int q = sp[8][0] == '-';
-		loc_t A1 = make_loc(sp[0], atoi(sp[1].c_str()), atoi(sp[2].c_str()), false);
-		loc_t A2 = make_loc(sp[3], atoi(sp[4].c_str()), atoi(sp[5].c_str()), q);
-
-		check(fr, A1, A2, sp[sp.size()-1]);
-	}
-}
-
 
 // ATAGCTAGCTAGCAT
 // --AGCTAcC--GCATA

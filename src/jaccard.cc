@@ -14,9 +14,12 @@
 #include "search.h"
 using namespace std;
 
-extern int QGRAM_NORMAL_FAILED;
-extern int QGRAM_SPACED_FAILED;
-extern int CORE_FAILED;
+extern int64_t TOTAL_ATTEMPTED ;
+extern int64_t JACCARD_FAILED ;
+extern int64_t QGRAM_NORMAL_FAILED ;
+extern int64_t OTHER_FAILED ;
+extern int64_t CORE_FAILED ;
+extern int64_t INTERVAL_FAILED ;
 
 void jaccard_search(string ref_path, string query_path, bool is_complement)
 {
@@ -33,14 +36,11 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
     fin.close();
     fin.clear();
 
-    transform(reference.begin(), reference.end(), reference.begin(), ::toupper);
+    //transform(reference.begin(), reference.end(), reference.begin(), ::toupper);
     if (is_complement) {
         eprnn("Reversing reference...\n");
         reverse(reference.begin(), reference.end());
-        for (int i = 0; i < reference.size(); i++) {
-            char &c = reference[i];
-            c = (c == 'A' ? 'T' : (c == 'C' ? 'G' : (c == 'G' ? 'C' : (c == 'T' ? 'A' : c))));
-        }
+        transform(reference.begin(), reference.end(), reference.begin(), rdna);
     }
 
     fin.open(query_path.c_str());
@@ -50,7 +50,7 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
         else query_chr = line.substr(1);
     }
     fin.close();
-    transform(query.begin(), query.end(), query.begin(), ::toupper);
+    // transform(query.begin(), query.end(), query.begin(), ::toupper);
 
     Hash ref_hash = Hash(reference);
 
@@ -67,6 +67,7 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 
     int total = 0;
     for (int i = 0; i < query.size(); i += 250) {
+    // int W=16085070; for (int i = W; i < W+1000; i += 250) {
     // chr22    16467109    16469072    chr22:16883317  0   _   chr22   16883317    16885246
     // 34421249    34419320
     // for (int i = 16467100, j = 0; i < query.size(); i += 250, j++) {
@@ -104,8 +105,12 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
     }
     eprnn("\n");
 
-    eprn("Total:               {:10n}", total);
-    eprn("Fails: cores         {:10n}\n"
-         "       q-gram normal {:10n}\n"
-         "       q-gram spaced {:10n}", CORE_FAILED, QGRAM_NORMAL_FAILED, QGRAM_SPACED_FAILED);
+    eprn("Total:                   {:10n}", total);
+    eprn("Fails: attempts          {:10n}\n"
+         "       Jaccard           {:10n}\n"
+         "       interval          {:10n}\n"
+         "       cores             {:10n}\n"
+         "       q-grams           {:10n}\n"
+         "       lowercase         {:10n}", 
+         TOTAL_ATTEMPTED, JACCARD_FAILED, INTERVAL_FAILED, CORE_FAILED, QGRAM_NORMAL_FAILED, OTHER_FAILED);
 }

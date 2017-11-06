@@ -47,6 +47,7 @@ def process(a, b, cigar):
     right = 0 if cigar[-1][0] != 'M' else cigar[-1][1]
 
     fuged = 0
+    fuged_ext = 0
     gaps = 0
     mism = 0
     tlen = 0
@@ -55,6 +56,8 @@ def process(a, b, cigar):
     for op, sz in cigar:
         tlen += sz
         for i in xrange(sz):
+            if (ia < len(a) and a[ia].isupper()) or (ib < len(b) and b[ib].isupper()):
+                fuged_ext += 1
             if op == 'M': 
                 if a[ia].isupper() and b[ib].isupper(): 
                     fuged += 1
@@ -69,7 +72,7 @@ def process(a, b, cigar):
     mism = perc(mism, tlen)
     fpt = perc(fuged, tlen)
 
-    return ((left, right), (gaps, mism), (fuged, tlen))
+    return ((left, right), (gaps, mism), (fuged, fuged_ext, tlen))
 
 y = []
 n = 0
@@ -80,6 +83,8 @@ with open(sys.argv[1]) as f:
         q = 29
         n += 1
         y.append(process(l[q+1], l[q+2], l[q+0]) + (n,))
+
+print len(y)
 
 min_left  = min(y, key=lambda x: x[0][0])
 min_right = min(y, key=lambda x: x[0][1])
@@ -92,7 +97,10 @@ print max_gaps[3], max_gaps[1][0]
 print max_mism[3], max_mism[1][1]
 
 min_fug = min(y, key=lambda x: x[2][0])
+min_fuge = min(y, key=lambda x: x[2][1])
 print min_fug[3], min_fug[2][0]
+print min_fuge[3], min_fug[2][1]
+print sum(1 for s in y if s[2][1] < s[2][2]/10)
 
 exit(0)
 

@@ -60,7 +60,7 @@ FastaReference::FastaReference(string filename)
 {
     if (!(file = fopen(filename.c_str(), "r"))) {
         cerr << "could not open " << filename << endl;
-        exit(1);
+        assert(false);
     }
     struct stat stFileInfo; 
     string indexFileName = filename + ".fai"; 
@@ -92,9 +92,10 @@ FastaReference::~FastaReference(void) {
 string FastaReference::getSubSequence(string seqname, int start, int length) 
 {
     FastaIndexEntry entry = index.entry(seqname);
+    
     if (start < 0 || length < 1) {
         cerr << "Error: cannot construct subsequence with negative offset or length < 1" << endl;
-        exit(1);
+        assert(false);
     }
     // we have to handle newlines
     // approach: count newlines before start

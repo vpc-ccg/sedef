@@ -14,31 +14,27 @@ using namespace std;
 #include <boost/icl/interval_map.hpp>
 #include <boost/icl/interval_set.hpp>
 
-
 typedef boost::icl::discrete_interval<int> INTERVAL;
 typedef boost::icl::interval_map<int, set<pair<INTERVAL, INTERVAL> > > SUBTREE_t;
 typedef boost::icl::interval_map<int, SUBTREE_t> TREE_t;
 TREE_t TREE;
 
-
-const int MAX_MATCH = 1 * 500 * 1000; // 0.5 MB at most!
+const int MAX_MATCH = 50 * 1000; // 50kb at most
 const int RIGHT_ALLOWANCE = 750; /// TODO more mathy formulation
 
-int QGRAM_NORMAL_FAILED = 0;
-int QGRAM_SPACED_FAILED = 0;
-int CORE_FAILED = 0;
-
-
-inline bool in_map_n(const map<hash_t, bool> &m, const hash_t &k) { 
-    return !k.first && m.find(k) != m.end();
-}
+int64_t TOTAL_ATTEMPTED = 0;
+int64_t JACCARD_FAILED = 0;
+int64_t QGRAM_NORMAL_FAILED = 0;
+int64_t OTHER_FAILED = 0;
+int64_t CORE_FAILED = 0;
+int64_t INTERVAL_FAILED = 0;
 
 inline int min_qgram(int l, int q) {
     return l * (1 - MAX_GAP_ERROR - q * MAX_EDIT_ERROR) - (GAP_FREQUENCY * l + 1) * (q - 1);
 }
 
 inline bool hits_cmp(const Hit &a, const Hit &b) {
-    if (a.q != b.q) return a.q > b.q; // .p are all equal
+    if (a.q != b.q) return a.q > b.q; // .query_start are all equal
     return make_pair(a.i, a.j) < make_pair(a.i, a.j);   // larger intervals at the top! then by other ints
 }
 
@@ -49,8 +45,11 @@ inline bool check_overlap (TREE_t::const_iterator &pf, int pf_pos, int pfp_pos) 
             int sA = it->first.lower(),  eA = it->first.upper();
             int sB = it->second.lower(), eB = it->second.upper();
             assert(eA - sA == eB - sB);
-            if (eA - sA > MIN_READ_SIZE * 1.5 && eA - pf_pos >= RIGHT_ALLOWANCE && eB - pfp_pos >= RIGHT_ALLOWANCE)
-                return false;
+            if (eA - sA > MIN_READ_SIZE * 1.5 
+                // && abs((pf_pos - sA) - (pfp_pos - sB)) >= (eA-sA)/4
+                && eA - pf_pos  >= RIGHT_ALLOWANCE 
+                && eB - pfp_pos >= RIGHT_ALLOWANCE
+            ) return false;
         }
     }
     return true;
@@ -64,12 +63,21 @@ inline void add_to_tree(INTERVAL a, INTERVAL b) {
     TREE += make_pair(a, iss);
 }
 
-
 AHOAutomata *aho = NULL;
 vector<int> qgram_p, qgram_r;
 
+vector<int> barjoseph_p, barjoseph_q; 
 pair<int, int> filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
 {
+    int q_up = 0; for (int i = 0; i < q_len; i++) q_up += isupper(q[q_pos + i]); 
+    int r_up = 0; for (int i = 0; i < r_len; i++) r_up += isupper(r[r_pos + i]);
+
+    if (q_up < 500 || r_up < 500) {
+        OTHER_FAILED++;
+        return make_pair(-1, -1);
+    }
+    
+
     int maxlen = max(q_len, r_len);
     int QG = 5;
     uint64_t QSZ = (1 << (2 * QG)); 
@@ -77,6 +85,9 @@ pair<int, int> filter(const string &q, int q_pos, int q_len, const string &r, in
 
     int minqg = min_qgram(maxlen, QG);
     assert(minqg >= 10);
+
+    assert(q_pos + q_len < q.size());
+    assert(r_pos + r_len < r.size());
     
     for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
         qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
@@ -96,6 +107,42 @@ pair<int, int> filter(const string &q, int q_pos, int q_len, const string &r, in
         QGRAM_NORMAL_FAILED++;
         return make_pair(-1, -1);
     }
+
+    // ed<k => DIST<4kq 
+    // ed>13(kn)^(2/3)
+
+    // q = pow(n, 2.0/3)/(2*pow(k, 1.0/3)) --> 6~8
+    // QG = 6;
+    // QSZ = (1 << (2 * QG)); 
+    // MASK = QSZ - 1;
+    // int spaces = QG + 1;
+    // if (!barjoseph_p.size()) {
+    //     barjoseph_p = vector<int>(QSZ * spaces, 0);
+    //     barjoseph_q = vector<int>(QSZ * spaces, 0);
+    // }
+    // for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
+    //     qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
+    //     int bin = (qi - q_pos) / (q_len / QG);
+    //     assert(bin<spaces);
+    //     if (qi - q_pos >= QG - 1) barjoseph_p[QSZ * bin + qgram] += 1;
+    // }
+    // for (uint64_t qi = r_pos, qgram = 0; qi < r_pos + r_len; qi++) {
+    //     qgram = ((qgram << 2) | qdna(r[qi])) & MASK;
+    //     int bin = (qi - r_pos) / (r_len / QG);
+    //     assert(bin<spaces);
+    //     if (qi - r_pos >= QG - 1) barjoseph_q[QSZ * bin + qgram] += 1;
+    // }
+    // dist = 0;
+    // for (uint64_t qi = 0; qi < QSZ; qi++)  {
+    //     dist += min(barjoseph_p[qi], barjoseph_q[qi]);
+    //     barjoseph_p[qi] = barjoseph_q[qi] = 0;
+    // }
+    // int max_err = q_len / 10;
+    // if (dist > 4 * max_err * QG) {
+    //     OTHER_FAILED++;
+    //     return make_pair(-1, -1);
+    // }
+
    
     // w=50; k=5; s=11; k=8 -->7
     // auto patterns = vector<tuple<string, int, int>> {
@@ -146,11 +193,20 @@ pair<int, int> filter(const string &q, int q_pos, int q_len, const string &r, in
     return make_pair(dist, common);
 }
 
-void refine(int p, int idx_p, int idx_q, // query start and W(query) range
-            int x, int y, // window to check for the initial MIN_READ_SIZE match
-            int initial_match_length,
+inline bool match_winnow_query(multimap<hash_t, bool> &m, const hash_t &k, multimap<hash_t, bool>::iterator &it) { 
+    if (k.first) return false;
+
+    it = m.lower_bound(k);
+    for (; it != m.end() && it->first == k; it++) {
+        if (!it->second) return true;
+    }
+    return false;
+}
+
+void refine(int query_start, int query_winnow_end, // query start and W(query) range
+            int min_ref, int max_ref, // window to check for the initial MIN_READ_SIZE match
             //map<hash_t, char> 
-            map<hash_t, bool> L0, // W(query)
+            multimap<hash_t, bool> winnow_query, // W(query)
             const Hash &ref_hash, 
             const Hash &query_hash,
             vector<Hit> &hits, // Output
@@ -158,68 +214,129 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
 {
     double tau = ::tau();
 
-    // eprn(">> eval {} vs {}", p, x);
+    // eprn(">> eval {} vs {}..{}", query_start, min_ref, max_ref);
 
-    TREE_t::const_iterator pf = TREE.find(p);
-    if (!check_overlap(pf, p, x)) {
+    TREE_t::const_iterator pf = TREE.find(query_start);
+    if (!check_overlap(pf, query_start, min_ref)) {
+        TOTAL_ATTEMPTED ++;
+        INTERVAL_FAILED ++;
         return;
     }
+
+    multimap<hash_t, bool>::iterator tmpit;
     
-    int i = x, 
-        j = x + initial_match_length;
-    // L0 is |W(query)| and L0[h] is {location of h in the query, false}
-    // L  is |W(reference) + W(query)| 
-    // L[h] is {location of h in the reference, true} iff h is in |W(reference) & W(query)|
-    SlidingMap<hash_t, bool> L(L0); // matches: ref -> query!
-    int idx_i = ref_hash.find_minimizers(i);
-    if (idx_i == ref_hash.minimizers.size()) {
+    int ref_start = min_ref, 
+        ref_end = min_ref + MIN_READ_SIZE;
+    // winnow_query is |W(query)| and winnow_query[h] is {location of h in the query, false}
+    // winnow_union  is |W(reference) + W(query)| 
+    // winnow_union[h] is {location of h in the reference, position} iff h is in |W(reference) & W(query)|
+    SlidingMap<hash_t, bool> winnow_union(winnow_query); // matches: ref -> query!
+    int ref_winnow_start = ref_hash.find_minimizers(ref_start);
+    if (ref_winnow_start == ref_hash.minimizers.size()) {
+        TOTAL_ATTEMPTED ++;
+        JACCARD_FAILED ++;
         return;
     }
-    int idx_j = idx_i;
-    while (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j) {
+    int ref_winnow_end = ref_winnow_start;
+    // winnow_union is W(query) as winnow_query; 
+    // now extend it to W(query)|W(ref) and mark elements in W(query)&W(ref)
+
+    // prnn("winnow query init");
+    // for (auto &it : winnow_query) {
+    //     prnn("{}{}:{} ", "*N"[it.first.first],it.first.second, it.second);
+    // } prnn("\n");
+
+    while (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end) {
         // do not set 1 to N hashes
-        L.store[ref_hash.minimizers[idx_j].first] = in_map_n(L0, ref_hash.minimizers[idx_j].first);
-        idx_j++;
+        // prn("checking {}{}", "*N"[ref_hash.minimizers[ref_winnow_end].first.first],ref_hash.minimizers[ref_winnow_end].first.second);
+        bool is_in = match_winnow_query(winnow_query, ref_hash.minimizers[ref_winnow_end].first, tmpit);
+        auto it = winnow_union.store.insert(make_pair(ref_hash.minimizers[ref_winnow_end].first, is_in));
+        if (is_in) tmpit->second = true; // it is marked as NOT TOUCHED [fix: pointer maybe?]
+        ref_winnow_end++;
     }
+    // eprnn("init sha={}\n", shared_init);
 
-    L.boundary = L.store.begin();
-    std::advance(L.boundary, L0.size() - 1);
+    winnow_union.boundary = winnow_union.store.begin();
+    std::advance(winnow_union.boundary, winnow_query.size() - 1);
     
-    int jaccard = L.boundary->second;
-    for (map<hash_t, bool>::iterator it = L.store.begin(); it != L.boundary; it++)
+    int jaccard = winnow_union.boundary->second;
+    for (multimap<hash_t, bool>::iterator it = winnow_union.store.begin(); it != winnow_union.boundary; it++)
         jaccard += it->second;
 
     // Extend it up to MIN_READ_SIZE (initial match)
-    int seed_i = -1, seed_jaccard = 0;
-    if (jaccard >= tau * L0.size())
-        seed_i = i, seed_jaccard = jaccard;
-    // prn("[{} {}] ja={} se_i={} se_ja={}", x, y, jaccard, seed_i, seed_jaccard);
-    while (i < y) {
-        if (idx_i < ref_hash.minimizers.size() && ref_hash.minimizers[idx_i].second < i + 1) {
-            jaccard += L.remove(ref_hash.minimizers[idx_i].first);
-            idx_i++;        
+    int seed_ref_start = -1, seed_jaccard = 0;
+    if (jaccard >= tau * winnow_query.size())
+        seed_ref_start = ref_start, seed_jaccard = jaccard;
+
+    int ref_uppercase = 0;
+    int query_uppercase = 0;
+
+    // prn("[{} {}] ja={} se_i={} se_ja={}", min_ref, max_ref, jaccard, seed_ref_start, seed_jaccard);
+    while (ref_start < max_ref) {
+        if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1) {
+            // removing reference hash 
+            auto &h = ref_hash.minimizers[ref_winnow_start].first;
+            // LOWER BOUND: remove matching hash "just in case"
+            auto itu = winnow_union.store.lower_bound(h); 
+            bool in_union = false;
+            if (itu != winnow_union.store.end() && itu->first == h) {
+                auto itu2 = itu;
+                for (; itu2 != winnow_union.store.end() && itu2->first == h; itu2++)
+                    if (itu2->second) {
+                        itu = itu2; 
+                        break;
+                    }
+
+                // itu is "the hash"
+                // delink it from winnow_query
+                tmpit = winnow_query.lower_bound(h);
+                for (; tmpit != winnow_query.end() && tmpit->first == h; tmpit++)
+                    if (tmpit->second) {
+                        tmpit->second = false;
+                        break;
+                    }
+
+                if (h < winnow_union.boundary->first) {
+                    winnow_union.boundary++;
+                    jaccard += winnow_union.boundary->second - itu->second;
+                } else if (h == winnow_union.boundary->first) {
+                    itu2 = itu;
+                    for (; itu2 != winnow_union.store.end() && itu2->first == h; itu2++)
+                        if (itu2 == winnow_union.boundary) {
+                            winnow_union.boundary++;
+                            jaccard += winnow_union.boundary->second - itu->second;
+                            break;
+                        }
+                }
+                winnow_union.store.erase(itu);
+            }            
+            ref_winnow_start++;    
         }
-        if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) {
-            jaccard += L.add(ref_hash.minimizers[idx_j].first, in_map_n(L0, ref_hash.minimizers[idx_j].first));
-            idx_j++;
+        if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) {
+            bool is_in = match_winnow_query(winnow_query, ref_hash.minimizers[ref_winnow_end].first, tmpit);
+            jaccard += winnow_union.add(ref_hash.minimizers[ref_winnow_end].first, is_in);
+            if (is_in) tmpit->second = true;
+            ref_winnow_end++;
         }
-        if (jaccard >= tau * L0.size() && jaccard >= seed_jaccard) {
-            seed_i = i, seed_jaccard = jaccard;
+        if (jaccard >= tau * winnow_query.size() && jaccard >= seed_jaccard) {
+            seed_ref_start = ref_start, seed_jaccard = jaccard;
             break;
         }
-        i++, j++;
+        ref_start++, ref_end++;
     }
-    if (seed_i == -1) {
+    if (seed_ref_start == -1) {
+        TOTAL_ATTEMPTED ++;
+        JACCARD_FAILED ++;
         return;
     }
 
     // Now keep extending it as much as we can
-    // L has all minimizers now
-    // we are mapping query[p, q] to ref[i, j]
-    int q = p + initial_match_length;
-    // idx_i/idx_j points to the first/last minimizer of REF_i,j
-    // idx_p/idx_q points to the first/last minimizer of QUERY_p,q
-    double prev_jaccard = double(jaccard) / L0.size();
+    // winnow_union has all minimizers now
+    // we are mapping query[query_start, q] to ref[ref_start, ref_end]
+    int query_end = query_start + MIN_READ_SIZE;
+    // ref_winnow_start/ref_winnow_end points to the first/last minimizer of ref
+    // query_winnow_start/query_winnow_end points to the first/last minimizer of query
+    double prev_jaccard = double(jaccard) / winnow_query.size();
     double init_jaccard = prev_jaccard;
     int prev_jaccard_p = jaccard;
     int init_jaccard_p = jaccard;
@@ -227,43 +344,64 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
     const int RECOVER_BP = 250; // We allow 250bp extra extend just in case!
     int recover = 0;
 
-    int best_q = q;
-    int best_j = j;
+    int best_query_end = query_end;
+    int best_ref_end = ref_end;
     char reason = 0;
-    while (q < query_hash.seq.size() && j < ref_hash.seq.size()) {    
+    
+    pair<int, int> edist = filter(query_hash.seq, query_start, best_query_end - query_start + 1, ref_hash.seq, ref_start, best_ref_end - ref_start + 1);
+    if (edist.first < 0) {
+        TOTAL_ATTEMPTED ++;
+        return;
+    }
+
+    while (query_end < query_hash.seq.size() && ref_end < ref_hash.seq.size()) {    
         // - disallow overlaps or too long matches
         int max_match = MAX_MATCH;
         if (!allow_overlaps) 
-            max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(p - i)));
-        if (max(q - p, j - i) > max_match) {
+            max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)));
+        if (max(query_end - query_start, ref_end - ref_start) > max_match) {
             reason = 0;
             break;
         }
 
-        // - try extending to the right
-        if (query_hash.minimizers[idx_q].second < q + 1) { // extend query
-            hash_t h = query_hash.minimizers[idx_q].first;
-            if (!in_map(L0, h)) {
-                L0[h] = 0; // {query_hash.minimizers[idx_q].second, false};
-                // check is h in L now
-                jaccard += L.add(h, in_map_n(L.store, h));
-                L.boundary++; // |W(A)| increases
-                jaccard += L.boundary->second;
-            }
-            idx_q++;
+        // N detection
+        int n_count = 0;
+        while ((query_hash.seq[query_end] == 'N') || (ref_hash.seq[ref_end] == 'N')) {
+            n_count++, query_end++, ref_end++;
+            if (n_count > 100) goto end;
         }
-        q++;
-        if (idx_j < ref_hash.minimizers.size() && ref_hash.minimizers[idx_j].second < j + 1) { // extend reference
-            const minimizer_t &h = ref_hash.minimizers[idx_j];
-            jaccard += L.add(h.first, in_map_n(L0, h.first));
-            idx_j++;
+
+        if (max(ref_uppercase, query_uppercase) < (ref_end - ref_start) / 10) {
+            goto end;
+        }
+
+
+        // - try extending to the right
+        if (query_hash.minimizers[query_winnow_end].second < query_end + 1) { // extend query
+            hash_t h = query_hash.minimizers[query_winnow_end].first;
+            // check is h in winnow_union now
+            auto it = winnow_query.insert(make_pair(h, 0)); // {query_hash.minimizers[query_winnow_end].second, false};
+            bool is_in = match_winnow_query(winnow_union.store, h, tmpit);
+            if (is_in) it->second = tmpit->second = true; // mark hash in both winnows as matched!
+            jaccard += winnow_union.add(h, is_in);
+            winnow_union.boundary++; // |W(A)| increases
+            jaccard += winnow_union.boundary->second;
+            query_winnow_end++;
+        }
+        query_end++;
+        if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) { // extend reference
+            const minimizer_t &h = ref_hash.minimizers[ref_winnow_end];
+            bool is_in = match_winnow_query(winnow_query, h.first, tmpit);
+            jaccard += winnow_union.add(h.first, is_in);
+            if (is_in) tmpit->second = true;
+            ref_winnow_end++;
         } 
-        j++;
-        if (jaccard >= tau * L0.size()) {
-            prev_jaccard = double(jaccard) / L0.size();
+        ref_end++;
+        if (jaccard >= tau * winnow_query.size()) {
+            prev_jaccard = double(jaccard) / winnow_query.size();
             prev_jaccard_p = jaccard;
-            best_j = j;
-            best_q = q;
+            best_ref_end = ref_end;
+            best_query_end = query_end;
             recover = 0;
             continue;
         } 
@@ -276,12 +414,17 @@ void refine(int p, int idx_p, int idx_q, // query start and W(query) range
         break;
     }
 
-    pair<int, int> edist = filter(query_hash.seq, p, best_q - p + 1, ref_hash.seq, i, best_j - i + 1);
-    if (edist.first < 0)
+    end:
+    edist = filter(query_hash.seq, query_start, best_query_end - query_start + 1, ref_hash.seq, ref_start, best_ref_end - ref_start + 1);
+    if (edist.first < 0) {
+        TOTAL_ATTEMPTED ++;
         return;
+    }
 
-    hits.push_back(Hit(p, best_q, i, best_j, j2md(prev_jaccard), j2md(init_jaccard), reason, make_pair(init_jaccard_p, prev_jaccard_p), edist));
-    add_to_tree(INTERVAL(p, best_q), INTERVAL(i, best_j));
+    TOTAL_ATTEMPTED ++;
+
+    hits.push_back(Hit(query_start, best_query_end, ref_start, best_ref_end, j2md(prev_jaccard), j2md(init_jaccard), reason, make_pair(init_jaccard_p, prev_jaccard_p), edist));
+    add_to_tree(INTERVAL(query_start, best_query_end), INTERVAL(ref_start, best_ref_end));
 }
 
 vector<Hit> search (int query_start, 
@@ -289,16 +432,15 @@ vector<Hit> search (int query_start,
                     const Hash &query_hash, 
                     bool allow_overlaps) 
 {
-
     if (!qgram_p.size()) {
         qgram_p = vector<int>(1<<(2*8),0);
         qgram_r = vector<int>(1<<(2*8),0);
         aho = new AHOAutomata();
     }
-
-    map<hash_t, bool> L0;
+ 
+    multimap<hash_t, bool> winnow_query;
     int st = query_hash.find_minimizers(query_start);
-    if (st == query_hash.minimizers.size())
+    if (st == query_hash.minimizers.size()) 
         return vector<Hit>();
     int mi = st;
     //prn("{}\n", mi);
@@ -313,7 +455,7 @@ vector<Hit> search (int query_start,
         if (mi != st && m.first == query_hash.minimizers[mi - 1].first) 
             continue;
         
-        L0[m.first] = false;
+        winnow_query.insert(make_pair(m.first, 0));
         // If it is N hash, ignore it
         if (m.first.first)
             continue;
@@ -327,18 +469,23 @@ vector<Hit> search (int query_start,
             // Make sure to have at least 1 kb spacing if reference = query
             if (!allow_overlaps && pos < query_start + 2 * MIN_READ_SIZE)
                 continue;
-            if (!check_overlap(pf, query_start, pos)) 
+            if (!check_overlap(pf, query_start, pos)) {
+                TOTAL_ATTEMPTED ++;
+                INTERVAL_FAILED ++;
                 continue;
+            }
             candidates.push_back(pos);
         }
     }
     sort(candidates.begin(), candidates.end());
     
-    if (L0.size() < 1) { // TODO min sketch size limit for Ns
+    if (winnow_query.size() < 1) { // TODO min sketch size limit for Ns
+        TOTAL_ATTEMPTED ++;
+        JACCARD_FAILED ++;
         return vector<Hit>();
     }
-    int M = ceil(L0.size() * tau());
-    // eprn("{} candidates to evaluate (M={}, L0={}, tau={})", candidates.size(), M, L0.size(), tau());
+    int M = ceil(winnow_query.size() * tau());
+    // eprn("{} candidates to evaluate (M={}, winnow_query={}, tau={})", candidates.size(), M, winnow_query.size(), tau());
 
     // Find all locations in the `candidates` so that
     // MIN_READ_SIZE read covers at least M (= s * tau) hashes
@@ -358,10 +505,9 @@ vector<Hit> search (int query_start,
     vector<Hit> hits, hits_real;
     for (int t = 1; t < T.size(); t++) {
         refine(
-            query_start, st, mi, 
+            query_start, mi, // st, mi, 
             T[t].first, T[t].second, 
-            MIN_READ_SIZE,
-            L0, ref_hash, query_hash, hits, allow_overlaps
+            winnow_query, ref_hash, query_hash, hits, allow_overlaps
         );
     }
     sort(hits.begin(), hits.end(), hits_cmp);
