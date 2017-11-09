@@ -23,14 +23,6 @@ static char align_dna_lookup[128] = {
 	4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
 };
 
-static char rdna[128] = {
-	'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'T', 'N', 'G', 'N', 'N', 'N', 'C', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'A', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 't', 'N', 'g', 'N', 'N', 'N', 'c', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-	'N', 'N', 'N', 'N', 'a', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N'
-};
-
 // static char align_rev_dna_lookup[128] = {
 // 	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
 // 	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
@@ -87,11 +79,11 @@ void align(FastaReference &fr, int line, const string &s)
 	char ca[500]; int sa, ea;
 	char cb[500]; int sb, eb;
 	char sta[10], stb[10];
-	// sscanf(s.c_str(), "%s %d %d %s %d %d %*s %s %s", ca, &sa, &ea, cb, &sb, &eb, sta, stb);
+	sscanf(s.c_str(), "%s %d %d %s %d %d %*s %s %s", ca, &sa, &ea, cb, &sb, &eb, sta, stb);
 
-	sta[0] = '+';
-	sscanf(s.c_str(), "%s %d %d %*s %*s %s %s %d %d", ca, &sa, &ea, stb,  cb, &sb, &eb);
-	stb[0] = stb[0] == '_' ? '-' : '+';
+	// sta[0] = '+';
+	// sscanf(s.c_str(), "%s %d %d %*s %*s %s %s %d %d", ca, &sa, &ea, stb,  cb, &sb, &eb);
+	// stb[0] = stb[0] == '_' ? '-' : '+';
  
 	assert(sta[0] == '+');
 	bool rc = (stb[0] == '-');
@@ -100,7 +92,7 @@ void align(FastaReference &fr, int line, const string &s)
 	string fb = fr.getSubSequence(cb, sb, eb - sb);
 	if (rc) {
         reverse(fb.begin(), fb.end());
-        for (auto &c: fb) c = rdna[c];
+        for (auto &c: fb) c = rdna(c);
 	}
 
 	string ssa = offset_fa(fa);

@@ -35,74 +35,74 @@ def system(x):
 #     }
 # }
 
-def perc(a, b):
-    return 100.0 * a / float(b)
+# def perc(a, b):
+#     return 100.0 * a / float(b)
 
-def process(a, b, cigar):
-    cigar = [s for s in re.split('([MID;])', cigar) if s not in [';', '']]
-    cigar = [(cigar[i + 1], int(cigar[i])) for i in xrange(0, len(cigar), 2)]
-    #print cigar
+# def process(a, b, cigar):
+#     cigar = [s for s in re.split('([MID;])', cigar) if s not in [';', '']]
+#     cigar = [(cigar[i + 1], int(cigar[i])) for i in xrange(0, len(cigar), 2)]
+#     #print cigar
 
-    left = 0 if cigar[0][0] != 'M' else cigar[0][1]
-    right = 0 if cigar[-1][0] != 'M' else cigar[-1][1]
+#     left = 0 if cigar[0][0] != 'M' else cigar[0][1]
+#     right = 0 if cigar[-1][0] != 'M' else cigar[-1][1]
 
-    fuged = 0
-    fuged_ext = 0
-    gaps = 0
-    mism = 0
-    tlen = 0
+#     fuged = 0
+#     fuged_ext = 0
+#     gaps = 0
+#     mism = 0
+#     tlen = 0
 
-    ia, ib = 0, 0
-    for op, sz in cigar:
-        tlen += sz
-        for i in xrange(sz):
-            if (ia < len(a) and a[ia].isupper()) or (ib < len(b) and b[ib].isupper()):
-                fuged_ext += 1
-            if op == 'M': 
-                if a[ia].isupper() and b[ib].isupper(): 
-                    fuged += 1
-                if a[ia].upper() != b[ib].upper(): 
-                    mism += 1
-            else: 
-                gaps += 1
-            if op != 'D': ib += 1
-            if op != 'I': ia += 1
+#     ia, ib = 0, 0
+#     for op, sz in cigar:
+#         tlen += sz
+#         for i in xrange(sz):
+#             if (ia < len(a) and a[ia].isupper()) or (ib < len(b) and b[ib].isupper()):
+#                 fuged_ext += 1
+#             if op == 'M': 
+#                 if a[ia].isupper() and b[ib].isupper(): 
+#                     fuged += 1
+#                 if a[ia].upper() != b[ib].upper(): 
+#                     mism += 1
+#             else: 
+#                 gaps += 1
+#             if op != 'D': ib += 1
+#             if op != 'I': ia += 1
 
-    gaps = perc(gaps, tlen)
-    mism = perc(mism, tlen)
-    fpt = perc(fuged, tlen)
+#     gaps = perc(gaps, tlen)
+#     mism = perc(mism, tlen)
+#     fpt = perc(fuged, tlen)
 
-    return ((left, right), (gaps, mism), (fuged, fuged_ext, tlen))
+#     return ((left, right), (gaps, mism), (fuged, fuged_ext, tlen))
 
-y = []
-n = 0
-with open(sys.argv[1]) as f:
-    next(f)
-    for l in f:
-        l = l.strip().split()
-        q = 29
-        n += 1
-        y.append(process(l[q+1], l[q+2], l[q+0]) + (n,))
+# y = []
+# n = 0
+# with open(sys.argv[1]) as f:
+#     next(f)
+#     for l in f:
+#         l = l.strip().split()
+#         q = 29
+#         n += 1
+#         y.append(process(l[q+1], l[q+2], l[q+0]) + (n,))
 
-print len(y)
+# print len(y)
 
-min_left  = min(y, key=lambda x: x[0][0])
-min_right = min(y, key=lambda x: x[0][1])
-print min_left[3], min_left[0][0]
-print min_right[3], min_right[0][1]
+# min_left  = min(y, key=lambda x: x[0][0])
+# min_right = min(y, key=lambda x: x[0][1])
+# print min_left[3], min_left[0][0]
+# print min_right[3], min_right[0][1]
 
-max_gaps = max(y, key=lambda x: x[1][0])
-max_mism = max(y, key=lambda x: x[1][1])
-print max_gaps[3], max_gaps[1][0]
-print max_mism[3], max_mism[1][1]
+# max_gaps = max(y, key=lambda x: x[1][0])
+# max_mism = max(y, key=lambda x: x[1][1])
+# print max_gaps[3], max_gaps[1][0]
+# print max_mism[3], max_mism[1][1]
 
-min_fug = min(y, key=lambda x: x[2][0])
-min_fuge = min(y, key=lambda x: x[2][1])
-print min_fug[3], min_fug[2][0]
-print min_fuge[3], min_fug[2][1]
-print sum(1 for s in y if s[2][1] < s[2][2]/10)
+# min_fug = min(y, key=lambda x: x[2][0])
+# min_fuge = min(y, key=lambda x: x[2][1])
+# print min_fug[3], min_fug[2][0]
+# print min_fuge[3], min_fug[2][1]
+# print sum(1 for s in y if s[2][1] < s[2][2]/10)
 
-exit(0)
+# exit(0)
 
 
 
@@ -156,6 +156,7 @@ def diff(X, Y):
 # bedtools
 system("bedtools pairtopair -a temp.bed -b {} -is -type both > temp_diff.bed".format(path))
 print 'Paired WGAC and Sedef, size: {}'.format(system("wc -l temp_diff.bed"))
+exit(0)
 
 with open('temp_diff.bed') as f:
     for l in f:

@@ -10,6 +10,15 @@
 
 using namespace std;
 
+static char qrev_dna[128] = {
+    'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
+    'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
+    'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'T', 'N', 'G', 'N', 'N', 'N', 'C', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
+    'A', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 't', 'N', 'g', 'N', 'N', 'N', 'c', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
+    'N', 'N', 'N', 'N', 'a', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N'
+};
+
+
 // ints are - if rev compl
 typedef tuple<string, int, int> loc_t;
 
@@ -32,7 +41,7 @@ string seq(FastaReference &fr, loc_t l)
     string s = fr.getSubSequence(get<0>(l), a, b-a);
     if (rc) {
         reverse(s.begin(), s.end());
-        for (auto &c: s) c = rdna(c);
+        for (auto &c: s) c = qrev_dna[c];
     }
     return s;
 }
@@ -297,15 +306,23 @@ bool check (FastaReference &fr, loc_t A1, loc_t A2, const string &cigarstr)
 	get<2>(A1) -= tr.second.first;
 	get<2>(A2) -= tr.second.second;
 
+	if (get<1>(A2)<0) {
+		// if (min (abs(get<1>(A1)- get<2>(A1)), abs(get<1>(A2)- get<2>(A2)))>=1000){
+		// eprn("{}..{} to {}..{}", get<1>(A1), get<2>(A1), get<1>(A2), get<2>(A2));
+		// eprn("   len {} {},  ", get<1>(A1)- get<2>(A1), get<1>(A2)- get<2>(A2));
+	}
+
 	// prnn("  * 1: "); prna(A1, B1);
 	// prnn("  * 2: "); prna(A2, B2);		
 	
 	auto err_aln = check_err(a, b, cigar);
 
-	// if (err_aln.first.second.first + err_aln.first.second.second <= 25) {
-	// 	print_pair(A1, A2, regenerate_cigar(err_aln.second), err_aln.first);
-	// 	return true;
-	// }
+	if (min (abs(get<1>(A1)- get<2>(A1)), abs(get<1>(A2)- get<2>(A2)))>=1000) {
+		if (  err_aln.first.second.first + err_aln.first.second.second <= 25) {
+			print_pair(A1, A2, regenerate_cigar(err_aln.second), err_aln.first);
+			return true;
+		}
+	}
 
 	// prn("  * len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
 	// 	get<0>(err_aln.second).size(), 
@@ -336,6 +353,7 @@ bool check (FastaReference &fr, loc_t A1, loc_t A2, const string &cigarstr)
 		ea.first = get_err(ea.second);
 
 		if (ea.first.second.first + ea.first.second.second > 25) continue;
+		if (get<1>(A2)<0) eprnn("---\n");
 
 		auto n_A1 = A1;
 		get<1>(n_A1) += ncop.second.first;  // shift A1
@@ -351,8 +369,8 @@ bool check (FastaReference &fr, loc_t A1, loc_t A2, const string &cigarstr)
 		for (auto c: get<0>(ea.second)) if (isupper(c)) nlow0++;
 		for (auto c: get<1>(ea.second)) if (isupper(c)) nlow1++;
 
-		if (nlow0 < 500) continue;
-		if (nlow1 < 500) continue;
+		// if (nlow0 < 500) continue;
+		// if (nlow1 < 500) continue;
 
 		// if (min(nlow1, nlow0) < 50) continue; 
 

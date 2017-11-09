@@ -66,8 +66,8 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
     eprn("Reverse complement: {}", is_complement);
 
     int total = 0;
-    for (int i = 0; i < query.size(); i += 250) {
-    // int W=16085070; for (int i = W; i < W+1000; i += 250) {
+    // for (int i = 0; i < query.size(); i += 250) {
+    int W=2632578; for (int i = W; i < W+1000; i += 250) {
     // chr22    16467109    16469072    chr22:16883317  0   _   chr22   16883317    16885246
     // 34421249    34419320
     // for (int i = 16467100, j = 0; i < query.size(); i += 250, j++) {
@@ -103,6 +103,8 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
             total += 1;
         }
     }
+
+    //chr1 (2687990 to 2689582
     eprnn("\n");
 
     eprn("Total:                   {:10n}", total);
