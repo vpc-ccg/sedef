@@ -4,107 +4,40 @@ import pandas as pd
 import numpy as np
 import subprocess as sp
 import sys, re, os, glob
+from kswpython import kswalign, FastaReference
 from collections import *
 
 def system(x):
-    return sp.check_output(x, shell=True).strip()
+    return sp.check_output(x, shell=True, executable="/bin/bash").strip()
 
+def process(a, b, cigar):
+    cigar = [s for s in re.split('([MID;])', cigar) if s not in [';', '']]
+    cigar = [(cigar[i + 1], int(cigar[i])) for i in xrange(0, len(cigar), 2)]
+    sa, sb, gp = '', '', ''
+    for op, sz in cigar:
+        if op == 'I':  
+            sa += '-' * sz
+            gp += ' ' * sz
+        elif op == 'D':   
+            sb += '-' * sz
+            gp += ' ' * sz    
+        else:
+            gp += ''.join(' |'[a[i].lower() == b[i].lower()] for i in xrange(sz))
+        if op != 'D': 
+            sb += b[:sz]
+            b = b[sz:]
+        if op != 'I':
+            sa += a[:sz]
+            a = a[sz:]
+    return sa, sb, gp
 
-
-# % normal bases
-# % gaps per my calc
-# % mis per my calc
-# boundary Ms
-# [via sedef] % completely covered cases
-
-# for (auto &c: cigar) {
-#     len += c.second;
-#     if (prnaln) prnn("{}:{} ", c.first, c.second);
-#     for (int i = 0; i < c.second; i++) {
-#         assert(c.first != 'M' || ia < a.size());
-#         assert(c.first != 'M' || ib < b.size());
-#         if (c.first == 'M' && ceq(a[ia], b[ib])) {
-#             get<2>(result) += "|";
-#         } else {
-#             get<2>(result) += " ";
-#         }
-#         if (c.first != 'D') get<1>(result) += b[ib++];
-#         else                get<1>(result) += "-";
-#         if (c.first != 'I') get<0>(result) += a[ia++];
-#         else                get<0>(result) += "-";
-#     }
-# }
-
-# def perc(a, b):
-#     return 100.0 * a / float(b)
-
-# def process(a, b, cigar):
-#     cigar = [s for s in re.split('([MID;])', cigar) if s not in [';', '']]
-#     cigar = [(cigar[i + 1], int(cigar[i])) for i in xrange(0, len(cigar), 2)]
-#     #print cigar
-
-#     left = 0 if cigar[0][0] != 'M' else cigar[0][1]
-#     right = 0 if cigar[-1][0] != 'M' else cigar[-1][1]
-
-#     fuged = 0
-#     fuged_ext = 0
-#     gaps = 0
-#     mism = 0
-#     tlen = 0
-
-#     ia, ib = 0, 0
-#     for op, sz in cigar:
-#         tlen += sz
-#         for i in xrange(sz):
-#             if (ia < len(a) and a[ia].isupper()) or (ib < len(b) and b[ib].isupper()):
-#                 fuged_ext += 1
-#             if op == 'M': 
-#                 if a[ia].isupper() and b[ib].isupper(): 
-#                     fuged += 1
-#                 if a[ia].upper() != b[ib].upper(): 
-#                     mism += 1
-#             else: 
-#                 gaps += 1
-#             if op != 'D': ib += 1
-#             if op != 'I': ia += 1
-
-#     gaps = perc(gaps, tlen)
-#     mism = perc(mism, tlen)
-#     fpt = perc(fuged, tlen)
-
-#     return ((left, right), (gaps, mism), (fuged, fuged_ext, tlen))
-
-# y = []
-# n = 0
-# with open(sys.argv[1]) as f:
-#     next(f)
-#     for l in f:
-#         l = l.strip().split()
-#         q = 29
-#         n += 1
-#         y.append(process(l[q+1], l[q+2], l[q+0]) + (n,))
-
-# print len(y)
-
-# min_left  = min(y, key=lambda x: x[0][0])
-# min_right = min(y, key=lambda x: x[0][1])
-# print min_left[3], min_left[0][0]
-# print min_right[3], min_right[0][1]
-
-# max_gaps = max(y, key=lambda x: x[1][0])
-# max_mism = max(y, key=lambda x: x[1][1])
-# print max_gaps[3], max_gaps[1][0]
-# print max_mism[3], max_mism[1][1]
-
-# min_fug = min(y, key=lambda x: x[2][0])
-# min_fuge = min(y, key=lambda x: x[2][1])
-# print min_fug[3], min_fug[2][0]
-# print min_fuge[3], min_fug[2][1]
-# print sum(1 for s in y if s[2][1] < s[2][2]/10)
-
-# exit(0)
-
-
+# a, b = "ATAGCTAGCTAGCAT", "AGCTAcCGCATCCC"
+# aln = kswalign(a, b, 1, -2, 2, 1)
+# print aln
+# a, b, aln = process(a, b, aln)
+# print a
+# print aln
+# print b
 
 #--------
 
@@ -113,6 +46,57 @@ chrom2 = sys.argv[2]
 strand = sys.argv[3]
 path = '{}_{}_{}.bed'.format(chrom1, chrom2, strand)
 strand = '_' if strand == 'y' else '+'
+
+frA = FastaReference("data/hg19/{}.fa".format(chrom1))
+frB = FastaReference("data/hg19/{}.fa".format(chrom2))
+
+def align(a, b):
+    return kswalign(a, b, 5, -4, 40, 1)
+
+# A-B is WGAC
+def print_nicely(chromA, chromB, wgacA, wgacB, sedefA, sedefB):
+    # fix rev comp later
+    seq_sedefA = frA.getSubSequence(chromA, sedefA[0], sedefA[1] - sedefA[0])
+    seq_sedefB = frB.getSubSequence(chromB, sedefB[0], sedefB[1] - sedefB[0])
+    print seq_sedefA
+    print seq_sedefB
+    aln_sedef = align(seq_sedefA, seq_sedefB)
+    print aln_sedef
+    seq_sedefA, seq_sedefB, aln_sedef = process(seq_sedefA, seq_sedefB, aln_sedef)
+
+
+    seq_wgacA = frA.getSubSequence(chromA, wgacA[0], wgacA[1] - wgacA[0])
+    seq_wgacB = frB.getSubSequence(chromB, wgacB[0], wgacB[1] - wgacB[0])
+    aln_wgac = align(seq_wgacA, seq_wgacB)
+    seq_wgacA, seq_wgacB, aln_wgac = process(seq_wgacA, seq_wgacB, aln_wgac)
+
+    # print:
+    #  SEDEFA    ----
+    #  WGACA       -----
+    #  WGACB   ---
+    #  SEDEFB    ----
+    
+    wgac_front = ''
+    sedefA_front, sedefB_front = '', ''
+    if sedefA[0] < wgacA[0]:
+        wgac_front += '*' * (wgacA[0] - sedefA[0])
+    else:
+        sedefA_front += '*' * (sedefA[0] - wgacA[0])
+    if sedefB[0] < wgacB[0]:
+        if wgacB[0] - sedefB[0] > len(wgac_front):
+            wgac_front += '*' * (wgacB[0] - sedefB[0] - len(wgac_front))
+            sedefA_front += '*' * (wgacB[0] - sedefB[0] - len(wgac_front))
+        else:
+            sedefB_front += '*' * (len(wgac_front) - wgacB[0] - sedefB[0])
+    else:
+        sedefB_front += '*' * (sedefB[0] - wgacB[0])
+
+    print 'SEDEF', sedefA_front + seq_sedefA
+    print 'WGAC ', wgac_front + seq_wgacA
+    print 'WGAC ', wgac_front + aln_wgac
+    print 'WGAC ', wgac_front + seq_wgacB
+    print 'SEDEF', sedefB_front + seq_sedefB
+    
 
 df = pd.read_table("data/GRCh37GenomicSuperDup.tab")
 if chrom1 != chrom2 or strand == '_':
@@ -154,9 +138,9 @@ def diff(X, Y):
     return (dA, wA, dB, wB)
 
 # bedtools
-system("bedtools pairtopair -a temp.bed -b {} -is -type both > temp_diff.bed".format(path))
+system("bedtools pairtopair -a temp.bed -b <(cat {} | tr -d ,) -is -type both > temp_diff.bed".format(path))
 print 'Paired WGAC and Sedef, size: {}'.format(system("wc -l temp_diff.bed"))
-exit(0)
+# exit(0)
 
 with open('temp_diff.bed') as f:
     for l in f:
@@ -180,4 +164,7 @@ for k, vs in hits.items():
         haha += [max(vs, key=lambda x: x[0][0] + x[0][2])]
 for ((p1, n1, p2, n2), A, B) in sorted(haha):
     print 'partial: {:.1f}% and {:.1f}% ({} and {}) -- {} to {}'.format(p1, p2, n1, n2, A, B)
+    print_nicely(chrom1, chrom2, A[0:2], A[2:], B[0:2], B[2:])
+    print
+    #exit(0)
 

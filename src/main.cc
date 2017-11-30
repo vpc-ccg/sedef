@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <locale>
 
 #include "jaccard.h"
 #include "align.h"
@@ -14,15 +15,16 @@ void parse(int argc, char **argv);
 
 int main(int argc, char **argv)
 {
-	std::ios_base::sync_with_stdio(0);
+	ios_base::sync_with_stdio(0);
+    setlocale(LC_NUMERIC, "en_US.UTF-8");
     //if (argc < 3) exit(1);
 
-    eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁", 0);
-    eprn("🐚       S   E   D   E   F       🐚", 0);
-    eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁", 0);
+    eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁");
+    eprn("🐚       S   E   D   E   F       🐚");
+    eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁");
     eprnn("   🖥  {}; arguments: ", GITVER);
     for (int i = 0; i < argc; i++) eprnn(" {}", argv[i]);
-    eprnn("\n");
+    eprn("");
     
 	string command = argv[1];
 
@@ -39,7 +41,7 @@ int main(int argc, char **argv)
     } else if (command == "parse") {
         parse(argc-1, argv+1);
     } else {
-    	eprnn("Whoops, invalid command!\n");
+    	eprn("Whoops, invalid command!");
     }
     
     return 0;

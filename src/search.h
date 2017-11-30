@@ -9,45 +9,117 @@
 #include <queue>
 #include "hash.h"
 
-template<typename K, typename V>
-struct SlidingMap {
-    std::multimap<K, V> store;
-    typename std::multimap<K, V>::iterator boundary;
+template<typename K>
+struct SlidingMap: public multimap<K, bool> {
+    typename std::multimap<K, bool>::iterator boundary;
+    typename std::multimap<K, bool>::iterator tmp;
+
+    inline auto match_winnow_query(multimap<K, bool> *m, const K &k) 
+    { 
+        if (k.first) return make_pair(false, m->end());
+        for (auto it = m->lower_bound(k); it != m->end() && it->first == k; it++) {
+            if (!it->second) return make_pair(true, it);
+        }
+        return make_pair(false, m->end());
+    }
 
 public:
-    SlidingMap(std::multimap<K, V> m): store(m) {}
-    SlidingMap() {} 
-    
+    multimap<K, bool> query;
+    int jaccard;
 
-    int add(K key, V val) 
+public:
+    // sets: query, ref
+    SlidingMap(): jaccard(0) {} 
+
+    int add(const K &key, bool val) 
     {
         int diff = 0;
-        typename std::multimap<K, V>::iterator present = store.find(key);
         if (key < boundary->first) {
-            if (present == store.end()) {
+            auto present = this->find(key);
+            if (present == this->end()) {
                 diff = val - boundary->second;
                 boundary--;
             } else {
                 diff = val - present->second;
             }
         }
-        store.insert(make_pair(key, val)); // assume inserted after last
+        this->insert(make_pair(key, val)); // assume inserted after last
         return diff;
     }
 
-    // int remove(K key) 
-    // {
-    //     int diff = 0;
-    //     typename std::multimap<K, V>::iterator present = store.find(key);
-    //     if (present == store.end()) 
-    //         return diff;
-    //     if (key <= boundary->first) {
-    //         boundary++;
-    //         diff = boundary->second - present->second;
-    //     }
-    //     store.erase(present);
-    //     return diff;
-    // }
+    void rewind()
+    {
+        boundary = this->begin();
+        std::advance(boundary, query.size() - 1);
+        
+        jaccard = boundary->second;
+        for (auto it = this->begin(); it != boundary; it++)
+            jaccard += it->second;
+    }
+
+    bool valid_jaccard() 
+    {
+        return jaccard >= tau() * query.size();
+    }
+
+    int add_to_query(const K &h) 
+    {
+        auto it = query.insert({h, false});
+
+        auto is_in = match_winnow_query(this, h);
+        if (is_in.first) {
+            it->second = is_in.second->second = true; // mark hash in both winnows as matched!
+        }
+        jaccard += this->add(h, is_in.first);
+        boundary++; // |W(A)| increases
+        jaccard += boundary->second;
+    }
+
+    void add_to_reference(const K &h)
+    {
+        auto is_in = match_winnow_query(&query, h);
+        auto it = this->insert({h, is_in.first});
+        if (is_in.first) {
+            is_in.second->second = true; // it is marked as NOT TOUCHED [fix: pointer maybe?]
+        }
+    }
+
+    void remove_from_reference(const K &h)
+    {
+        // LOWER BOUND: remove matching hash "just in case"
+        auto itu = this->lower_bound(h); 
+        if (itu == this->end() || itu->first != h) 
+            return;
+        
+        bool in_union = false;
+        // Find first item which equals <h> and which is in both sets
+        for (auto itu2 = itu; itu2 != this->end() && itu2->first == h; itu2++)
+            if (itu2->second) {
+                itu = itu2; 
+                break;
+            }
+
+        // itu is "the hash"
+        // mark it zero in query set (if it exists)
+        for (auto tmpit = query.lower_bound(h); tmpit != query.end() && tmpit->first == h; tmpit++)
+            if (tmpit->second) {
+                tmpit->second = false;
+                break;
+            }
+
+        if (h < boundary->first) {
+            boundary++;
+            jaccard += boundary->second - itu->second;
+        } else if (h == boundary->first) {
+            for (auto itu2 = itu; itu2 != this->end() && itu2->first == h; itu2++)
+                if (itu2 == boundary) {
+                    boundary++;
+                    jaccard += boundary->second - itu->second;
+                    break;
+                }
+        }
+        this->erase(itu);      
+    }
 };
 
 struct Hit {

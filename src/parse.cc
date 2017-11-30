@@ -75,7 +75,7 @@ bool check_overlap(loc_t x, loc_t y)
 /************************************************************************************************************/
 
 // format: [((i, j) span in edit string, (a, b) start pos in strings)]
-vector<pair<pair<int, int>, pair<int, int>>> max_sum(auto al, int THRESHOLD)
+vector<pair<pair<int, int>, pair<int, int>>> max_sum(tuple<string, string, string> al, int THRESHOLD)
 {
 	const string &aln = get<2>(al);
 	const string &a   = get<0>(al);
@@ -118,7 +118,7 @@ vector<pair<pair<int, int>, pair<int, int>>> max_sum(auto al, int THRESHOLD)
 	return hits;
 }
 
-void prn_aln (auto result, int qa, int qb, int WD=2000)
+void prn_aln (tuple<string, string, string> result, int qa, int qb, int WD=2000)
 {
 	for (int i = 0; i < get<2>(result).size(); i += WD) {
 		prn("   {:10}: {} {}\n   {:10}  {}\n   {:10}: {}", 
@@ -131,7 +131,7 @@ void prn_aln (auto result, int qa, int qb, int WD=2000)
 	}
 }
 
-pair<pair<int,int>,pair<double,double>> get_err(auto result)
+pair<pair<int,int>,pair<double,double>> get_err(tuple<string, string, string> result)
 {
 	int len = get<2>(result).size();
 	int gaps = 0, mismatches = 0;
@@ -229,7 +229,7 @@ auto check_err(string a, string b, const deque<pair<char, int>> &cigar)
 // B1 maps to B2 in B
 // In A1, B1 should map to which pos in A2...
 // In A2, B2 should map to which pos in A1...
-pair<pair<int, int>,pair<int, int>> find_match_in_alignment(auto result, loc_t A1, loc_t A2, loc_t B1, loc_t B2) 
+pair<pair<int, int>,pair<int, int>> find_match_in_alignment(tuple<string, string, string> result, loc_t A1, loc_t A2, loc_t B1, loc_t B2) 
 {
 	int qa1 = get<1>(A1);
 	int qa2 = get<1>(A2); 
@@ -251,7 +251,7 @@ pair<pair<int, int>,pair<int, int>> find_match_in_alignment(auto result, loc_t A
 	return make_pair(mloc1, mloc2);
 }
 
-string regenerate_cigar(auto r)
+string regenerate_cigar(tuple<string, string, string> r)
 {
 	// prn("CIGAR:{}\n{}\n{}", get<0>(r), get<1>(r), get<2>(r));
 	string cigar = "";
@@ -279,7 +279,7 @@ string regenerate_cigar(auto r)
 	return cigar;
 }
 
-void print_pair(loc_t A, loc_t B, string cigar, auto err)
+void print_pair(loc_t A, loc_t B, string cigar, pair<pair<int,int>,pair<double,double>> err)
 {
 	char rc = '+';
 	prnn("{}\t{}\t{}\t", get<0>(A), get<1>(A), get<2>(A));

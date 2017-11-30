@@ -7,10 +7,11 @@
 #include <string>
 
 #include "extern/format.h"
-#define prn(f, ...)    fmt::print(f "\n", __VA_ARGS__)
+
+#define prn(f, ...)    fmt::print(f "\n", ##__VA_ARGS__)
 #define prnn(...)      fmt::print(__VA_ARGS__)
 
-#define eprn(f, ...)   fmt::print(stderr, f "\n", __VA_ARGS__)
+#define eprn(f, ...)   fmt::print(stderr, f "\n",  ##__VA_ARGS__)
 #define eprnn(...)     fmt::print(stderr, __VA_ARGS__)
 
 const int    KMER_SIZE = 14;
@@ -70,9 +71,11 @@ inline bool in_map(const std::map<X, Y> &m, X k)
 
 /// Jaccard helper functions
 
-inline double tau(double error=MAX_EDIT_ERROR)
+inline double tau()
 {
-    return (1 - MAX_GAP_ERROR) / (2 * std::exp(KMER_SIZE * error) - 1);
+    double a = (1 - MAX_GAP_ERROR) / (1 + MAX_GAP_ERROR);
+    double b = 1 / (2 * std::exp(KMER_SIZE * MAX_EDIT_ERROR) - 1);
+    return a * b;
 }
 
 inline double j2md(float j)

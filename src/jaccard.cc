@@ -36,9 +36,8 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
     fin.close();
     fin.clear();
 
-    //transform(reference.begin(), reference.end(), reference.begin(), ::toupper);
     if (is_complement) {
-        eprnn("Reversing reference...\n");
+        eprn("Reversing reference...");
         reverse(reference.begin(), reference.end());
         transform(reference.begin(), reference.end(), reference.begin(), rdna);
     }
@@ -50,7 +49,6 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
         else query_chr = line.substr(1);
     }
     fin.close();
-    // transform(query.begin(), query.end(), query.begin(), ::toupper);
 
     Hash ref_hash = Hash(reference);
 
@@ -67,12 +65,9 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 
     int total = 0;
     // for (int i = 0; i < query.size(); i += 250) {
-    int W=2632578; for (int i = W; i < W+1000; i += 250) {
-    // chr22    16467109    16469072    chr22:16883317  0   _   chr22   16883317    16885246
-    // 34421249    34419320
-    // for (int i = 16467100, j = 0; i < query.size(); i += 250, j++) {
+    int W=16239131+1000; for (int i = W; i < W+1; i += 250) {
         while (query[i] == 'N') i++;
-        while (i % 250 != 0) i++;
+        // while (i % 250 != 0) i++;
         if (i % 5000 == 0) {
             double perc = 100.0 * i / double(query.size());
             eprnn("\r   {} {:.1f}% ({})", string(int(perc / 2) + 1, '-'), perc, i);
@@ -80,15 +75,14 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
         // prn("{}", i);
 
         vector<Hit> mapping = search(i, ref_hash, *query_hash, allow_overlaps);
-        for (int i = 0; i < mapping.size(); i++) {
-            Hit &pp = mapping[i];
+        for (auto &pp: mapping) {
             // BEDPE
             if (is_complement) {
                 pp.i = ref_hash.seq.size() - pp.i + 1;
                 pp.j = ref_hash.seq.size() - pp.j + 1;
                 swap(pp.i, pp.j);
             }
-            prn("{}\t{}\t{}\t{}\t{}\t{}\t\t{:.0f}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            prn("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t{:.0f}\t{}\t{}\t{}\t{:n}\t{}\t{}\t{}\t{}",
                 query_chr, pp.p, pp.q, 
                 ref_chr, pp.i, pp.j,
                 pp.id, 
@@ -99,13 +93,12 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
                 pp.jaccard.first, pp.jaccard.second,
                 pp.edist.first, pp.edist.second
             );
-            
             total += 1;
         }
     }
 
     //chr1 (2687990 to 2689582
-    eprnn("\n");
+    eprn("");
 
     eprn("Total:                   {:10n}", total);
     eprn("Fails: attempts          {:10n}\n"
@@ -114,5 +107,6 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
          "       cores             {:10n}\n"
          "       q-grams           {:10n}\n"
          "       lowercase         {:10n}", 
-         TOTAL_ATTEMPTED, JACCARD_FAILED, INTERVAL_FAILED, CORE_FAILED, QGRAM_NORMAL_FAILED, OTHER_FAILED);
+         TOTAL_ATTEMPTED, JACCARD_FAILED, INTERVAL_FAILED, 
+         CORE_FAILED, QGRAM_NORMAL_FAILED, OTHER_FAILED);
 }

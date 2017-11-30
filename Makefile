@@ -1,9 +1,10 @@
-CC=g++
-CFLAGS=-c -I fmt -I . -std=c++14 -I src
-LDFLAGS=
+CC=icpc
+BOOST?=
+CFLAGS=-c -I fmt -I . -std=c++17 -I src
+LDFLAGS=-lrt
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
-SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) parse.cc
+SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 
 OBJECTS=$(SOURCES:.cc=.o) patterns.o
 EXECUTABLE=sedef
 
