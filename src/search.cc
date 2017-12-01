@@ -8,6 +8,7 @@
 #include <cmath>
 #include <queue>
 #include "common.h"
+#include "filter.h"
 #include "search.h"
 using namespace std;
 
@@ -24,18 +25,9 @@ const int MAX_MATCH = 500 * 1000; // 50kb at most
 const int RIGHT_ALLOWANCE = 750; /// TODO more mathy formulation
 const int RECOVER_BP = 10; // We allow 250bp extra extend just in case!
 
-
 int64_t TOTAL_ATTEMPTED = 0;
 int64_t JACCARD_FAILED = 0;
-int64_t QGRAM_NORMAL_FAILED = 0;
-int64_t OTHER_FAILED = 0;
-int64_t CORE_FAILED = 0;
 int64_t INTERVAL_FAILED = 0;
-
-inline int min_qgram(int l, int q) 
-{
-    return l * (1 - MAX_GAP_ERROR - q * MAX_EDIT_ERROR) - (GAP_FREQUENCY * l + 1) * (q - 1);
-}
 
 inline bool check_overlap (TREE_t::const_iterator &pf, int pf_pos, int pfp_pos) 
 {
@@ -53,67 +45,6 @@ inline bool check_overlap (TREE_t::const_iterator &pf, int pf_pos, int pfp_pos)
         }
     }
     return true;
-}
-
-AHOAutomata *aho = NULL;
-vector<int> qgram_p, qgram_r;
-
-const int LOW_LIMIT = 500;
-
-auto filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
-{
-    int q_up = 0; for (int i = 0; i < q_len; i++) q_up += isupper(q[q_pos + i]); 
-    int r_up = 0; for (int i = 0; i < r_len; i++) r_up += isupper(r[r_pos + i]);
-
-    if (q_up < LOW_LIMIT || r_up < LOW_LIMIT) {
-        OTHER_FAILED++;
-        return make_pair(make_pair(-1, -1), make_pair(-1, -1));
-    }
-    
-    int maxlen = max(q_len, r_len);
-    int QG = 5;
-    uint64_t QSZ = (1 << (2 * QG)); 
-    uint64_t MASK = QSZ - 1;
-
-    int minqg = min_qgram(maxlen, QG);
-    assert(minqg >= 10);
-
-    assert(q_pos + q_len < q.size());
-    assert(r_pos + r_len < r.size());
-    
-    for (uint64_t qi = q_pos, qgram = 0; qi < q_pos + q_len; qi++) {
-        qgram = ((qgram << 2) | qdna(q[qi])) & MASK;
-        if (qi - q_pos >= QG - 1) qgram_p[qgram] += 1;
-    }
-    for (uint64_t qi = r_pos, qgram = 0; qi < r_pos + r_len; qi++) {
-        qgram = ((qgram << 2) | qdna(r[qi])) & MASK;
-        if (qi - r_pos >= QG - 1) qgram_r[qgram] += 1;
-    }
-    int dist = 0;
-    for (uint64_t qi = 0; qi < QSZ; qi++)  {
-        dist += min(qgram_p[qi], qgram_r[qi]);
-        qgram_p[qi] = qgram_r[qi] = 0;
-    }
-
-    if (dist < minqg) {
-        QGRAM_NORMAL_FAILED++;
-        return make_pair(make_pair(-1, -1), make_pair(-1, -1));
-    }
-
-    map<int, int> hits;
-    assert(q_len == r_len);
-    int common = 0;
-    aho->search(q.c_str() + q_pos, q_len, hits, 1);
-    aho->search(r.c_str() + r_pos, r_len, hits, 2);
-    for (auto &h: hits) if (h.second == 3) common++;
-
-    double boundary = (1.0/2) * (q_len / 50.0);
-    if (common < boundary) {
-        CORE_FAILED++;
-        return make_pair(make_pair(-1, -1), make_pair(-1, -1));
-    }
-
-    return make_pair(make_pair(dist, common), make_pair(q_up, r_up));
 }
 
 auto parse_hits(vector<Hit> &hits)
@@ -138,7 +69,7 @@ auto parse_hits(vector<Hit> &hits)
     return hits_real;
 }
 
-void extend(SlidingMap<hash_t> &winnow,
+void extend(SlidingMap &winnow,
     const Hash &query_hash, int query_start, int query_end,
     int query_winnow_start, int query_winnow_end,
     const Hash &ref_hash, int ref_start, int ref_end,
@@ -148,25 +79,26 @@ void extend(SlidingMap<hash_t> &winnow,
 {
     // eprn(">> extend query:{:n} vs ref:{:n}...{:n}", query_start, min_ref, max_ref);
             
-    auto edist = filter(
-        query_hash.seq, query_start, query_end - query_start + 1, 
-        ref_hash.seq, ref_start, ref_end - ref_start + 1
-    );
-    if (edist.first.first < 0) return;
+    if (!filter(query_hash.seq, query_start, query_end - query_start + 1, 
+        ref_hash.seq, ref_start, ref_end - ref_start + 1)) 
+    {
+        return;
+    }
 
-    int qlow = query_end - query_start - edist.second.first;
-    int rlow = ref_end - ref_start - edist.second.second;
+    int qlow = 0; //query_end - query_start - edist.second.first;
+    int rlow = 0; //ref_end - ref_start - edist.second.second;
 
     int best_query_end = query_end;
     int best_ref_end = ref_end;
     double prev_jaccard = double(winnow.jaccard) / winnow.query.size();
     int prev_jaccard_p = winnow.jaccard;
     for (int recover = 0; query_end < query_hash.seq.size() && ref_end < ref_hash.seq.size() && recover < RECOVER_BP; ) {   
-        if (qlow > (query_end-query_start)/4 || rlow > (ref_end-ref_start)/4) { // TODO FIX
-            break;
-        }
-        if (islower(query_hash.seq[query_end])) qlow++;
-        if (islower(ref_hash.seq[ref_end])) rlow++;
+        //break;
+        // if (qlow > (query_end-query_start)/4 || rlow > (ref_end-ref_start)/4) { // TODO FIX
+        //     break;
+        // }
+        // if (islower(query_hash.seq[query_end])) qlow++;
+        // if (islower(ref_hash.seq[ref_end])) rlow++;
 
         // - disallow overlaps or too long matches
         int max_match = MAX_MATCH;
@@ -179,22 +111,26 @@ void extend(SlidingMap<hash_t> &winnow,
 
         // N detection
         int n_count = 0;
-        while ((query_hash.seq[query_end] == 'N') || (ref_hash.seq[ref_end] == 'N')) {
+        while (query_end < query_hash.seq.size() && ref_end < ref_hash.seq.size() 
+                && ((query_hash.seq[query_end] == 'N') || (ref_hash.seq[ref_end] == 'N'))) 
+        {
             n_count++, query_end++, ref_end++;
             if (n_count > 100) goto E;
         }
 
         // - try extending to the right
-        if (query_hash.minimizers[query_winnow_end].second < query_end + 1) { // extend query
+        if (query_winnow_end < query_hash.minimizers.size() 
+                && query_hash.minimizers[query_winnow_end].second < query_end + 1) 
+        { // extend query
             winnow.add_to_query(query_hash.minimizers[query_winnow_end].first);
             query_winnow_end++;
         }
-        query_end++;
-        if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) { // extend reference
+        if (ref_winnow_end < ref_hash.minimizers.size() 
+                && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) 
+        { // extend reference
             winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
             ref_winnow_end++;
         } 
-        ref_end++;
 
         if (winnow.valid_jaccard()) {
             prev_jaccard = double(winnow.jaccard) / winnow.query.size();
@@ -205,38 +141,32 @@ void extend(SlidingMap<hash_t> &winnow,
         } else {
             recover++;
         }
+
+        query_end++, ref_end++;
     }
 
-E:  edist = filter(query_hash.seq, query_start, 
-        best_query_end - query_start + 1, ref_hash.seq, 
-        ref_start, best_ref_end - ref_start + 1
-    );
-    if (edist.first.first < 0) {
+E:  if (!filter(query_hash.seq, query_start, best_query_end - query_start + 1, 
+            ref_hash.seq, ref_start, best_ref_end - ref_start + 1))
+    {
         return;
     }
-
+    
     hits.push_back({
-        query_start, best_query_end, ref_start, best_ref_end, 
-        j2md(prev_jaccard), j2md(0), 0, // fix these 
-        make_pair(0, prev_jaccard_p), edist.first
+        query_start, best_query_end, 
+        ref_start, best_ref_end, 
+        j2md(prev_jaccard), prev_jaccard_p
     });
     
     auto a = INTERVAL(query_start, best_query_end);
     auto b = INTERVAL(ref_start, best_ref_end);
-    TREE += make_pair(a, SUBTREE_t({b, {make_pair(a, b)}}));
+    // TREE += make_pair(a, SUBTREE_t({b, {make_pair(a, b)}}));
 }
 
 vector<Hit> search (int query_start, 
                     const Hash &ref_hash, 
                     const Hash &query_hash, 
                     bool allow_overlaps) 
-{
-    if (!qgram_p.size()) {
-        qgram_p = vector<int>(1 << (2 * 8), 0);
-        qgram_r = vector<int>(1 << (2 * 8), 0);
-        aho = new AHOAutomata();
-    }
- 
+{ 
     int st = query_hash.find_minimizers(query_start);
     if (st == query_hash.minimizers.size()) 
         return vector<Hit>();
@@ -246,7 +176,7 @@ vector<Hit> search (int query_start,
 
     // Iterate through all unique hashes in query[query_start: query_start + MIN_READ_SIZE]
     // `candidates` is a list of positions in the reference which match the query hashes
-    SlidingMap<hash_t> init_winnow;
+    SlidingMap init_winnow;
     vector<int> candidates;
     for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= MIN_READ_SIZE; mi++) { 
         auto &h = query_hash.minimizers[mi].first;
@@ -257,12 +187,9 @@ vector<Hit> search (int query_start,
         if (h.first) // If it is N hash, ignore it
             continue;
         
-        // Is this hash in the reference? Is this hash high-call hash as well?
         auto ptr = ref_hash.index.find(h);
         if (ptr == ref_hash.index.end() || ptr->second.size() >= ref_hash.threshold) 
             continue;
-
-        // Iterate through positions in the reference with this hash
         for (auto &pos: ptr->second) {
             // Make sure to have at least 1 kb spacing if reference = query
             if (!allow_overlaps && pos < query_start + MIN_READ_SIZE)
@@ -273,27 +200,28 @@ vector<Hit> search (int query_start,
             candidates.push_back(pos);
         }
     }
-    sort(candidates.begin(), candidates.end());
-    
     if (!init_winnow.size()) { // TODO min sketch size limit for Ns
         return vector<Hit>();
     }
-    
     int M = ceil(init_winnow.size() * tau());
+    eprn("==M {}", M);
+    // int M = init_winnow.size() * tau();
+    
     // for (auto e: candidates) eprn("{:n}", e);
     // eprn(">> search: {} candidates to evaluate (M={}, init_winnow_query={}, tau={})", candidates.size(), M, init_winnow_query.size(), tau());
 
     // Find all locations in the `candidates` so that
     // MIN_READ_SIZE read covers at least M (= s * tau) hashes
     auto T = vector<pair<int, int>>{{-1, -1}};
+    sort(candidates.begin(), candidates.end());
     for (int i = 0; i <= (int)candidates.size() - M; i++) {
         int j = i + (M - 1);
         if (candidates[j] - candidates[i] < MIN_READ_SIZE) {
             int x = max(0, candidates[j] - MIN_READ_SIZE + 1), 
                 y = candidates[i] + 1;
-            if (x >= T.back().second)
-                T.push_back({x, y});
-            T.back().second = y;
+            //if (x >= T.back().second)
+            T.push_back({x, y});
+            //T.back().second = y; // 
         }
     }
 
@@ -304,7 +232,7 @@ vector<Hit> search (int query_start,
         if (T[t].first > T[t].second) 
             continue;
 
-        eprn(">> extend query:{:n} vs ref:{:n}...{:n}", query_start, T[t].first, T[t].second);
+        // eprn(">> extend query:{:n} vs ref:{:n}...{:n}", query_start, T[t].first, T[t].second);
     
         TOTAL_ATTEMPTED++;
         auto winnow = init_winnow;
@@ -332,7 +260,9 @@ vector<Hit> search (int query_start,
         //     jaccard, 
         //     seed_ref_start, seed_jaccard);
         // Roll until we find best inital match
-        bool found = false;
+        int best_jaccard = winnow.valid_jaccard() ? winnow.jaccard : -1;
+        int best_ref_start = ref_start, best_ref_end = ref_end;
+        int best_ref_winnow_start = ref_winnow_start, best_ref_winnow_end = ref_winnow_end;
         while (ref_start < T[t].second) {
             if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1) {
                 winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start].first);
@@ -342,21 +272,25 @@ vector<Hit> search (int query_start,
                 winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
                 ref_winnow_end++;
             }
-            if (winnow.valid_jaccard()) {
-                extend(winnow, 
-                    query_hash, query_start, query_start + MIN_READ_SIZE, st, mi,
-                    ref_hash, ref_start, ref_end, ref_winnow_start, ref_winnow_end, 
-                    hits, allow_overlaps
-                );
-                found = true;
+            if (winnow.valid_jaccard() && winnow.jaccard > best_jaccard) {
+                best_jaccard = winnow.jaccard;
+                best_ref_start = ref_start;
+                best_ref_end = ref_end;
+                best_ref_winnow_start = ref_winnow_start;
+                best_ref_winnow_end = ref_winnow_end;
             }
             ref_start++, ref_end++;
         }
 
-        if (!found) JACCARD_FAILED ++;
+        if (best_jaccard == -1) JACCARD_FAILED++;
+        else extend(winnow, 
+            query_hash, query_start, query_start + MIN_READ_SIZE, st, mi,
+            ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
+            hits, allow_overlaps
+        );
     }
+   
     TREE -= INTERVAL(0, query_start);
-
     return parse_hits(hits);
 }
 

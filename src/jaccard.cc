@@ -1,9 +1,5 @@
 /// 786 
 
-
-/// start Thu Oct 26 10:56:02 PDT 2017
-/// 
-
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -65,7 +61,7 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 
     int total = 0;
     // for (int i = 0; i < query.size(); i += 250) {
-    int W=16239131+1000; for (int i = W; i < W+1; i += 250) {
+    int W=32675644+1000; for (int i = W; i < W+1; i += 250) {
         while (query[i] == 'N') i++;
         // while (i % 250 != 0) i++;
         if (i % 5000 == 0) {
@@ -82,16 +78,15 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
                 pp.j = ref_hash.seq.size() - pp.j + 1;
                 swap(pp.i, pp.j);
             }
-            prn("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t{:.0f}\t{}\t{}\t{}\t{:n}\t{}\t{}\t{}\t{}",
+            prn("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t{:.0f}\t+\t{}\t{:n}\t{}",
                 query_chr, pp.p, pp.q, 
                 ref_chr, pp.i, pp.j,
                 pp.id, 
-                "+", is_complement ? "-" : "+",
+                is_complement ? "-" : "+",
                 // Optional fields
-                int(pp.break_criteria),
+                //int(pp.break_criteria),
                 pp.q - pp.p ,
-                pp.jaccard.first, pp.jaccard.second,
-                pp.edist.first, pp.edist.second
+                pp.jaccard
             );
             total += 1;
         }

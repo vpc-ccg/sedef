@@ -27,23 +27,19 @@ const int    MIN_READ_SIZE  = 1000;
 
 /// Helper functions
 
-// constexpr auto dna_lookup_init() {
-//     using namespace std;
-//     array<char, 128> values = {};
-//     get<'C'>(values) = 1; get<'c'>(values) = 1;
-//     get<'G'>(values) = 2; get<'g'>(values) = 2;
-//     get<'T'>(values) = 3; get<'t'>(values) = 3;
-//     return values;
-// }
-// constexpr auto dna_lookup = dna_lookup_init();
-
-static char dna_lookup[128] = {
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,
-    3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,2,0,0,0,0,0,0,0,0,
-    0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0
-};
+constexpr auto dna_lookup_init() {
+    using namespace std;
+    array<char, 128> values = {};
+    get<'C'>(values) = 1; get<'c'>(values) = 1;
+    get<'G'>(values) = 2; get<'g'>(values) = 2;
+    get<'T'>(values) = 3; get<'t'>(values) = 3;
+    return values;
+}
+constexpr auto dna_lookup = dna_lookup_init();
+inline char qdna(char c) 
+{
+    return dna_lookup[c];
+}
 
 static char rev_dna[128] = {
     'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
@@ -52,12 +48,6 @@ static char rev_dna[128] = {
     'A', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 't', 'N', 'g', 'N', 'N', 'N', 'c', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
     'N', 'N', 'N', 'N', 'a', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N'
 };
-
-inline char qdna(char c) 
-{
-    return dna_lookup[c];
-}
-
 inline char rdna(char c) 
 {
     return rev_dna[c];
@@ -89,8 +79,6 @@ inline double j2md(float j)
     }
 }
 
-int estM(int s, double ci=0.75);
 std::vector<std::string> split(const std::string &s, char delim);
-
 double current_time();
 

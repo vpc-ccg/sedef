@@ -1,5 +1,4 @@
-CC=icpc
-BOOST?=
+CXX=icpc
 CFLAGS=-c -I fmt -I . -std=c++17 -I src
 LDFLAGS=-lrt
 
@@ -29,10 +28,10 @@ gprofile: CFLAGS+=-g -O2
 gprofile: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS) 
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) $(OBJECTS) $(LDFLAGS) -o $@
 
 .cc.o:	
-	$(CC) $(CFLAGS) -DGITVER=\"$(GIT_VERSION)\" $< -o $@
+	$(CXX) $(CFLAGS) -DGITVER=\"$(GIT_VERSION)\" $< -o $@
 
 clean:
 	find . -name '*.o' -delete

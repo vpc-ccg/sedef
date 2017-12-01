@@ -56,46 +56,46 @@ def align(a, b):
 # A-B is WGAC
 def print_nicely(chromA, chromB, wgacA, wgacB, sedefA, sedefB):
     # fix rev comp later
-    seq_sedefA = frA.getSubSequence(chromA, sedefA[0], sedefA[1] - sedefA[0])
-    seq_sedefB = frB.getSubSequence(chromB, sedefB[0], sedefB[1] - sedefB[0])
-    print seq_sedefA
-    print seq_sedefB
-    aln_sedef = align(seq_sedefA, seq_sedefB)
-    print aln_sedef
-    seq_sedefA, seq_sedefB, aln_sedef = process(seq_sedefA, seq_sedefB, aln_sedef)
-
+    # seq_sedefA = frA.getSubSequence(chromA, sedefA[0], sedefA[1] - sedefA[0])
+    # seq_sedefB = frB.getSubSequence(chromB, sedefB[0], sedefB[1] - sedefB[0])
+    # print seq_sedefA
+    # print seq_sedefB
+    # aln_sedef = align(seq_sedefA, seq_sedefB)
+    # print aln_sedef
+    # seq_sedefA, seq_sedefB, aln_sedef = process(seq_sedefA, seq_sedefB, aln_sedef)
 
     seq_wgacA = frA.getSubSequence(chromA, wgacA[0], wgacA[1] - wgacA[0])
     seq_wgacB = frB.getSubSequence(chromB, wgacB[0], wgacB[1] - wgacB[0])
     aln_wgac = align(seq_wgacA, seq_wgacB)
     seq_wgacA, seq_wgacB, aln_wgac = process(seq_wgacA, seq_wgacB, aln_wgac)
-
-    # print:
-    #  SEDEFA    ----
-    #  WGACA       -----
-    #  WGACB   ---
-    #  SEDEFB    ----
     
     wgac_front = ''
-    sedefA_front, sedefB_front = '', ''
-    if sedefA[0] < wgacA[0]:
-        wgac_front += '*' * (wgacA[0] - sedefA[0])
-    else:
-        sedefA_front += '*' * (sedefA[0] - wgacA[0])
-    if sedefB[0] < wgacB[0]:
-        if wgacB[0] - sedefB[0] > len(wgac_front):
-            wgac_front += '*' * (wgacB[0] - sedefB[0] - len(wgac_front))
-            sedefA_front += '*' * (wgacB[0] - sedefB[0] - len(wgac_front))
-        else:
-            sedefB_front += '*' * (len(wgac_front) - wgacB[0] - sedefB[0])
-    else:
-        sedefB_front += '*' * (sedefB[0] - wgacB[0])
+    # sedefA_front, sedefB_front = '', ''
+    # if sedefA[0] < wgacA[0]:
+    #     wgac_front += '*' * (wgacA[0] - sedefA[0])
+    # else:
+    #     sedefA_front += '*' * (sedefA[0] - wgacA[0])
+    # if sedefB[0] < wgacB[0]:
+    #     if wgacB[0] - sedefB[0] > len(wgac_front):
+    #         wgac_front += '*' * (wgacB[0] - sedefB[0] - len(wgac_front))
+    #         sedefA_front += '*' * (wgacB[0] - sedefB[0] - len(wgac_front))
+    #     else:
+    #         sedefB_front += '*' * (len(wgac_front) - wgacB[0] - sedefB[0])
+    # else:
+    #     sedefB_front += '*' * (sedefB[0] - wgacB[0])
 
-    print 'SEDEF', sedefA_front + seq_sedefA
-    print 'WGAC ', wgac_front + seq_wgacA
-    print 'WGAC ', wgac_front + aln_wgac
-    print 'WGAC ', wgac_front + seq_wgacB
-    print 'SEDEF', sedefB_front + seq_sedefB
+    # print 'SEDEF', sedefA_front + seq_sedefA
+    blanks, smallA, smallB = 0, 0, 0
+
+    for i in xrange(0, len(seq_wgacA), 100):
+        print ' > ', seq_wgacA[i:i + 100]
+        print ' + ', aln_wgac[i:i + 100]
+        print ' > ', seq_wgacB[i:i + 100]
+        blanks += sum(1 for c in aln_wgac[i:i + 100] if c == ' ')
+        smallA += sum(1 for c in seq_wgacA[i:i + 100] if c.islower())
+        smallB += sum(1 for c in seq_wgacB[i:i + 100] if c.islower())
+        print '   ', i, blanks, smallA, smallB
+    # print 'SEDEF', sedefB_front + seq_sedefB
     
 
 df = pd.read_table("data/GRCh37GenomicSuperDup.tab")
