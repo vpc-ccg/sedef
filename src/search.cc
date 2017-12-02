@@ -70,7 +70,7 @@ auto parse_hits(vector<Hit> &hits)
     return hits_real;
 }
 
-void extend(SlidingMap &winnow, SlidingMap2 &winnow2,
+void extend(SlidingMap &winnow,
     const Hash &query_hash, int query_start, int query_end,
     int query_winnow_start, int query_winnow_end,
     const Hash &ref_hash, int ref_start, int ref_end,
@@ -182,14 +182,11 @@ vector<Hit> search (int query_start,
     // Iterate through all unique hashes in query[query_start: query_start + MIN_READ_SIZE]
     // `candidates` is a list of positions in the reference which match the query hashes
     SlidingMap init_winnow;
-    SlidingMap2 init_winnow2;
     set<int> candidates_prel;
     for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= MIN_READ_SIZE; mi++) { 
         auto &h = query_hash.minimizers[mi].first;
-        
         init_winnow.add_to_query(h);
-        init_winnow2.add_to_query(h);
-        
+
         if (h.first) // If it is N hash, ignore it
             continue;
         
@@ -243,7 +240,6 @@ vector<Hit> search (int query_start,
     
         TOTAL_ATTEMPTED++;
         auto winnow = init_winnow;
-        auto winnow2 = init_winnow2;
 
         // auto pf = TREE.find(query_start);
         // if (!check_overlap(pf, query_start, min_ref)) {
@@ -256,37 +252,13 @@ vector<Hit> search (int query_start,
         int ref_winnow_start = ref_hash.find_minimizers(ref_start);
         assert(ref_winnow_start < ref_hash.minimizers.size());
 
-        auto px = [&](int x) {
-            string s1;
-            if (x==1){
-                for (auto e: winnow) s1 += fmt::format("{}:{} ", (int)e.first.first.first, e.first.first.second); 
-            } else {
-                map<hash_t, int> wwq, wwr, wwp;
-                for (auto x: winnow2.query) wwq[x]++, wwp[x]=0;
-                for (auto x: winnow2.ref) wwr[x]++, wwp[x]=0;
-                for (auto &x: wwp) x.second = max(wwq[x.first], wwr[x.first]);
-                for (auto &e: wwp) for(int i=0;i<e.second;i++) s1 += fmt::format("{}:{} ", 
-                    (int)e.first.first, e.first.second); 
-            }
-            return s1;
-        };
-
-        winnow.rewind();
-        winnow2.rewind();
-        assert(winnow.jaccard() == winnow2.jaccard());
-        assert(px(1)==px(2));
         
         // winnow is W(query) ; extend it to W(query) | W(ref) and mark elements in W(query) & W(ref)
         int ref_winnow_end = ref_winnow_start;
         for (; ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end; ref_winnow_end++) {
             winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-            winnow2.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-            assert(winnow.jaccard() == winnow2.jaccard());
-
-            eprn("ai {}:{}", (int)ref_hash.minimizers[ref_winnow_end].first.first, ref_hash.minimizers[ref_winnow_end].first.second);
-            if (px(1)!=px(2)) eprn("{}\n{}", px(1), px(2));
-            assert(px(1)==px(2));
         }
+        winnow.rewind();
 
         // eprn(">> extend needed_jaccard:{} jaccard:{} init_start:{} init_jaccard={}", 
         //     tau * winnow_query.size(),
@@ -296,27 +268,13 @@ vector<Hit> search (int query_start,
         int best_jaccard = winnow.jaccard();
         int best_ref_start = ref_start, best_ref_end = ref_end;
         int best_ref_winnow_start = ref_winnow_start, best_ref_winnow_end = ref_winnow_end;
-        assert(px(1)==px(2));
         while (ref_start < T[t].second) {
             if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1) {
                 winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start].first);
-                winnow2.remove_from_reference(ref_hash.minimizers[ref_winnow_start].first);
-
-                eprn("\nrm {}:{}", (int)ref_hash.minimizers[ref_winnow_start].first.first, ref_hash.minimizers[ref_winnow_start].first.second);
-                eprn("-- {} vs true {}", winnow.jaccard() , winnow2.jaccard());
-                if (px(1)!=px(2)) eprn("{}\n{}", px(1), px(2));
-                assert(px(1)==px(2));
-                assert(winnow.jaccard() == winnow2.jaccard());
                 ref_winnow_start++;    
             }
             if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) {
                 winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-                winnow2.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-                eprn("\nad {}:{}", (int)ref_hash.minimizers[ref_winnow_end].first.first, ref_hash.minimizers[ref_winnow_end].first.second);
-                eprn("-- {} vs true {}", winnow.jaccard() , winnow2.jaccard());
-                if (px(1)!=px(2)) eprn("{}\n{}", px(1), px(2));
-                assert(px(1)==px(2));
-                assert(winnow.jaccard() == winnow2.jaccard());
                 ref_winnow_end++;
             }
             int j;
@@ -330,9 +288,8 @@ vector<Hit> search (int query_start,
             ref_start++, ref_end++;
         }
 
-        assert(winnow.jaccard() == winnow2.jaccard());
         if (best_jaccard < 0) JACCARD_FAILED++;
-        else extend(winnow, winnow2,
+        else extend(winnow,
             query_hash, query_start, query_start + MIN_READ_SIZE, st, mi,
             ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
             hits, allow_overlaps
