@@ -98,6 +98,11 @@ def print_nicely(chromA, chromB, wgacA, wgacB, sedefA, sedefB):
     # print 'SEDEF', sedefB_front + seq_sedefB
     
 
+print_nicely('chr22', 'chr22', 
+    (32676644,  32788590),
+    (44619626,  44731572), 0, 0)
+exit(0)
+
 df = pd.read_table("data/GRCh37GenomicSuperDup.tab")
 if chrom1 != chrom2 or strand == '_':
     df = df[(df.chrom == chrom1) & (df.otherChrom == chrom2) & (df.strand == strand)]
