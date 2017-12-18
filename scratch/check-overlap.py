@@ -98,10 +98,10 @@ def print_nicely(chromA, chromB, wgacA, wgacB, sedefA, sedefB):
     # print 'SEDEF', sedefB_front + seq_sedefB
     
 
-print_nicely('chr22', 'chr22', 
-    (32676644,  32788590),
-    (44619626,  44731572), 0, 0)
-exit(0)
+# print_nicely('chr22', 'chr22', 
+#     (32676644,  32788590),
+#     (44619626,  44731572), 0, 0)
+# exit(0)
 
 df = pd.read_table("data/GRCh37GenomicSuperDup.tab")
 if chrom1 != chrom2 or strand == '_':
@@ -169,7 +169,7 @@ for k, vs in hits.items():
         haha += [max(vs, key=lambda x: x[0][0] + x[0][2])]
 for ((p1, n1, p2, n2), A, B) in sorted(haha):
     print 'partial: {:.1f}% and {:.1f}% ({} and {}) -- {} to {}'.format(p1, p2, n1, n2, A, B)
-    print_nicely(chrom1, chrom2, A[0:2], A[2:], B[0:2], B[2:])
-    print
+    # print_nicely(chrom1, chrom2, A[0:2], A[2:], B[0:2], B[2:])
+    # print
     #exit(0)
 
