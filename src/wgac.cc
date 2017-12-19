@@ -62,11 +62,11 @@ string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, 
 	return out;
 }
 
-void check_wgac(string bed_path) 
+void check_wgac(string bed_path, string ref_path) 
 {
 	eprnn("Loading reference... ");
 	unordered_map<string, string> ref;
-	ifstream ff("data/hg19/chr1.fa");
+	ifstream ff(ref_path);
 	string chr, s;
 	while (getline(ff, s)) {
 		if (s[0] == '>') {

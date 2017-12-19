@@ -12,4 +12,4 @@
 
 /******************************************************************************/
 
-void check_wgac(std::string bed_path);
+void check_wgac(std::string bed_path, std::string ref_path);
