@@ -25,7 +25,7 @@ const int MIN_UPPERCASE = 250;
 /* extern */ int64_t CORE_FAILED = 0;
 
 // Must be initialized thread-safe
-/* extern */ unique_ptr<AHOAutomata> aho = NULL;
+/* extern */ shared_ptr<AHOAutomata> aho = NULL;
 
 /******************************************************************************/
 

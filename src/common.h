@@ -92,6 +92,11 @@ inline bool in_map(const std::map<X, Y> &m, X k)
 	return m.find(k) != m.end();
 }
 
+inline double pct(double p, double tot)
+{
+	return 100.0 * p / tot;
+}
+
 /******************************************************************************/
 
 double tau(double edit_error = MAX_EDIT_ERROR);

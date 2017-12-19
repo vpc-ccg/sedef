@@ -139,7 +139,7 @@ void AHOAutomata::initialize_automata()
 	}
 }
 
-void AHOAutomata::search (const char *text, int len, map<int, int> &hits, int flag)
+void AHOAutomata::search (const char *text, int len, map<int, int> &hits, int flag) //const
 {
 	auto cur = trie.get();
 	for (int i = 0; i < len; i++) {

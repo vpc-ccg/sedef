@@ -325,7 +325,7 @@ vector<Hit> search (int query_start,
 				fmt::format("jaccard: {} < {}", winnow.limit + best_jaccard, winnow.limit)
 			});
 			JACCARD_FAILED++;
-		} else if (init_len == 1000) {
+		} else if (init_len == MIN_READ_SIZE) {
 			auto pf = tree.find(query_start);
 			if (!check_overlap(tree, pf, query_start, best_ref_start)) {
 				INTERVAL_FAILED++;

@@ -20,6 +20,9 @@ typedef pair<hash_t, int> minimizer_t;
 /******************************************************************************/
 
 struct Hash {
+	const int kmer_size;
+	const int window_size;
+
 	unsigned int threshold;
 	string seq;
 
@@ -29,8 +32,7 @@ struct Hash {
 	unordered_map<hash_t, list<int>, pair_hash> index;
 
 public:
-	Hash() {};
-	Hash(const string &s);
+	Hash(const string &s, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE);
 
 	// Find first minimizer at loci p
 	int find_minimizers(int p) const;

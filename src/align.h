@@ -15,6 +15,23 @@
 /******************************************************************************/
 
 struct alignment_t {
+	struct aln_error_t {
+		int gaps, gap_bases, mismatches, matches;
+
+		double gap_error() {
+			return pct(gap_bases, matches + gap_bases + mismatches);
+		}
+		double mis_error() {
+			return pct(mismatches, matches + gap_bases + mismatches);
+		}
+		double error() {
+			return mis_error() + gap_error();
+		}
+		double identity() {
+			return 100 - error();
+		}
+	};
+
 	int chr_a, start_a, end_a;
 	int chr_b, start_b, end_b;
 
@@ -31,11 +48,14 @@ struct alignment_t {
 
 	alignment_t trim();
 	std::vector<alignment_t> max_sum(int min_span=1000);
+
+	aln_error_t calculate_error();
 };
 
 /******************************************************************************/
 
 std::string getfasta(FastaReference &fr, const std::string &chrom, int start, int end, bool rc);
+
 alignment_t align(std::string fa, std::string fb, 
 	int match = 5, 
 	int mismatch = -4, 

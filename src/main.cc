@@ -9,10 +9,15 @@
 #include <locale>
 
 #include "jaccard.h"
+#include "aho.h"
 #include "align.h"
 #include "wgac.h"
 
 using namespace std;
+
+/******************************************************************************/
+
+extern shared_ptr<AHOAutomata> aho;
 
 /******************************************************************************/
 
@@ -34,6 +39,8 @@ int main(int argc, char **argv)
 	eprn("");
 	
 	string command = argv[1];
+
+	aho = make_shared<AHOAutomata>();
 
 	if (command == "search") {
 		string ref_path = argv[2];

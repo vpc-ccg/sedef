@@ -13,30 +13,30 @@ using namespace std;
 
 /******************************************************************************/
 
-vector<minimizer_t> get_minimizers(const string &s)
+vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const int window_size)
 {
 	vector<minimizer_t> minimizers;
-	minimizers.reserve((2 * s.size()) / WINDOW_SIZE);
+	minimizers.reserve((2 * s.size()) / window_size);
 	deque<minimizer_t> window;
 	uint32_t h = 0;
-	const uint32_t MASK = (1 << (2 * KMER_SIZE)) - 1;
-	int last_n = - KMER_SIZE - WINDOW_SIZE;
+	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
+	int last_n = - kmer_size - window_size;
 	for (int i = 0; i < s.size(); i++) {
 		if (s[i] == 'N') last_n = i;
 
 		h = (h << 2) | hash_dna(s[i]); 
 		h &= MASK;
-		if (i < KMER_SIZE) continue;
+		if (i < kmer_size) continue;
 
-		hash_t hh = make_pair(bool(last_n >= (i - KMER_SIZE + 1) - WINDOW_SIZE), h);   
+		hash_t hh = make_pair(bool(last_n >= (i - kmer_size + 1) - window_size), h);   
 		while (!window.empty() && (window.back().first >= hh))
 			window.pop_back();
-		while (!window.empty() && window.back().second <= (i - KMER_SIZE + 1) - WINDOW_SIZE)
+		while (!window.empty() && window.back().second <= (i - kmer_size + 1) - window_size)
 			window.pop_front();
 		// Do not add minimizers with N
-		window.push_back(make_pair(hh, i - KMER_SIZE + 1));
+		window.push_back(make_pair(hh, i - kmer_size + 1));
 
-		if (i - KMER_SIZE + 1 < WINDOW_SIZE) continue;
+		if (i - kmer_size + 1 < window_size) continue;
 		if (!minimizers.size() || window.front() != minimizers.back()) {
 			minimizers.push_back(window.front());
 		}
@@ -46,10 +46,13 @@ vector<minimizer_t> get_minimizers(const string &s)
 
 /******************************************************************************/
 
-Hash::Hash(const string &s): seq(s)
+Hash::Hash(const string &s, int kmer_size, int window_size): 
+	seq(s), kmer_size(kmer_size), window_size(window_size) 
 {
 	// eprn("Hashing {} bps", s.size());
-	minimizers = get_minimizers(s);
+
+	assert(kmer_size <= 16);
+	minimizers = get_minimizers(s, kmer_size, window_size);
 	
 	for (auto &i: minimizers) {
 		index[i.first].push_back(i.second);

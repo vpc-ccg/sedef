@@ -19,4 +19,4 @@ std::string print_mapping(Hit &pp,
 	bool is_complement, 
 	const std::string &query_chr, 
 	const std::string &ref_chr,
-	const Hash &ref_hash);
+	int ref_size);

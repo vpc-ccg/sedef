@@ -45,7 +45,7 @@ alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int
 			cigar.push_back(make_pair("MID"[ez.cigar[i]&0xf], ez.cigar[i]>>4));
 		free(ez.cigar);
 	}
-	return alignment_t{ 0, 0, qseq.size(), 0, 0, tseq.size(), qseq, tseq, "", "", "", cigar, 0 };
+	return alignment_t{ 0, 0, (int)qseq.size(), 0, 0, (int)tseq.size(), qseq, tseq, "", "", "", cigar, 0 };
 }
 
 alignment_t align(string fa, string fb, int match, int mismatch, int gap_open, int gap_extend) 
@@ -176,20 +176,15 @@ void alignment_t::populate_nice_alignment()
 	}
 }
 
-string alignment_t::print(int width)
+alignment_t::aln_error_t alignment_t::calculate_error()
 {
 	if (!alignment.size()) populate_nice_alignment();
-
-	string res;
-	int qa = start_a;
-	int qb = start_b;
-
 
 	int gaps = 0, gap_bases = 0, mismatches = 0, matches = 0;
 	for (auto &c: cigar) {
 		if (c.first != 'M') gaps++, gap_bases += c.second;
 	}
-	for (int i = 0; i < alignment.size(); i += width) {
+	for (int i = 0; i < alignment.size(); i++) {
 		if (align_a[i] != '-' && align_b[i] != '-') {
 			if (toupper(align_a[i]) == toupper(align_b[i])) {
 				matches++;
@@ -198,15 +193,26 @@ string alignment_t::print(int width)
 			}
 		}
 	}
+	return aln_error_t{gaps, gap_bases, mismatches, matches};
+}
 
+string alignment_t::print(int width)
+{
+	if (!alignment.size()) populate_nice_alignment();
+
+	string res;
+	int qa = start_a;
+	int qb = start_b;
+
+	auto err = calculate_error();
 	res += fmt::format(
 		"       A: {:>9}..{:<9} (len {:7})    Gaps:       {:5} = {:.0f}% ({})\n"
 		"       B: {:>9}..{:<9} (len {:7})    Mismatches: {:5} = {:.0f}%\n"
 		"   CIGAR: {}\n",
 		start_a, end_a, end_a - start_a, 
-		gap_bases, 100.0 * gap_bases / double(alignment.size()), gaps,
+		err.gap_bases, err.gap_error(), err.gaps,
 		start_b, end_b, end_b - start_b,
-		mismatches, 100.0 * mismatches / double(alignment.size()),
+		err.mismatches, err.mis_error(),
 		cigar_string()
 	);
 	for (int i = 0; i < alignment.size(); i += width) {

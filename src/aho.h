@@ -38,5 +38,5 @@ private:
 
 public:
 	AHOAutomata();
-	void search (const char *text, int len, map<int, int> &hits, int flag);
+	void search (const char *text, int len, map<int, int> &hits, int flag); // const;
 };
