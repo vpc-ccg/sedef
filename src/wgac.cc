@@ -41,6 +41,7 @@ double overlap(int sa, int ea, int sb, int eb)
 string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, int la, int lb)
 {
 	string out;
+
 	sort(mapping.begin(), mapping.end(), [&](Hit pp, Hit pq) {
 		auto ta = make_pair(overlap(pp.p, pp.q, OFF, OFF + la), overlap(pp.i, pp.j, OFF, OFF + lb));
 		auto tb = make_pair(overlap(pq.p, pq.q, OFF, OFF + la), overlap(pq.i, pq.j, OFF, OFF + lb));
@@ -53,9 +54,9 @@ string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, 
 		if (!cnt || pp.reason.substr(0, 2) == "OK") {
 			double score = overlap(pp.p, pp.q, OFF, OFF + la) + overlap(pp.i, pp.j, OFF, OFF + lb);
 			if (prev_score != -1 && prev_score / score > 2) break;
-			out += "\t\t" + fmt::format("{:.2f} {:.2f} ~ ", 
+			out += fmt::format("<< {:.2f} {:.2f} ~ ", 
 				overlap(pp.p, pp.q, OFF, OFF + la),
-				overlap(pp.i, pp.j, OFF, OFF + lb)) + print_mapping(pp, 0, ca, cb, lb); 
+				overlap(pp.i, pp.j, OFF, OFF + lb)) + print_mapping(pp, 0, ca, cb, lb) + ">> "; 
 			prev_score = score;
 		}
 	}
@@ -83,7 +84,11 @@ void check_wgac(string bed_path, string ref_path)
 	vector<vector<string>> lines;
 	while (getline(fin, s)) {
 		auto ss = split(s, '\t');
-		if (ss[0] != "chr1" || ss[6] != "chr1") continue;
+
+		if (ss[0][3] == 'U' || ss[0].back() == 'm') continue;
+		if (ss[6][3] == 'U' || ss[6].back() == 'm') continue;
+		// if (ss[0] != "chr1" || ss[6] != "chr1") continue;
+
 		if (seen.find(ss[16]) == seen.end()) {
 			seen.insert(ss[16]);
 			lines.push_back(ss);
@@ -91,7 +96,7 @@ void check_wgac(string bed_path, string ref_path)
 	}
 	// vector<vector<string>> lines = 
 
-	// auto xx =  set<int>{0,
+	// auto xx =  set<int>{980,990};
 	// 	408,
 	// 	543,
 	// 	136,
@@ -102,7 +107,7 @@ void check_wgac(string bed_path, string ref_path)
 	// };
 	
 	int total = 0, pass = 0, total_fails = 0;
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (int si = 0; si < lines.size(); si++) {
 		// if (xx.find(si) == xx.end()) continue;
 		// #pragma omp critical
@@ -124,46 +129,65 @@ void check_wgac(string bed_path, string ref_path)
 		}
 
 		string out;
-		out += fmt::format("{:<5} # {:5} {:>9n} {:>9n} | {:5} {:>9n} {:>9n} {} | {:>7n} {:.2f} {:.2f} {}\n", si,
-			ss[0], atoi(ss[1].c_str()), atoi(ss[2].c_str()), 
-			ss[6], atoi(ss[7].c_str()), atoi(ss[8].c_str()), ss[5],
-			atoi(ss[17].c_str()), atof(ss[25].c_str()), atof(ss[26].c_str()), 
-			ss[16]
-		);
+		// out += fmt::format(
+		// 	"{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t"
+		// 	"{}\t{}\t+\t{}" 
+		// 	ss[0], atoi(ss[1].c_str()), atoi(ss[2].c_str()), 
+		// 	ss[6], atoi(ss[7].c_str()), atoi(ss[8].c_str()), 
+		// 	ss[16],  ss[5],
+		// 	atoi(ss[17].c_str()), atof(ss[25].c_str()), atof(ss[26].c_str()), 
+		// );
 
 		int i_pass = 0, i_total_fails = 0;
 
 		auto aln = align(refa, refb);
+		aln.chr_a   = ca;
+		aln.start_a = sa;
+		aln.end_a   = ea;
+		aln.chr_b   = cb;
+		aln.start_b = sb;
+		aln.end_b   = eb;
 		auto alns = aln.trim().max_sum();
 		for (auto &a: alns) {
 			auto err = a.calculate_error();
-			out += fmt::format("      > {:5} {:>9n} {:>9n} | {:5} {:>9n} {:>9n} {} | {:>7n} {:.2f} {:.2f}\n", 
-				a.chr_a, a.start_a, a.end_a,
-				a.chr_b, a.start_b, a.end_b, ss[5],
-				a.alignment.size(),
-				err.mis_error() / 100, err.gap_error() / 100
+			out += fmt::format(
+				"{}\t{}\t{}\t"  
+				"{}\t{}\t{}\t"
+				"{}\t{:.1f}\t+\t{}\t"
+				"{}\t{}\t"
+				"SUB:{};{}-{};{}-{}\t",
+				aln.chr_a, a.start_a, a.end_a,
+				a.chr_b, a.start_b, a.end_b, 
+				ss[16], err.error(), ss[5],
+				a.alignment.size(), a.cigar_string(),
+
+				ss[17], // original size
+				a.start_a - aln.start_a, a.end_a - aln.start_a, 
+				a.start_b - aln.start_b, a.end_b - aln.start_b
 			);
 
 			// we need to padd it properly to assure their equality!
 			// eprn("{} {}", a.a.size(), a.b.size());
 			// eprn("{} {}", refa.size(), refb.size());
-			if (a.a.size() < a.b.size()) {
-				a.a += ref[ca].substr(sa + a.end_a, a.b.size() - a.a.size());
+			string aa = a.a, ab = a.b;
+			if (aa.size() < ab.size()) {
+				aa += ref[ca].substr(a.end_a, ab.size() - aa.size());
 			}
-			if (a.a.size() > a.b.size()) {
+			if (aa.size() > ab.size()) {
 				if (!rb) {
-					a.b += ref[cb].substr(sb + a.end_b, a.a.size() - a.b.size());
+					ab += ref[cb].substr(a.end_b, aa.size() - ab.size());
 				} else {
-					int real_start = sb + refb.size() - a.end_b;
-					string rc = ref[cb].substr(real_start - (a.a.size() - a.b.size()), a.a.size() - a.b.size());
+					int real_start = sb + (refb.size() - (a.end_b - a.start_b));
+					string rc = ref[cb].substr(real_start - (aa.size() - ab.size()), aa.size() - ab.size());
 					reverse(rc.begin(), rc.end());
 					transform(rc.begin(), rc.end(), rc.begin(), rev_dna);
-					a.b += rc;
+					ab += rc;
 				}
 			}
-			assert(a.a.size() == a.b.size());
-			Hash ha(a.a);
-			Hash hb(a.b);
+			assert(aa.size() == ab.size());
+			
+			Hash ha(aa);
+			Hash hb(ab);
 
 			bool success = false;
 
@@ -176,8 +200,8 @@ void check_wgac(string bed_path, string ref_path)
 				mappings.insert(mappings.end(), m.begin(), m.end());
 				for (auto &pp: m) { 
 					if (pp.reason.substr(0, 2) == "OK" 
-						&& overlap(pp.p, pp.q, OFF, OFF + a.a.size()) >= MIN_ID
-						&& overlap(pp.i, pp.j, OFF, OFF + a.b.size()) >= MIN_ID)
+						&& overlap(pp.p, pp.q, OFF, OFF + aa.size()) >= MIN_ID
+						&& overlap(pp.i, pp.j, OFF, OFF + ab.size()) >= MIN_ID)
 					{
 						success = true;
 						break;
@@ -186,19 +210,19 @@ void check_wgac(string bed_path, string ref_path)
 				if (success) break;
 			}
 			if (success) {
-				out += fmt::format("\tExtn:  OK\n");
+				out += fmt::format("EXT/OK\n");
 				i_pass++;
 				continue;
 			}
-			out += fmt::format("\tExtn:  FAIL\n");
-			out += print_mappings(mappings, ca, cb, a.a.size(), a.b.size());
+			out += fmt::format("EXT/FAIL;");
+			// out += print_mappings(mappings, ca, cb, a.a.size(), a.b.size());
 
 			// 2. Try full mappings without extension
-			mappings = search(OFF, ha, hb, tree, true, max(a.a.size(), a.b.size()));
+			mappings = search(OFF, ha, hb, tree, true, max(aa.size(), ab.size()));
 			for (auto &pp: mappings) { 
 				if (pp.reason.substr(0, 2) == "OK" 
-					&& overlap(pp.p, pp.q, OFF, OFF + a.a.size()) >= MIN_ID
-					&& overlap(pp.i, pp.j, OFF, OFF + a.b.size()) >= MIN_ID)
+					&& overlap(pp.p, pp.q, OFF, OFF + aa.size()) >= MIN_ID
+					&& overlap(pp.i, pp.j, OFF, OFF + ab.size()) >= MIN_ID)
 				{
 					success = true;
 					break;
@@ -206,19 +230,19 @@ void check_wgac(string bed_path, string ref_path)
 				if (success) break;
 			}
 			if (success) {
-				out += fmt::format("\tFull: OK\n");
+				out += fmt::format("FULL/OK\n");
 				continue;
 			}
-			out += fmt::format("\tFull: FAIL\n");
-			out += a.print();
-			out += print_mappings(mappings, ca, cb, a.a.size(), a.b.size());		
+			out += fmt::format("FULL/FAIL\n");
+			//out += a.print();
+			//out += print_mappings(mappings, ca, cb, a.a.size(), a.b.size());		
 			
 			i_total_fails++;	
 		}
 
 		#pragma omp critical
 		{
-			eprnn("{}", out);
+			prnn("{}", out);
 			total += alns.size();
 			total_fails += i_total_fails;
 			pass += i_pass;
@@ -227,12 +251,12 @@ void check_wgac(string bed_path, string ref_path)
 	}
 
 	eprn("total:     {:>6n}\n"
-		 "pass:      {:>6n} ({:.2f})\n"
-		 "fail/tot:  {:>6n} ({:.2f})\n"
-		 "fail/ext:  {:>6n} ({:.2f})",
-		 total, 
-		 pass, pct(pass, total),
-		 total_fails, pct(total_fails, total),
-		 total - pass  - total_fails, pct(total - pass  - total_fails, total)
+		  "pass:      {:>6n} ({:.2f})\n"
+		  "fail/tot:  {:>6n} ({:.2f})\n"
+		  "fail/ext:  {:>6n} ({:.2f})",
+		total, 
+		pass, pct(pass, total),
+		total_fails, pct(total_fails, total),
+		total - pass  - total_fails, pct(total - pass  - total_fails, total)
 	);
 }

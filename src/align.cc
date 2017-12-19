@@ -45,16 +45,17 @@ alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int
 			cigar.push_back(make_pair("MID"[ez.cigar[i]&0xf], ez.cigar[i]>>4));
 		free(ez.cigar);
 	}
-	return alignment_t{ 0, 0, (int)qseq.size(), 0, 0, (int)tseq.size(), qseq, tseq, "", "", "", cigar, 0 };
+	return alignment_t{ "A", 0, (int)qseq.size(), "B", 0, (int)tseq.size(), qseq, tseq, "", "", "", cigar };
 }
 
-alignment_t align(string fa, string fb, int match, int mismatch, int gap_open, int gap_extend) 
+alignment_t align(string fa, string fb, int match, int mismatch, int gap_open, int gap_extend)
 {
 	string xa = fa, xb = fb;
 	for (auto &c: fa) c = align_dna(c);
 	for (auto &c: fb) c = align_dna(c);
 	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend);
 	a.a = xa, a.b = xb;
+	a.populate_nice_alignment();
 	return a;
 }
 
@@ -305,14 +306,14 @@ vector<alignment_t> alignment_t::max_sum(int min_span)
 	for (auto &h: hits) {
 		// translate: a --> b
 		results.push_back({
-			chr_a, lookup_a[h.first], lookup_a[h.second],
-			chr_b, lookup_b[h.first], lookup_b[h.second],
+			chr_a, start_a + lookup_a[h.first], start_a + lookup_a[h.second],
+			chr_b, start_b + lookup_b[h.first], start_b + lookup_b[h.second],
 			a.substr(lookup_a[h.first], lookup_a[h.second] - lookup_a[h.first]),
 			b.substr(lookup_b[h.first], lookup_b[h.second] - lookup_b[h.first]),
 			align_a.substr(h.first, h.second - h.first),
 			align_b.substr(h.first, h.second - h.first),
 			alignment.substr(h.first, h.second - h.first),
-			{}, 0
+			{}
 		});
 		results.back().cigar_from_alignment();
 	}

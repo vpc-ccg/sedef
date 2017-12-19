@@ -81,7 +81,7 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 		vector<Hit> mapping = search(i, ref_hash, *query_hash, tree, allow_overlaps);
 		for (auto &pp: mapping) {
 			// BEDPE
-			prn("{}", print_mapping(pp, is_complement, query_chr, ref_chr, ref_hash.seq.size()));
+			prn("{}\n", print_mapping(pp, is_complement, query_chr, ref_chr, ref_hash.seq.size()));
 			total += 1;
 		}
 	}
@@ -106,7 +106,7 @@ string print_mapping(Hit &pp, bool is_complement,
 		pp.j = ref_size - pp.j + 1;
 		swap(pp.i, pp.j);
 	}
-	return fmt::format("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t+\t{}\t{:n}\t{}\t{}\n",
+	return fmt::format("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t+\t{}\t{:n}\t{}\t{}",
 		query_chr, pp.p, pp.q, 
 		ref_chr, pp.i, pp.j,
 		// pp.id, 

@@ -32,14 +32,13 @@ struct alignment_t {
 		}
 	};
 
-	int chr_a, start_a, end_a;
-	int chr_b, start_b, end_b;
+	std::string chr_a; int start_a, end_a;
+	std::string chr_b; int start_b, end_b;
 
-	string a, b;
-	string align_a, align_b, alignment;
+	std::string a, b;
+	std::string align_a, align_b, alignment;
 	
-	deque<pair<char, int>> cigar;
-	int score;
+	std::deque<std::pair<char, int>> cigar;
 
 	std::string cigar_string();
 	void cigar_from_alignment();
@@ -47,7 +46,7 @@ struct alignment_t {
 	std::string print(int width=100);
 
 	alignment_t trim();
-	std::vector<alignment_t> max_sum(int min_span=1000);
+	std::vector<alignment_t> max_sum(int min_span=MIN_READ_SIZE);
 
 	aln_error_t calculate_error();
 };
