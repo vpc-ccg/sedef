@@ -73,8 +73,8 @@ void check_wgac(string bed_path, string ref_path)
 	while (getline(ff, s)) {
 		if (s[0] == '>') {
 			chr = s.substr(1);
-			if (chr=="chr1" || chr=="chrX") skip=0;
-			else skip=1;
+			// if (chr=="chr1" || chr=="chrX") skip=0;
+			// else skip=1;
 			if (!skip) eprnn("{} ", chr);
 		}
 		else if (!skip) ref[chr] += s;
@@ -91,8 +91,8 @@ void check_wgac(string bed_path, string ref_path)
 		if (ss[0][3] == 'U' || ss[0].back() == 'm') continue;
 		if (ss[6][3] == 'U' || ss[6].back() == 'm') continue;
 		
-		if (ss[0] != "chr1") continue;
-		if (ss[3] != "chr1" && ss[3] != "chrX") continue;
+		// if (ss[0] != "chr1") continue;
+		// if (ss[3] != "chr1" && ss[3] != "chrX") continue;
 
 		// if (seen.find(ss[16]) == seen.end()) {
 		// 	seen.insert(ss[16]);

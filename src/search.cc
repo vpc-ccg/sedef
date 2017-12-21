@@ -98,7 +98,7 @@ void extend(SlidingMap &winnow,
 	static int CNT(0);
 	++CNT;
 
-	eprn(">> {}: extend query:{}..{} vs ref:{}..{}", CNT, query_start, query_end, ref_start, ref_end);
+	// eprn(">> {}: extend query:{}..{} vs ref:{}..{}", CNT, query_start, query_end, ref_start, ref_end);
 	
 	assert(query_start < query_hash.seq.size());
 	assert(ref_start < ref_hash.seq.size());
@@ -406,7 +406,7 @@ vector<Hit> search (int query_start,
 		int best_ref_winnow_start = ref_winnow_start, best_ref_winnow_end = ref_winnow_end;
 		while (ref_start < t.second && ref_end < ref_hash.seq.size()) {
 			if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1) {
-				winnow.remove_oldest_from_reference(ref_hash.minimizers[ref_winnow_start].first);
+				winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start].first);
 				ref_winnow_start++;    
 			}
 			if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) {

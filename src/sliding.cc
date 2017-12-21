@@ -40,58 +40,57 @@ void SlidingMap::rewind()
 
 void SlidingMap::add_to_query(const hash_t &h) 
 {
-	query_size++;
-	limit = relaxed_jaccard_estimate(query_size);
+	// if (boundary != this->end() && next(boundary) != this->end()) {
+	// 	boundary++;
+	// 	intersection += (boundary->second == 3);
+	// }
+	
+	auto it = this->lower_bound({h, 0});  // first >=
+	for (; it != this->end() && it->first.first == h && (it->second & 1); it++); 
 
-	if (boundary != this->end() && next(boundary) != this->end()) {
-		boundary++;
-		intersection += (boundary->second == 3);
-	}
-	// if (h.first) return;
-
-	auto it = this->lower_bound({h, 0}); 
-	for (; it != this->end() && it->first.first == h && (it->second & 1); it++);
-
-	bool inserted = false;
+	// bool inserted = false;
 	if (it != this->end() && it->first.first == h && !(it->second & 1)) {
 		it->second |= 1;
 	} else {
 		it = this->insert({{h, time++}, 1}).first;
-		inserted = true;
+		// inserted = true;
 	}
 
-	if (boundary != this->end() && it->first <= boundary->first) {
-		intersection += (it->second == 3);
-		if (inserted) {
-			intersection -= (boundary->second == 3);
-			boundary--;
-		}
-	}
+	query_size++;
+	limit = relaxed_jaccard_estimate(query_size);
+	rewind();
+
+	// if (boundary != this->end() && it->first <= boundary->first) {
+	// 	intersection += (it->second == 3);
+	// 	if (inserted) {
+	// 		intersection -= (boundary->second == 3);
+	// 		boundary--;
+	// 	}
+	// }
 }
 
 void SlidingMap::remove_from_query(const hash_t &h) // removing last added h from query!
 {
-	query_size--;
-	limit = relaxed_jaccard_estimate(query_size);
-
 	auto it = this->lower_bound({h, time + 1}); // first >=, and not = since...
-	assert(it != this->begin());
 	it--;
 	while (it != this->begin() && it->first.first == h && !(it->second & 1)) it--; // find first recently added
-	assert(it->first.first == h && (it->second & 1));
+	
+	if (it->first.first != h) return;
 	if (it->second == 1) this->erase(it);
 	else it->second &= 2;
 
+	query_size--;
+	limit = relaxed_jaccard_estimate(query_size);
 	rewind();
 }
 
 void SlidingMap::remove_from_reference(const hash_t &h) // removing last added h from query!
 {
 	auto it = this->lower_bound({h, time + 1}); // first >=, and not = since...
-	assert(it != this->begin());
 	it--;
 	while (it != this->begin() && it->first.first == h && !(it->second & 2)) it--; // find first recently added
-	assert(it->first.first == h && (it->second & 2));
+	
+	if (it->first.first != h) return;
 	if (it->second == 2) this->erase(it);
 	else it->second &= 1;
 
@@ -110,47 +109,49 @@ void SlidingMap::add_to_reference(const hash_t &h)
 	//     eprnn("// {}:{}:{} ", it->first.first.first, it->first.first.second, it->first.second);
 	// }eprn("");
 
-	bool inserted = false;
+	// bool inserted = false;
 	if (it != this->end() && it->first.first == h && !(it->second & 2)) {
 		it->second |= 2;
 	} else {
 		it = this->insert({make_pair(h, time++), 2}).first;
-		inserted = true;
+		// inserted = true;
 	}
 
-	if (boundary != this->end() && it->first <= boundary->first) { // error
-		intersection += (it->second == 3);
-		if (inserted) {
-			intersection -= (boundary->second == 3);
-			boundary--;
-		}
-	}
+	rewind();
+
+	// if (boundary != this->end() && it->first <= boundary->first) { // error
+	// 	intersection += (it->second == 3);
+	// 	if (inserted) {
+	// 		intersection -= (boundary->second == 3);
+	// 		boundary--;
+	// 	}
+	// }
 }
 
-void SlidingMap::remove_oldest_from_reference(const hash_t &h)
-{
-	if (h.first) return;
+// void SlidingMap::remove_oldest_from_reference(const hash_t &h)
+// {
+// 	if (h.first) return;
 	
-	auto it = this->lower_bound({h, 0}); 
-	for (; it != this->end() && it->first.first == h && !(it->second & 2); it++);
-	if (it == this->end() || it->first.first != h || !(it->second & 2)) return;
+// 	auto it = this->lower_bound({h, 0}); 
+// 	for (; it != this->end() && it->first.first == h && !(it->second & 2); it++);
+// 	if (it == this->end() || it->first.first != h || !(it->second & 2)) return;
 
-	it->second &= 1;
-	if (boundary != this->end() && it->first <= boundary->first) {
-		intersection -= (it->second == 1);
-		if (it->second == 0) { // remove
-			assert(next(boundary) != this->end());
-			if (it != boundary) { /* make sure it is not boundary!! */
-				this->erase(it);
-				boundary++;
-			} else {
-				boundary++;
-				this->erase(it);
-			}
-			intersection += (boundary->second == 3);
-		}
-	} else if (it->second == 0) {
-		this->erase(it);
-	}
-}
+// 	it->second &= 1;
+// 	if (boundary != this->end() && it->first <= boundary->first) {
+// 		intersection -= (it->second == 1);
+// 		if (it->second == 0) { // remove
+// 			assert(next(boundary) != this->end());
+// 			if (it != boundary) { /* make sure it is not boundary!! */
+// 				this->erase(it);
+// 				boundary++;
+// 			} else {
+// 				boundary++;
+// 				this->erase(it);
+// 			}
+// 			intersection += (boundary->second == 3);
+// 		}
+// 	} else if (it->second == 0) {
+// 		this->erase(it);
+// 	}
+// }
 
