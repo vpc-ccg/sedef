@@ -87,13 +87,13 @@ pair<bool, string> qgram_filter(const string &q, int q_pos, int q_len, const str
 pair<bool, string> core_filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
 {
 	map<int, int> hits;
-	assert(q_len == r_len);
 	int common = 0;
 	aho->search(q.c_str() + q_pos, q_len, hits, 1);
 	aho->search(r.c_str() + r_pos, r_len, hits, 2);
 	for (auto &h: hits) if (h.second == 3) common++;
 
-	double boundary = (1.0/2.5) * (q_len / 50.0);
+	int maxlen = max(q_len, r_len);
+	double boundary = (1.0/2.5) * (maxlen / 50.0);
 	if (common < int(boundary)) {
 		CORE_FAILED++;
 		return {false, fmt::format("cores {} < {}", common, boundary)};
@@ -108,8 +108,8 @@ pair<bool, string> filter(const string &q, int q_pos, int q_len, const string &r
 	auto f = uppercase_filter(q, q_pos, q_len, r, r_pos, r_len);
 	if (!f.first) return f;
 
-	f = core_filter(q, q_pos, q_len, r, r_pos, r_len);
-	if (!f.first) return f;
+	// f = core_filter(q, q_pos, q_len, r, r_pos, r_len);
+	// if (!f.first) return f;
 
 	f = qgram_filter(q, q_pos, q_len, r, r_pos, r_len);
 	if (!f.first) return f;

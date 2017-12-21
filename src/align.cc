@@ -112,6 +112,23 @@ void align_main(string ref_path, string bed_path, int resume_after)
 
 /******************************************************************************/
 
+alignment_t alignment_t::from_cigar(const string &a, const string &b, const string &cigar_str)
+{
+	auto aln = alignment_t{ "A", 0, (int)a.size(), "B", 0, (int)b.size(), a, b, "", "", "", {} };
+	for (int ci = 0, num = 0; ci < cigar_str.size(); ci++) {
+		if (isdigit(cigar_str[ci])) {
+			num = 10 * num + (cigar_str[ci] - '0');
+		} else if (cigar_str[ci] == ';') {
+			continue;
+		} else {
+			aln.cigar.push_back({cigar_str[ci], num});
+			num = 0;
+		}
+	}
+	aln.populate_nice_alignment();
+	return aln;
+}
+
 string alignment_t::cigar_string()
 {
 	string res;
@@ -202,8 +219,8 @@ string alignment_t::print(int width)
 	if (!alignment.size()) populate_nice_alignment();
 
 	string res;
-	int qa = start_a;
-	int qb = start_b;
+	int qa = start_a, sa = 0;
+	int qb = start_b, sb = 0;
 
 	auto err = calculate_error();
 	res += fmt::format(
@@ -218,12 +235,12 @@ string alignment_t::print(int width)
 	);
 	for (int i = 0; i < alignment.size(); i += width) {
 		res += fmt::format(
-			"   {:10}: {} {}\n   {:10}  {}\n   {:10}: {}\n", 
-			qa, align_a.substr(i, width), i+align_a.substr(i, width).size(),
-			"", alignment.substr(i, width), 
-			qb, align_b.substr(i, width));
-		for (auto c: align_a.substr(i, width)) if (c != '-') qa++;
-		for (auto c: align_b.substr(i, width)) if (c != '-') qb++;
+			"   {:10}: {} {}\n   {:10}  {} {}\n   {:10}: {} {}\n", 
+			qa, align_a.substr(i, width),   sa,  
+			"", alignment.substr(i, width), i+align_a.substr(i, width).size(),
+			qb, align_b.substr(i, width), sb);
+		for (auto c: align_a.substr(i, width)) if (c != '-') qa++, sa++;
+		for (auto c: align_b.substr(i, width)) if (c != '-') qb++, sb++;
 		res += "\n";
 	}
 	return res;

@@ -40,6 +40,8 @@ struct alignment_t {
 	
 	std::deque<std::pair<char, int>> cigar;
 
+	static alignment_t from_cigar(const std::string &a, const std::string &b, const std::string &cigar);
+	
 	std::string cigar_string();
 	void cigar_from_alignment();
 	void populate_nice_alignment();

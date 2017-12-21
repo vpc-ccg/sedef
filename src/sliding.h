@@ -16,8 +16,8 @@
 
 /******************************************************************************/
 
-struct SlidingMap: public map<pair<hash_t, int64_t>, char> {
-	typename std::map<pair<hash_t, int64_t>, char>::iterator boundary;
+struct SlidingMap: public std::map<std::pair<hash_t, int64_t>, char> {
+	typename std::map<std::pair<hash_t, int64_t>, char>::iterator boundary;
 	int query_size;
 	int intersection;
 	double limit;
@@ -28,7 +28,9 @@ struct SlidingMap: public map<pair<hash_t, int64_t>, char> {
 	int jaccard();
 	void rewind();
 	void add_to_query(const hash_t &h);
+	void remove_from_query(const hash_t &h);
 	void add_to_reference(const hash_t &h);
 	void remove_from_reference(const hash_t &h);
+	void remove_oldest_from_reference(const hash_t &h);
 };
 

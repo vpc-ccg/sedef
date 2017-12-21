@@ -26,24 +26,36 @@ using namespace std;
 /******************************************************************************/
 
 const int MAX_MATCH = 500 * 1000;   /// 50kb at most
-const int RIGHT_ALLOWANCE = 750;    /// TODO more mathy formulation
 const int RECOVER_BP = 1000;        /// We allow 250bp extra extend just in case!
 
 /******************************************************************************/
 
-bool check_overlap (TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pfp_pos) 
+bool check_overlap(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pf_end, int pfp_pos, int pfp_end) 
 {
+	assert(pf_pos <= pf_end);
+	assert(pfp_pos <= pfp_end);
+
+	const int RIGHT_ALLOWANCE = 750;    /// TODO more mathy formulation
+
 	SUBTREE_t::const_iterator pfp;
 	if (pf != tree.end() && (pfp = pf->second.find(pfp_pos)) != pf->second.end()) { // check overlap!
 		for (auto &it: pfp->second) {
 			int sA = it.first.lower(),  eA = it.first.upper();
 			int sB = it.second.lower(), eB = it.second.upper();
-			assert(eA - sA == eB - sB);
-			if (eA - sA > MIN_READ_SIZE * 1.5 
-				// && abs((pf_pos - sA) - (pfp_pos - sB)) >= (eA-sA)/4
-				&& eA - pf_pos  >= RIGHT_ALLOWANCE 
-				&& eB - pfp_pos >= RIGHT_ALLOWANCE
-			) return false;
+
+			if (pf_pos >= sA && pf_end <= eA && pfp_pos >= sB && pfp_end <= eB)
+				return false;
+
+			if (min(eA - sA, eB - sB) < MIN_READ_SIZE * 1.5) 
+				continue;
+
+			/*
+			-------+     
+			  +---------
+			  <----> must be at least RIGHT_ALLOWANCE 
+			*/
+			if (eA - pf_pos  >= RIGHT_ALLOWANCE && eB - pfp_pos >= RIGHT_ALLOWANCE) 
+				return false;
 		}
 	}
 	return true;
@@ -83,7 +95,10 @@ void extend(SlidingMap &winnow,
 	bool allow_overlaps,
 	TREE_t &tree) 
 {
-	// eprn(">> extend query:{:n} vs ref:{:n}", query_start, ref_start);
+	static int CNT(0);
+	++CNT;
+
+	eprn(">> {}: extend query:{}..{} vs ref:{}..{}", CNT, query_start, query_end, ref_start, ref_end);
 	
 	assert(query_start < query_hash.seq.size());
 	assert(ref_start < ref_hash.seq.size());
@@ -97,91 +112,185 @@ void extend(SlidingMap &winnow,
 			0,
 			f.second
 		});
+		// eprn(">> {}: failed first filter {}", CNT, f.second);
 		return;
 	}
 
-	int qlow = 0; //query_end - query_start - edist.second.first;
-	int rlow = 0; //ref_end - ref_start - edist.second.second;
-
 	int j = winnow.jaccard();
-	int best_query_end = query_end,
-		best_ref_end = ref_end,
-		best_jaccard = j;
-	for (int recover = 0; query_end < query_hash.seq.size() 
-			&& ref_end < ref_hash.seq.size() && recover < RECOVER_BP; ) 
-	{   
-		//break;
-		// if (qlow > (query_end-query_start)/4 || rlow > (ref_end-ref_start)/4) { // TODO FIX
-		//     break;
-		// }
-		// if (islower(query_hash.seq[query_end])) qlow++;
-		// if (islower(ref_hash.seq[ref_end])) rlow++;
+	auto best_winnow = winnow;
+	int best_query_end = query_end, // TODO is not inclusive!
+	    best_query_winnow_end = query_winnow_end,
+	    best_query_start = query_start,
+	    best_query_winnow_start = query_winnow_start,
+	    best_ref_end = ref_end,
+	    best_ref_winnow_end = ref_winnow_end,
+	    best_ref_start = ref_start,
+	    best_ref_winnow_start = ref_winnow_start,
+	    best_jaccard = j;
 
-		// - disallow overlaps or too long matches
+	auto fn_qe = [&]() {
+		if (query_end >= query_hash.seq.size()) return 0;
+		int i = 1;
+		if (query_winnow_end < query_hash.minimizers.size() && query_hash.minimizers[query_winnow_end].second == query_end)
+			winnow.add_to_query(query_hash.minimizers[query_winnow_end++].first), i++;
+		query_end++;
+		return i;
+	};
+	auto fn_u_qe = [&](int i) {
+		if (!i) return;
+		if (i == 2) winnow.remove_from_query(query_hash.minimizers[--query_winnow_end].first);
+		query_end--;
+	};
+
+	auto fn_re = [&]() {
+		if (ref_end >= ref_hash.seq.size()) return 0;
+		int i = 1;
+		if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second == ref_end) 
+			winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end++].first), i++;
+		ref_end++;
+		return i;
+	};
+	auto fn_u_re = [&](int i) {
+		if (!i) return;
+		if (i == 2) winnow.remove_from_reference(ref_hash.minimizers[--ref_winnow_end].first);
+		ref_end--;
+	};
+
+	auto fn_qre = [&]() {
+		if (query_end >= query_hash.seq.size() || ref_end >= ref_hash.seq.size()) return 0;
+		return fn_qe() * 10 + fn_re();
+	};
+	auto fn_u_qre = [&](int i) {
+		if (!i) return;
+		fn_u_qe(i / 10), fn_u_re(i % 10);
+	};
+
+	auto fn_qs = [&]() {
+		if (!query_start) return 0;
+		int i = 1;
+		if (query_winnow_start && query_hash.minimizers[query_winnow_start - 1].second == query_start - 1)
+			winnow.add_to_query(query_hash.minimizers[--query_winnow_start].first), i++;
+		query_start--;
+		return i;
+	};
+	auto fn_u_qs = [&](int i) {
+		if (!i) return;
+		if (i == 2) winnow.remove_from_query(query_hash.minimizers[query_winnow_start++].first);
+		query_start++;
+	};
+
+	auto fn_rs = [&]() {
+		if (!ref_start) return 0;
+		int i = 1;
+		if (ref_winnow_start && ref_hash.minimizers[ref_winnow_start - 1].second == ref_start - 1) 
+			winnow.add_to_reference(ref_hash.minimizers[--ref_winnow_start].first), i++; 
+		ref_start--;
+		return i;
+	};
+	auto fn_u_rs = [&](int i) {
+		if (!i) return;
+		if (i == 2) winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start++].first);
+		ref_start++;
+	};
+
+	auto fn_qrs = [&]() {
+		if (!query_start || !ref_start) return 0;
+		return fn_qs() * 10 + fn_rs();
+	};
+	auto fn_u_qrs = [&](int i) {
+		if (!i) return;
+		fn_u_qs(i / 10), fn_u_rs(i % 10);
+	};
+	
+	auto fns = vector<pair<function<int(void)>, function<void(int)>>>{
+		make_pair(fn_qre, fn_u_qre),
+		make_pair(fn_qe, fn_u_qe),
+		make_pair(fn_re, fn_u_re),
+		make_pair(fn_qrs, fn_u_qrs),
+		make_pair(fn_qs, fn_u_qs),
+		make_pair(fn_rs, fn_u_rs)
+	};
+
+	const int STEP = 100;
+	for ( ; ; ) {
 		int max_match = MAX_MATCH;
-		if (!allow_overlaps) {
+		if (!allow_overlaps)
 			max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)));
-		}
-		if (max(query_end - query_start, ref_end - ref_start) > max_match) {
-			// eprn("wooops_overlap");
+		if (max(query_end - query_start, ref_end - ref_start) > max_match)
 			break;
-		}
-
-		// N detection
-		int n_count = 0;
-		while (query_end < query_hash.seq.size() && ref_end < ref_hash.seq.size() 
-				&& ((query_hash.seq[query_end] == 'N') || (ref_hash.seq[ref_end] == 'N'))) 
-		{
-			n_count++, query_end++, ref_end++;
-			if (n_count > 100) break;
-		}
-		if (n_count > 100 || query_end == query_hash.seq.size() || ref_end == ref_hash.seq.size()) 
+		if (min(query_end - query_start, ref_end - ref_start) / (double)max(query_end - query_start, ref_end - ref_start) < (1 - 2 * MAX_GAP_ERROR))
 			break;
 
-		// - try extending to the right
-		if (query_winnow_end < query_hash.minimizers.size() 
-				&& query_hash.minimizers[query_winnow_end].second < query_end + 1) 
-		{ // extend query
-			winnow.add_to_query(query_hash.minimizers[query_winnow_end].first);
-			query_winnow_end++;
-		}
-		if (ref_winnow_end < ref_hash.minimizers.size() 
-				&& ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) 
-		{ // extend reference
-			winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-			ref_winnow_end++;
-		} 
-		if ((j = winnow.jaccard()) >= 0) {
-			best_jaccard = j;
-			best_ref_end = ref_end;
-			best_query_end = query_end;
-			recover = 0;
-		} else {
-			recover++;
-		}
+		bool succeeded = false;
+		for (auto &fn: fns) {
+			// eprn("{} , {}--{}/{}--{}", CNT, query_start, query_end, ref_start, ref_end);
+			int i = fn.first();
+			if (i == 0) continue;
+			//for (i = 0; i < STEP; i++) {
+			//}
+			//if (i == 0) continue;
+			// we have "working" jacard
+			if ((j = winnow.jaccard()) >= 0) {
+				// best_jaccard = j;
+				// best_query_start = query_start;
+				// best_query_winnow_start = query_winnow_start;
+				// best_query_end = query_end;
+				// best_query_winnow_end = query_winnow_end;
+				// best_ref_start = ref_start;
+				// best_ref_winnow_start = ref_winnow_start;
+				// best_ref_end = ref_end;
+				// best_ref_winnow_end = ref_winnow_end;
+				// best_winnow = winnow;
 
-		query_end++, ref_end++;
-		// eprn("len={} rec={}", query_end-query_start, recover);
-		// if (recover == RECOVER_BP) eprn("wooops_recover");
+				succeeded = true;
+				break;
+			} else {
+				fn.second(i); // undo
+			}
+			// else {
+			// 	query_start = best_query_start;
+			// 	query_winnow_start = best_query_winnow_start;
+			// 	query_end = best_query_end;
+			// 	query_winnow_end = best_query_winnow_end;
+
+			// 	ref_start = best_ref_start;
+			// 	ref_winnow_start = best_ref_winnow_start;
+			// 	ref_end = best_ref_end;
+			// 	ref_winnow_end = best_ref_winnow_end;
+
+			// 	winnow = best_winnow;
+			// }
+		}
+		if (!succeeded) break;
 	}
 
-	f = filter(query_hash.seq, query_start, best_query_end - query_start, ref_hash.seq, ref_start, best_ref_end - ref_start);
+	best_query_start = query_start;
+	best_query_end = query_end;
+	best_ref_start = ref_start;
+	best_ref_end = ref_end;
+				
+	f = filter(query_hash.seq, best_query_start, best_query_end - best_query_start, 
+		ref_hash.seq, best_ref_start, best_ref_end - best_ref_start);
 	if (!f.first) {
 		hits.push_back({
-			query_start, best_query_end, 
-			ref_start, best_ref_end, 
+			best_query_start, best_query_end, 
+			best_ref_start, best_ref_end, 
 			best_jaccard,
 			f.second
 		});
+		// eprn(">> {}: failed second filter {}", CNT, f.second);
 		return;
 	}
 	
 	hits.push_back({
-		query_start, best_query_end, 
-		ref_start, best_ref_end, 
+		best_query_start, best_query_end, 
+		best_ref_start, best_ref_end, 
 		best_jaccard,
 		"OK"
 	});
+
+	// eprn(">> {}: extended to {}..{}; {}..{}", CNT, best_query_start, best_query_end, 
+	// 	best_ref_start, best_ref_end);
 	
 	auto a = INTERVAL(query_start, best_query_end);
 	auto b = INTERVAL(ref_start, best_ref_end);
@@ -267,7 +376,7 @@ vector<Hit> search (int query_start,
 		if (t.first > t.second) 
 			continue;
 
-		// eprn(">> extend query:{:n} vs ref:{:n}...{:n}", query_start, t.first, t.second);
+		// eprn(">> BEGIN extend query:{:n} vs ref:{:n}...{:n}", query_start, t.first, t.second);
 	
 		TOTAL_ATTEMPTED++; 
 		auto winnow = init_winnow;
@@ -291,12 +400,13 @@ vector<Hit> search (int query_start,
 		//     jaccard, 
 		//     seed_ref_start, seed_jaccard);
 		// Roll until we find best inital match
+		auto best_winnow = winnow;
 		int best_jaccard = winnow.jaccard();
 		int best_ref_start = ref_start, best_ref_end = ref_end;
 		int best_ref_winnow_start = ref_winnow_start, best_ref_winnow_end = ref_winnow_end;
 		while (ref_start < t.second && ref_end < ref_hash.seq.size()) {
 			if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1) {
-				winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start].first);
+				winnow.remove_oldest_from_reference(ref_hash.minimizers[ref_winnow_start].first);
 				ref_winnow_start++;    
 			}
 			if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) {
@@ -310,6 +420,7 @@ vector<Hit> search (int query_start,
 				best_ref_end = ref_end;
 				best_ref_winnow_start = ref_winnow_start;
 				best_ref_winnow_end = ref_winnow_end;
+				best_winnow = winnow;
 			}
 			ref_start++;
 			ref_end++;
@@ -322,15 +433,16 @@ vector<Hit> search (int query_start,
 				query_start, query_start + init_len, 
 				best_ref_start, best_ref_end, 
 				best_jaccard, 
-				fmt::format("jaccard: {} < {}", winnow.limit + best_jaccard, winnow.limit)
+				fmt::format("jaccard: {} < {}", best_winnow.limit + best_jaccard, best_winnow.limit)
 			});
 			JACCARD_FAILED++;
 		} else if (init_len == MIN_READ_SIZE) {
 			auto pf = tree.find(query_start);
-			if (!check_overlap(tree, pf, query_start, best_ref_start)) {
+			if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
 				INTERVAL_FAILED++;
 			} else {
-				extend(winnow,
+				// eprn("init jacc === {}", best_jaccard);
+				extend(best_winnow,
 					query_hash, query_start, query_start + init_len, st, mi,
 					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
 					hits, allow_overlaps, tree

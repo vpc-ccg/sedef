@@ -11,7 +11,9 @@ using namespace std;
 
 /******************************************************************************/
 
-SlidingMap::SlidingMap(): query_size(0), time(0), intersection(0), limit(0) { 
+SlidingMap::SlidingMap(): 
+	query_size(0), time(0), intersection(0), limit(0) 
+{ 
 	boundary = this->end();
 } 
 
@@ -67,6 +69,37 @@ void SlidingMap::add_to_query(const hash_t &h)
 	}
 }
 
+void SlidingMap::remove_from_query(const hash_t &h) // removing last added h from query!
+{
+	query_size--;
+	limit = relaxed_jaccard_estimate(query_size);
+
+	auto it = this->lower_bound({h, time + 1}); // first >=, and not = since...
+	assert(it != this->begin());
+	it--;
+	while (it != this->begin() && it->first.first == h && !(it->second & 1)) it--; // find first recently added
+	assert(it->first.first == h && (it->second & 1));
+	if (it->second == 1) this->erase(it);
+	else it->second &= 2;
+
+	rewind();
+}
+
+void SlidingMap::remove_from_reference(const hash_t &h) // removing last added h from query!
+{
+	auto it = this->lower_bound({h, time + 1}); // first >=, and not = since...
+	assert(it != this->begin());
+	it--;
+	while (it != this->begin() && it->first.first == h && !(it->second & 2)) it--; // find first recently added
+	assert(it->first.first == h && (it->second & 2));
+	if (it->second == 2) this->erase(it);
+	else it->second &= 1;
+
+	rewind();
+}
+
+
+
 void SlidingMap::add_to_reference(const hash_t &h)
 {        
 	if (h.first) return;
@@ -85,7 +118,7 @@ void SlidingMap::add_to_reference(const hash_t &h)
 		inserted = true;
 	}
 
-	if (boundary != this->end() && it->first <= boundary->first) {
+	if (boundary != this->end() && it->first <= boundary->first) { // error
 		intersection += (it->second == 3);
 		if (inserted) {
 			intersection -= (boundary->second == 3);
@@ -94,7 +127,7 @@ void SlidingMap::add_to_reference(const hash_t &h)
 	}
 }
 
-void SlidingMap::remove_from_reference(const hash_t &h)
+void SlidingMap::remove_oldest_from_reference(const hash_t &h)
 {
 	if (h.first) return;
 	

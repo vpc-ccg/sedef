@@ -1,5 +1,5 @@
 CXX=icpc
-CFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp
+CFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fsanitize=address -fno-omit-frame-pointer
 LDFLAGS=-lrt -fopenmp -lz
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)

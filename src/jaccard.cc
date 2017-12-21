@@ -107,13 +107,13 @@ string print_mapping(Hit &pp, bool is_complement,
 		swap(pp.i, pp.j);
 	}
 	return fmt::format("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t+\t{}\t{:n}\t{}\t{}",
-		query_chr, pp.p, pp.q, 
 		ref_chr, pp.i, pp.j,
+		query_chr, pp.p, pp.q, 
 		// pp.id, 
 		is_complement ? "-" : "+",
 		// Optional fields
 		//int(pp.break_criteria),
-		pp.q - pp.p,
+		max(pp.q - pp.p, pp.j - pp.i),
 		pp.jaccard,
 		pp.reason
 	);

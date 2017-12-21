@@ -31,10 +31,10 @@ int main(int argc, char **argv)
 	setlocale(LC_NUMERIC, "en_US.UTF-8");
 	if (argc < 3) exit(1);
 
-	eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁");
-	eprn("🐚       S   E   D   E   F       🐚");
-	eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁");
-	eprnn("   🖥  {}; arguments: ", GITVER);
+	// eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁");
+	// eprn("🐚       S   E   D   E   F       🐚");
+	// eprn("🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁 🍁");
+	eprnn("🍁  🐚    SEDEF {}; arguments: ", GITVER);
 	for (int i = 0; i < argc; i++) eprnn(" {}", argv[i]);
 	eprn("");
 	
