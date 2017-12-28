@@ -13,6 +13,14 @@ using namespace std;
 
 /******************************************************************************/
 
+ostream& operator<<(ostream& os, const hash_t& dt)
+{  
+	os << int(dt.first) << '.' << hex << dt.second;  
+	return os;  
+}  
+
+/******************************************************************************/
+
 vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const int window_size)
 {
 	vector<minimizer_t> minimizers;

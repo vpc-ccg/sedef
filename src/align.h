@@ -46,6 +46,7 @@ struct alignment_t {
 	void cigar_from_alignment();
 	void populate_nice_alignment();
 	std::string print(int width=100);
+	std::string print_only_alignment(int width=-1);
 
 	alignment_t trim();
 	std::vector<alignment_t> max_sum(int min_span=MIN_READ_SIZE);

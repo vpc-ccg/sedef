@@ -25,6 +25,14 @@ vector<string> split(const string &s, char delim)
 	return elems;
 }
 
+string rc(const string &s)
+{
+	auto r = s;
+	reverse(r.begin(), r.end());
+	transform(r.begin(), r.end(), r.begin(), rev_dna);
+	return r;
+}
+
 /******************************************************************************/
 
 double tau(double edit_error)
@@ -52,14 +60,20 @@ double solve_inverse_jaccard(int j)
 int relaxed_jaccard_estimate(int s)
 {
 	static unordered_map<int, int> mm;
-	auto it = mm.find(s);
-	if (it != mm.end()) return it->second;
+
+	double result = -1;
+	#pragma omp critical
+	{
+		auto it = mm.find(s);
+		if (it != mm.end()) result = it->second;
+	}
+	if (result != -1) return result;
 
 	using namespace boost::math;
 	const double CI = 0.75;
 	const double Q2 = (1.0 - CI) / 2; // one side interval probability
 
-	double result = ceil(s * tau());
+	result = ceil(s * tau());
 	for (; result >= 0; result--) {        
 		double d = solve_inverse_jaccard(result / s); // returns edit error
 		// eprn("[in={}] inverse for {} is {} ~ {}", s, result/s, d, tau(d));
@@ -70,7 +84,10 @@ int relaxed_jaccard_estimate(int s)
 			break;
 		}
 	}
-
-	mm[s] = result;
+	result = max(result, 0.0);
+	#pragma omp critical
+	{
+		mm[s] = result;
+	}
 	return result;
 }

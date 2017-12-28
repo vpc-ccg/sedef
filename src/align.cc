@@ -241,10 +241,28 @@ string alignment_t::print(int width)
 			qb, align_b.substr(i, width), sb);
 		for (auto c: align_a.substr(i, width)) if (c != '-') qa++, sa++;
 		for (auto c: align_b.substr(i, width)) if (c != '-') qb++, sb++;
-		res += "\n";
+		// res += "\n";
 	}
 	return res;
 }
+
+string alignment_t::print_only_alignment(int width)
+{
+	if (!alignment.size()) populate_nice_alignment();
+
+	if (width == -1) width = alignment.size();
+	string res;
+	for (int i = 0; i < alignment.size(); i += width) {
+		res += fmt::format(
+			"{}\n{}\n{}\n\n", 
+			align_a.substr(i, width),  
+			alignment.substr(i, width),
+			align_b.substr(i, width)
+		);
+	}
+	return res;
+}
+
 
 void alignment_t::cigar_from_alignment() 
 {

@@ -7,6 +7,7 @@
 /******************************************************************************/
 
 #include <list>
+#include <iostream>
 #include <unordered_map>
 #include <vector>
 
@@ -37,3 +38,7 @@ public:
 	// Find first minimizer at loci p
 	int find_minimizers(int p) const;
 };
+
+
+#include "extern/ostream.h"
+ostream& operator<<(ostream& os, const hash_t& dt);

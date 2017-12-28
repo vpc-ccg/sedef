@@ -1,6 +1,6 @@
 CXX=icpc
-CFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fsanitize=address -fno-omit-frame-pointer
-LDFLAGS=-lrt -fopenmp -lz
+CFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp
+LDFLAGS=-lrt -lz -fopenmp
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
 SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 
@@ -9,6 +9,11 @@ EXECUTABLE=sedef
 
 all: CFLAGS+=-g -O2
 all: $(SOURCES) $(EXECUTABLE)
+
+sanitize: CXX=g++
+sanitize: CFLAGS+= -g -O1 -fno-omit-frame-pointer -fsanitize=address
+sanitize: LDFLAGS+=-fno-omit-frame-pointer -fsanitize=address
+sanitize: $(SOURCES) $(EXECUTABLE)
 
 release: CFLAGS+=-g -O3 -DNDEBUG 
 release: $(SOURCES) $(EXECUTABLE)

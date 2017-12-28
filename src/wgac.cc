@@ -19,6 +19,7 @@
 #include "filter.h"
 #include "align.h"
 #include "aho.h"
+#include "sliding.h"
 
 using namespace std;
 
@@ -38,7 +39,7 @@ double overlap(int sa, int ea, int sb, int eb)
 	return o / double(eb - sb);
 }
 
-string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, int la, int lb)
+string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, int la, int lb, string end = "\n")
 {
 	string out;
 
@@ -54,35 +55,32 @@ string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, 
 		if (!cnt || pp.reason.substr(0, 2) == "OK") {
 			double score = overlap(pp.p, pp.q, OFF, OFF + la) + overlap(pp.i, pp.j, OFF, OFF + lb);
 			if (prev_score != -1 && prev_score / score > 2) break;
-			out += fmt::format("\n{:.2f} {:.2f} ~ ", 
+			out += fmt::format("   {:.2f} {:.2f} # ", 
 				overlap(pp.p, pp.q, OFF, OFF + la),
-				overlap(pp.i, pp.j, OFF, OFF + lb)) + print_mapping(pp, 0, ca, cb, lb); 
+				overlap(pp.i, pp.j, OFF, OFF + lb)) + print_mapping(pp, 0, ca, cb, lb) + end; 
 			prev_score = score;
 		}
 	}
 	return out;
 }
 
-void check_wgac(string bed_path, string ref_path) 
+void align_wgac(string tab_path, string ref_path)
 {
 	eprnn("Loading reference... ");
 	unordered_map<string, string> ref;
 	ifstream ff(ref_path);
 	string chr, s;
-	bool skip=0;
 	while (getline(ff, s)) {
 		if (s[0] == '>') {
 			chr = s.substr(1);
-			// if (chr=="chr1" || chr=="chrX") skip=0;
-			// else skip=1;
-			if (!skip) eprnn("{} ", chr);
+			eprnn("{} ", chr);
 		}
-		else if (!skip) ref[chr] += s;
+		else ref[chr] += s;
 	}
 	eprn("done!");
 
-	ifstream fin(bed_path.c_str());
-	// getline(fin, s);
+	ifstream fin(tab_path.c_str());
+	getline(fin, s);
 	unordered_set<string> seen;
 	vector<vector<string>> lines;
 	while (getline(fin, s)) {
@@ -90,25 +88,111 @@ void check_wgac(string bed_path, string ref_path)
 
 		if (ss[0][3] == 'U' || ss[0].back() == 'm') continue;
 		if (ss[6][3] == 'U' || ss[6].back() == 'm') continue;
-		
-		// if (ss[0] != "chr1") continue;
-		// if (ss[3] != "chr1" && ss[3] != "chrX") continue;
 
-		// if (seen.find(ss[16]) == seen.end()) {
-		// 	seen.insert(ss[16]);
+		// align_both/0001/both009292
+		// if (ss[16] != "align_both/0001/both009292") continue;
+
+		if (seen.find(ss[16]) == seen.end()) {
+			seen.insert(ss[16]);
 			lines.push_back(ss);
-		// }
+		}
+	}
+	
+	#pragma omp parallel for
+	for (int si = 0; si < lines.size(); si++) {
+		auto &ss = lines[si];
+
+		string ca = ss[0]; int sa = atoi(ss[1].c_str()), ea = atoi(ss[2].c_str());
+		string cb = ss[6]; int sb = atoi(ss[7].c_str()), eb = atoi(ss[8].c_str());
+		bool rb = (ss[5][0] == '_');
+		auto refa = ref[ca].substr(sa - OFF, ea - sa);
+		auto refb = ref[cb].substr(sb - OFF, eb - sb);
+		if (rb) refb = rc(refb);
+
+		string out;
+		
+		auto aln = align(refa, refb);
+		aln.chr_a   = ca;
+		aln.start_a = sa;
+		aln.end_a   = ea;
+		aln.chr_b   = cb;
+		if (!rb) {
+			aln.start_b = sb;
+			aln.end_b   = eb;
+		} else {
+			aln.start_b = -eb + 1;
+			aln.end_b = -sb + 1;
+		}
+		auto alns = aln.trim().max_sum();
+		for (auto &a: alns) {
+			auto err = a.calculate_error();
+			out += fmt::format(
+				"{}\t"
+				"{}\t{}\t{}\t"
+				"{}\t{}\t{}\t"
+				"{}\t{:.1f}\t+\t{}\t"
+				"{}\t{}\t"
+				"SUB:{};{}-{};{}-{}\t",
+				si,
+				aln.chr_a, a.start_a, a.end_a,
+				a.chr_b, 
+				a.start_b < 0 ? -a.end_b + 1 : a.start_b, 
+				a.end_b < 0 ? -a.start_b + 1 : a.end_b,
+				ss[16], err.error(), ss[5],
+				a.alignment.size(), a.cigar_string(),
+				ss[17], // original size
+				a.start_a - aln.start_a, a.end_a - aln.start_a,
+				a.start_b - aln.start_b, a.end_b - aln.start_b
+			);
+			
+			auto pa = a.print_only_alignment();
+
+			auto xa = ref[ca].substr(a.start_a, a.end_a - a.start_a);
+			auto xb = ref[cb].substr(a.start_b < 0 ? -a.end_b + 1 : a.start_b, a.end_b - a.start_b);
+			if (rb) xb = rc(xb);
+			auto x = alignment_t::from_cigar(xa, xb, a.cigar_string());
+			auto px = x.print_only_alignment();
+
+			assert(pa == px);
+			out += "\n";
+		}
+		#pragma omp critical
+		{
+			prnn("{}", out);
+			// eprn("{} / {}", si, lines.size());
+		}
+
+	}
+}
+
+void check_wgac(string bed_path, string ref_path) 
+{
+	unordered_map<string, string> ref;
+	FastaReference fr(ref_path);
+
+	ifstream fin(bed_path.c_str());
+	string s;
+	unordered_set<string> seen;
+	vector<vector<string>> lines;
+	while (getline(fin, s)) {
+		auto ss = split(s, '\t');
+		ss.erase(ss.begin());
+		if (ss[0][3] == 'U' || ss[0].back() == 'm') continue;
+		if (ss[3][3] == 'U' || ss[3].back() == 'm') continue;
+		lines.push_back(ss);
+
+		if (ref.find(ss[0]) == ref.end()) ref[ss[0]] = fr.getSubSequence(ss[0], 0, 300000000);
+		if (ref.find(ss[3]) == ref.end()) ref[ss[3]] = fr.getSubSequence(ss[3], 0, 300000000);
 	}
 	eprn("IN: {} lines", lines.size());
-	// vector<vector<string>> lines = 
+	
 
-	// auto xx =  set<int>{980,990};
+	#define parprnn(...) out+=fmt::format(__VA_ARGS__)
+
 	int total = 0, pass = 0, total_fails = 0;
-	// #pragma omp parallel for
+	#pragma omp parallel for
 	for (int si = 0; si < lines.size(); si++) {
-		// if (xx.find(si) == xx.end()) continue;
-		// if (si != 269) continue;
-		eprnn("---- {} ---- ", si);
+		// if (si != 459) continue;
 
 		auto &ss = lines[si];
 
@@ -116,30 +200,36 @@ void check_wgac(string bed_path, string ref_path)
 		string cb = ss[3]; int sb = atoi(ss[4].c_str()), eb = atoi(ss[5].c_str());
 		bool rb = (ss[9][0] == '_');
 
+		// if (ref.find(ca) == ref.end()) ref[ca] = fr.getSubSequence(ca, 0, 300000000);
+		// if (ref.find(cb) == ref.end()) ref[cb] = fr.getSubSequence(cb, 0, 300000000);
+
 		auto refa = ref[ca].substr(sa - OFF, ea - sa);
 		auto refb = ref[cb].substr(sb - OFF, eb - sb);
-		if (rb) {
-			reverse(refb.begin(), refb.end());
-			transform(refb.begin(), refb.end(), refb.begin(), rev_dna);
-		}
+		if (rb) refb = rc(refb);
 
 		string out;
 		int i_pass = 0, i_total_fails = 0;
 
 		auto aln = alignment_t::from_cigar(refa, refb, ss[11]);
 		aln.chr_a = ca; aln.start_a = sa; aln.end_a = ea;
-		aln.chr_b = cb; aln.start_b = sb; aln.end_b = eb;
+		aln.chr_b = cb; 
+		if (!rb) aln.start_b = sb, aln.end_b   = eb;
+		else aln.start_b = -eb + 1, aln.end_b = -sb + 1;
 		auto alns = vector<alignment_t>{ aln };
 		for (auto &a: alns) {
 			auto err = a.calculate_error();
-			eprnn(
+			parprnn(
+				"{}\t"
 				"{}\t{}\t{}\t"  
 				"{}\t{}\t{}\t"
 				"{}\t{:.1f}\t+\t{}\t"
 				"{}\t{}\t"
-				"SUB:{};{}-{};{}-{}\n",
+				"SUB:{};{}-{};{}-{}\t",
+				si,
 				aln.chr_a, a.start_a, a.end_a,
-				a.chr_b, a.start_b, a.end_b, 
+				a.chr_b, 
+				a.start_b < 0 ? -a.end_b + 1 : a.start_b, 
+				a.end_b < 0 ? -a.start_b + 1 : a.end_b,
 				ss[6], err.error(), ss[9],
 				a.alignment.size(), "...",
 
@@ -154,16 +244,13 @@ void check_wgac(string bed_path, string ref_path)
 			string aa = a.a, ab = a.b;
 			if (aa.size() < ab.size()) {
 				aa += ref[ca].substr(a.end_a, ab.size() - aa.size());
-			}
-			if (aa.size() > ab.size()) {
+			} else if (aa.size() > ab.size()) {
 				if (!rb) {
 					ab += ref[cb].substr(a.end_b, aa.size() - ab.size());
 				} else {
 					int real_start = sb + (refb.size() - (a.end_b - a.start_b));
-					string rc = ref[cb].substr(real_start - (aa.size() - ab.size()), aa.size() - ab.size());
-					reverse(rc.begin(), rc.end());
-					transform(rc.begin(), rc.end(), rc.begin(), rev_dna);
-					ab += rc;
+					string r = ref[cb].substr(real_start - (aa.size() - ab.size()), aa.size() - ab.size());
+					ab += rc(r);
 				}
 			}
 			assert(aa.size() == ab.size());
@@ -193,44 +280,41 @@ void check_wgac(string bed_path, string ref_path)
 				// break;
 			}
 			if (success) {
-				eprnn("EXT/OK\n");
+				parprnn("EXT/OK\n");
 				i_pass++;
-				continue;
-			}
+			} else {
+				// eprnn("\n" + a.print());
 
-			// eprnn("\n" + a.print());
+				parprnn("\n  EXT/FAIL\n");
+				parprnn("{}", print_mappings(mappings, ca, cb, aa.size(), ab.size()));
 
-			eprnn("EXT/FAIL");
-			eprnn("{}", print_mappings(mappings, ca, cb, aa.size(), ab.size()));
-
-			// 2. Try full mappings without extension
-			mappings = search(OFF, ha, hb, tree, true, max(aa.size(), ab.size()));
-			for (auto &pp: mappings) { 
-				if (pp.reason.substr(0, 2) == "OK" 
-					&& overlap(pp.p, pp.q, OFF, OFF + aa.size()) >= MIN_ID
-					&& overlap(pp.i, pp.j, OFF, OFF + ab.size()) >= MIN_ID)
-				{
-					success = true;
-					break;
+				// 2. Try full mappings without extension
+				mappings = search(OFF, ha, hb, tree, true, max(aa.size(), ab.size()));
+				for (auto &pp: mappings) { 
+					if (pp.reason.substr(0, 2) == "OK" 
+						&& overlap(pp.p, pp.q, OFF, OFF + aa.size()) >= MIN_ID
+						&& overlap(pp.i, pp.j, OFF, OFF + ab.size()) >= MIN_ID)
+					{
+						success = true;
+						break;
+					}
+					if (success) break;
 				}
-				if (success) break;
+				if (success) {
+					parprnn("  FULL/OK\n");
+				} else {
+					parprnn("  FULL/FAIL\n");
+					parprnn(a.print(a.alignment.size()));
+					parprnn("{}", print_mappings(mappings, ca, cb, aa.size(), ab.size()));		
+				
+					i_total_fails++;	
+				}
 			}
-			if (success) {
-				eprnn("\nFULL/OK\n");
-				continue;
-			}
-			eprnn("\nFULL/FAIL");
-			//eprnn(a.print());
-			eprnn("{}", print_mappings(mappings, ca, cb, aa.size(), ab.size()));	
-			eprnn("\n");	
-			
-			i_total_fails++;	
 		}
-
 
 		#pragma omp critical
 		{
-			eprnn("{}", out);
+			if (i_pass == 0) prnn("{}", out);
 			total += alns.size();
 			total_fails += i_total_fails;
 			pass += i_pass;

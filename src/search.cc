@@ -9,6 +9,7 @@
 #include <string>
 #include <cmath>
 #include <queue>
+#include <chrono>
 
 #include "common.h"
 #include "filter.h"
@@ -25,7 +26,7 @@ using namespace std;
 
 /******************************************************************************/
 
-const int MAX_MATCH = 500 * 1000;   /// 50kb at most
+const int MAX_MATCH = 1000 * 1000;   /// 1MB at most
 const int RECOVER_BP = 1000;        /// We allow 250bp extra extend just in case!
 
 /******************************************************************************/
@@ -97,6 +98,8 @@ void extend(SlidingMap &winnow,
 {
 	static int CNT(0);
 	++CNT;
+
+	auto time = chrono::high_resolution_clock::now();
 
 	// eprn(">> {}: extend query:{}..{} vs ref:{}..{}", CNT, query_start, query_end, ref_start, ref_end);
 	
@@ -289,8 +292,8 @@ void extend(SlidingMap &winnow,
 		"OK"
 	});
 
-	// eprn(">> {}: extended to {}..{}; {}..{}", CNT, best_query_start, best_query_end, 
-	// 	best_ref_start, best_ref_end);
+	// eprn("Time: {}s", chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - time).count() / 1000.00);
+	// eprn(">> {}: extended to {}..{}; {}..{}", CNT, best_query_start, best_query_end, best_ref_start, best_ref_end);
 	
 	auto a = INTERVAL(query_start, best_query_end);
 	auto b = INTERVAL(ref_start, best_ref_end);
@@ -390,10 +393,9 @@ vector<Hit> search (int query_start,
 
 		// winnow is W(query) ; extend it to W(query) | W(ref) and mark elements in W(query) & W(ref)
 		int ref_winnow_end = ref_winnow_start;
-		for (; ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end; ref_winnow_end++) {
+		for (; ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end; ref_winnow_end++) 
 			winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-		}
-		winnow.rewind();
+		// winnow.rewind();
 
 		// eprn(">> extend needed_jaccard:{} jaccard:{} init_start:{} init_jaccard={}", 
 		//     tau * winnow_query.size(),
@@ -405,14 +407,10 @@ vector<Hit> search (int query_start,
 		int best_ref_start = ref_start, best_ref_end = ref_end;
 		int best_ref_winnow_start = ref_winnow_start, best_ref_winnow_end = ref_winnow_end;
 		while (ref_start < t.second && ref_end < ref_hash.seq.size()) {
-			if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1) {
-				winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start].first);
-				ref_winnow_start++;    
-			}
-			if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end + 1) {
-				winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-				ref_winnow_end++;
-			}
+			if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1)
+				winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start++].first);
+			if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second == ref_end)
+				winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end++].first);
 			int j;
 			if ((j = winnow.jaccard()) > best_jaccard) {
 				best_jaccard = j;

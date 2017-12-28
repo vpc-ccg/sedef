@@ -56,6 +56,8 @@ int main(int argc, char **argv)
 		parse(argc-1, argv+1);
 	} else if (command == "wgac") {
 		check_wgac(argv[2], argv[3]);
+	} else if (command == "wgac_aln") {
+		align_wgac(argv[2], argv[3]);
 	} else {
 		eprn("Whoops, invalid command!");
 	}

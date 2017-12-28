@@ -42,7 +42,7 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 
 	if (is_complement) {
 		eprn("Reversing reference...");
-		reverse(reference.begin(), reference.end());
+		reference = rc(reference);
 	}
 
 	// reference = reference.substr(0, 65000000);
