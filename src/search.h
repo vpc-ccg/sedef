@@ -39,5 +39,7 @@ vector<Hit> search (int query_start,
 	const Hash &query_hash, 
 	TREE_t &tree,
 	bool allow_overlaps = false,
-	int init_len = MIN_READ_SIZE);
+	int init_len = MIN_READ_SIZE,
+	bool allow_extend = true,
+	bool report_fails = false);
 

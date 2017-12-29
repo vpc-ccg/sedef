@@ -31,6 +31,12 @@ const int RECOVER_BP = 1000;        /// We allow 250bp extra extend just in case
 
 /******************************************************************************/
 
+#define eprn(f, ...)   // fmt::print(stderr, f "\n",  ##__VA_ARGS__)
+#define eprnn(...)     // fmt::print(stderr, __VA_ARGS__)
+
+
+/******************************************************************************/
+
 bool check_overlap(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pf_end, int pfp_pos, int pfp_end) 
 {
 	assert(pf_pos <= pf_end);
@@ -94,14 +100,12 @@ void extend(SlidingMap &winnow,
 	int ref_winnow_start, int ref_winnow_end,
 	vector<Hit> &hits,
 	bool allow_overlaps,
-	TREE_t &tree) 
+	TREE_t &tree,
+	bool report_fails) 
 {
-	static int CNT(0);
-	++CNT;
-
 	auto time = chrono::high_resolution_clock::now();
 
-	// eprn(">> {}: extend query:{}..{} vs ref:{}..{}", CNT, query_start, query_end, ref_start, ref_end);
+	eprn(">> extend query:{}..{} vs ref:{}..{}", query_start, query_end, ref_start, ref_end);
 	
 	assert(query_start < query_hash.seq.size());
 	assert(ref_start < ref_hash.seq.size());
@@ -109,27 +113,15 @@ void extend(SlidingMap &winnow,
 	assert(ref_end <= ref_hash.seq.size());
 	auto f = filter(query_hash.seq, query_start, query_end - query_start, ref_hash.seq, ref_start, ref_end - ref_start);
 	if (!f.first) {
-		hits.push_back({
+		if (report_fails) hits.push_back({
 			query_start, query_end, 
 			ref_start, ref_end, 
 			0,
 			f.second
 		});
-		// eprn(">> {}: failed first filter {}", CNT, f.second);
+		eprn(">> failed first filter {}", f.second);
 		return;
 	}
-
-	int j = winnow.jaccard();
-	auto best_winnow = winnow;
-	int best_query_end = query_end, // TODO is not inclusive!
-	    best_query_winnow_end = query_winnow_end,
-	    best_query_start = query_start,
-	    best_query_winnow_start = query_winnow_start,
-	    best_ref_end = ref_end,
-	    best_ref_winnow_end = ref_winnow_end,
-	    best_ref_start = ref_start,
-	    best_ref_winnow_start = ref_winnow_start,
-	    best_jaccard = j;
 
 	auto fn_qe = [&]() {
 		if (query_end >= query_hash.seq.size()) return 0;
@@ -214,8 +206,7 @@ void extend(SlidingMap &winnow,
 		make_pair(fn_rs, fn_u_rs)
 	};
 
-	const int STEP = 100;
-	for ( ; ; ) {
+	for (int i = 0, j = winnow.jaccard(); ;) {
 		int max_match = MAX_MATCH;
 		if (!allow_overlaps)
 			max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)));
@@ -223,80 +214,46 @@ void extend(SlidingMap &winnow,
 			break;
 		if (min(query_end - query_start, ref_end - ref_start) / (double)max(query_end - query_start, ref_end - ref_start) < (1 - 2 * MAX_GAP_ERROR))
 			break;
-
 		bool succeeded = false;
 		for (auto &fn: fns) {
-			// eprn("{} , {}--{}/{}--{}", CNT, query_start, query_end, ref_start, ref_end);
-			int i = fn.first();
-			if (i == 0) continue;
-			//for (i = 0; i < STEP; i++) {
-			//}
-			//if (i == 0) continue;
-			// we have "working" jacard
+			if ((i = fn.first()) == 0) 
+				continue;
 			if ((j = winnow.jaccard()) >= 0) {
-				// best_jaccard = j;
-				// best_query_start = query_start;
-				// best_query_winnow_start = query_winnow_start;
-				// best_query_end = query_end;
-				// best_query_winnow_end = query_winnow_end;
-				// best_ref_start = ref_start;
-				// best_ref_winnow_start = ref_winnow_start;
-				// best_ref_end = ref_end;
-				// best_ref_winnow_end = ref_winnow_end;
-				// best_winnow = winnow;
-
 				succeeded = true;
 				break;
 			} else {
 				fn.second(i); // undo
 			}
-			// else {
-			// 	query_start = best_query_start;
-			// 	query_winnow_start = best_query_winnow_start;
-			// 	query_end = best_query_end;
-			// 	query_winnow_end = best_query_winnow_end;
-
-			// 	ref_start = best_ref_start;
-			// 	ref_winnow_start = best_ref_winnow_start;
-			// 	ref_end = best_ref_end;
-			// 	ref_winnow_end = best_ref_winnow_end;
-
-			// 	winnow = best_winnow;
-			// }
 		}
 		if (!succeeded) break;
 	}
-
-	best_query_start = query_start;
-	best_query_end = query_end;
-	best_ref_start = ref_start;
-	best_ref_end = ref_end;
 				
-	f = filter(query_hash.seq, best_query_start, best_query_end - best_query_start, 
-		ref_hash.seq, best_ref_start, best_ref_end - best_ref_start);
+	eprn(">> extended to {}..{}; {}..{}", query_start, query_end, ref_start, ref_end);
+	eprn(">>     took {}s", chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - time).count() / 1000.00);
+
+	f = filter(query_hash.seq, query_start, query_end - query_start, ref_hash.seq, ref_start, ref_end - ref_start);
 	if (!f.first) {
-		hits.push_back({
-			best_query_start, best_query_end, 
-			best_ref_start, best_ref_end, 
-			best_jaccard,
+		if (report_fails) hits.push_back({
+			query_start, query_end, 
+			ref_start, ref_end, 
+			winnow.jaccard(),
 			f.second
 		});
-		// eprn(">> {}: failed second filter {}", CNT, f.second);
+		eprn(">> failed second filter {}", f.second);
 		return;
 	}
 	
 	hits.push_back({
-		best_query_start, best_query_end, 
-		best_ref_start, best_ref_end, 
-		best_jaccard,
+		query_start, query_end, 
+		ref_start, ref_end, 
+		winnow.jaccard(),
 		"OK"
 	});
 
-	// eprn("Time: {}s", chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - time).count() / 1000.00);
-	// eprn(">> {}: extended to {}..{}; {}..{}", CNT, best_query_start, best_query_end, best_ref_start, best_ref_end);
+	eprn(">> success!");
 	
-	auto a = INTERVAL(query_start, best_query_end);
-	auto b = INTERVAL(ref_start, best_ref_end);
+	auto a = INTERVAL(query_start, query_end);
+	auto b = INTERVAL(ref_start, ref_end);
 	tree += make_pair(a, SUBTREE_t({b, {make_pair(a, b)}}));
 }
 
@@ -307,7 +264,9 @@ vector<Hit> search (int query_start,
 					const Hash &query_hash, 
 					TREE_t &tree, 
 					bool allow_overlaps,
-					int init_len)
+					int init_len,
+					bool allow_extend,
+					bool report_fails)
 { 
 	if (query_start + init_len > query_hash.seq.size())
 		return vector<Hit>();
@@ -326,9 +285,7 @@ vector<Hit> search (int query_start,
 	for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= init_len; mi++) { 
 		auto &h = query_hash.minimizers[mi].first;
 		init_winnow.add_to_query(h);
-
-		if (h.first) // If it is N hash, ignore it
-			continue;
+		if (h.first) continue; // If it is N hash, ignore it
 		
 		auto ptr = ref_hash.index.find(h);
 		if (ptr == ref_hash.index.end() || ptr->second.size() >= ref_hash.threshold) 
@@ -337,21 +294,17 @@ vector<Hit> search (int query_start,
 			// Make sure to have at least 1 kb spacing if reference = query
 			if (!allow_overlaps && pos < query_start + init_len)
 				continue;
-			// if (!check_overlap(pf, query_start, pos)) {
-			//     continue;
-			// }
+			if (!check_overlap(tree, pf, query_start, query_start + init_len, pos, pos + init_len))
+			    continue;
 			candidates_prel.insert(pos);
 		}
 	}
-	if (!init_winnow.query_size) { // TODO min sketch size limit for Ns
+	if (!init_winnow.query_size)
 		return vector<Hit>();
-	}
-	int MO = ceil(init_winnow.query_size * tau());
-	int M  = relaxed_jaccard_estimate(init_winnow.query_size);
+	int M = relaxed_jaccard_estimate(init_winnow.query_size);
 
 	// eprn("==MO {} M {}", MO, M);
-	// int M = init_winnow.size() * tau();
-	
+	// int M = init_winnow.query_size() * tau();	
 	// for (auto e: candidates) eprn("{:n}", e);
 	// eprn(">> search: {} candidates to evaluate (M={}, init_winnow_query={}, tau={})", candidates_prel.size(), M, init_winnow.query_size, tau());
 
@@ -427,15 +380,14 @@ vector<Hit> search (int query_start,
 		}
 
 		if (best_jaccard < 0) {
-			hits.push_back({
+			if (report_fails) hits.push_back({
 				query_start, query_start + init_len, 
 				best_ref_start, best_ref_end, 
 				best_jaccard, 
 				fmt::format("jaccard: {} < {}", best_winnow.limit + best_jaccard, best_winnow.limit)
 			});
 			JACCARD_FAILED++;
-		} else if (init_len == MIN_READ_SIZE) {
-			auto pf = tree.find(query_start);
+		} else if (allow_extend) {
 			if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
 				INTERVAL_FAILED++;
 			} else {
@@ -443,12 +395,12 @@ vector<Hit> search (int query_start,
 				extend(best_winnow,
 					query_hash, query_start, query_start + init_len, st, mi,
 					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
-					hits, allow_overlaps, tree
+					hits, allow_overlaps, tree, report_fails
 				); 
 			}
 		} else {
 			auto f = filter(query_hash.seq, query_start, init_len, ref_hash.seq, best_ref_start, best_ref_end - best_ref_start);
-			hits.push_back({
+			if (f.first || report_fails) hits.push_back({
 				query_start, query_start + init_len, 
 				best_ref_start, best_ref_end, 
 				best_jaccard, 

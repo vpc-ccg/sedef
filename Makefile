@@ -28,8 +28,9 @@ profile: CFLAGS+=-g -pg -O2
 profile: LDFLAGS+=-pg
 profile: $(SOURCES) $(EXECUTABLE)
 
-gprofile: LDFLAGS+=-ltcmalloc -lprofiler
-gprofile: CFLAGS+=-g -O2
+gprofile: CXX=g++
+gprofile: LDFLAGS=-Wl,--no-as-needed,-lprofiler,--as-needed -ltcmalloc -lrt -lz -fopenmp
+gprofile: CFLAGS+=-g -O1
 gprofile: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS) 

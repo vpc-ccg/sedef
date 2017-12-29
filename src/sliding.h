@@ -16,7 +16,11 @@
 
 /******************************************************************************/
 
-struct SlidingMap: public std::map<std::pair<hash_t, int64_t>, char> {
+// struct _X {
+// 	int
+// };
+
+struct SlidingMap: public std::map<hash_t, char> {
 	typename SlidingMap::iterator boundary; // this is inclusive!
 	int query_size;
 	int intersection;
@@ -31,8 +35,8 @@ struct SlidingMap: public std::map<std::pair<hash_t, int64_t>, char> {
 	// when adding, if same hash is found: try to match earliest one if added by another set (i.e. try increase jaccard)
 	// when removing, if same hash is found: try to remove the latest one (try to preserve jaccard)
 
-	void add(const hash_t &h, int BIT, int FULL = 3);
-	void remove(const hash_t &h, int BIT, int FULL = 3);
+	bool add(const hash_t &h, int BIT, int FULL = 3);
+	bool remove(const hash_t &h, int BIT, int FULL = 3);
 
 	void add_to_query(const hash_t &h);
 	void remove_from_query(const hash_t &h);

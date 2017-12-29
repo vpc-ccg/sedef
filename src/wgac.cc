@@ -64,6 +64,8 @@ string print_mappings(vector<Hit> &mapping, const string &ca, const string &cb, 
 	return out;
 }
 
+/******************************************************************************/
+
 void align_wgac(string tab_path, string ref_path)
 {
 	eprnn("Loading reference... ");
@@ -265,7 +267,7 @@ void check_wgac(string bed_path, string ref_path)
 
 			// 1. Try normal Sedef mapping
 			for (int i = OFF; i < ha.seq.size(); i += 250) {
-				auto m = search(i, ha, hb, tree, true, MIN_READ_SIZE);
+				auto m = search(i, ha, hb, tree, true);
 				mappings.insert(mappings.end(), m.begin(), m.end());
 				for (auto &pp: m) { 
 					if (pp.reason.substr(0, 2) == "OK" 
@@ -289,7 +291,7 @@ void check_wgac(string bed_path, string ref_path)
 				parprnn("{}", print_mappings(mappings, ca, cb, aa.size(), ab.size()));
 
 				// 2. Try full mappings without extension
-				mappings = search(OFF, ha, hb, tree, true, max(aa.size(), ab.size()));
+				mappings = search(OFF, ha, hb, tree, true, max(aa.size(), ab.size()), false, true);
 				for (auto &pp: mappings) { 
 					if (pp.reason.substr(0, 2) == "OK" 
 						&& overlap(pp.p, pp.q, OFF, OFF + aa.size()) >= MIN_ID

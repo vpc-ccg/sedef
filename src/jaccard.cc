@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 
 #include "common.h"
 #include "search.h"
@@ -64,26 +65,26 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 	eprn("Allowing overlaps: {}", allow_overlaps);
 	eprn("Reverse complement: {}", is_complement);
 
-
 	TREE_t tree;
 
 	int total = 0;
 	for (int i = 0; i < query_hash->seq.size(); i += 250) {
-	// int W=51623132; for (int i = W; i < W+1; i += 250) {
+	// auto time=chrono::high_resolution_clock::now();
+	// int W=20317750; for (int i = W; i < W+1/*20365000+1000*/; i += 250) {
 		while (i < query_hash->seq.size() && query_hash->seq[i] == 'N') i++;
 		while (i < query_hash->seq.size() && i % 250 != 0) i++;
-		if (i % 5000 == 0) {
-			double perc = 100.0 * i / double(query_hash->seq.size());
-			eprnn("\r   {} {:.1f}% ({})", string(int(perc / 2) + 1, '-'), perc, i);
-		}
-		// prn("{}", i);
+		if (i % 5000 == 0) eprnn("\r   {} {:.1f}% ({})", 
+			string(int(pct(i, query_hash->seq.size()) / 2) + 1, '-'), 
+			pct(i, query_hash->seq.size()), i);
 
-		vector<Hit> mapping = search(i, ref_hash, *query_hash, tree, allow_overlaps);
-		for (auto &pp: mapping) {
-			// BEDPE
+		auto mapping = search(i, ref_hash, *query_hash, tree, allow_overlaps);
+		for (auto &pp: mapping)
 			prn("{}\n", print_mapping(pp, is_complement, query_chr, ref_chr, ref_hash.seq.size()));
-			total += 1;
-		}
+		total += mapping.size();
+
+		// eprn("--- {}s", 
+		// chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - time).count() / 1000.00);
+		// time = chrono::high_resolution_clock::now() ;
 	}
 
 	eprn("");
@@ -107,8 +108,8 @@ string print_mapping(Hit &pp, bool is_complement,
 		swap(pp.i, pp.j);
 	}
 	return fmt::format("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t+\t{}\t{:n}\t{}\t{}",
-		ref_chr, pp.i, pp.j,
 		query_chr, pp.p, pp.q, 
+		ref_chr, pp.i, pp.j,
 		// pp.id, 
 		is_complement ? "-" : "+",
 		// Optional fields
