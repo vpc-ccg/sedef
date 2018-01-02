@@ -87,7 +87,7 @@ inline char rev_dna(char c)
 }
 
 template<class X, class Y>
-inline bool in_map(const std::map<X, Y> &m, X k)
+inline bool in_map(const X &m, Y k)
 {
 	return m.find(k) != m.end();
 }

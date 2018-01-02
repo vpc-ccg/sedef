@@ -91,9 +91,6 @@ void align_wgac(string tab_path, string ref_path)
 		if (ss[0][3] == 'U' || ss[0].back() == 'm') continue;
 		if (ss[6][3] == 'U' || ss[6].back() == 'm') continue;
 
-		// align_both/0001/both009292
-		// if (ss[16] != "align_both/0001/both009292") continue;
-
 		if (seen.find(ss[16]) == seen.end()) {
 			seen.insert(ss[16]);
 			lines.push_back(ss);
@@ -161,10 +158,22 @@ void align_wgac(string tab_path, string ref_path)
 		#pragma omp critical
 		{
 			prnn("{}", out);
-			// eprn("{} / {}", si, lines.size());
 		}
-
 	}
+}
+
+string pax(const string &s)
+{
+	vector<int> lower(s.size()/1000+1, 0);
+	int lowtot = 0;
+	for (int i = 0; i < s.size(); i++) {
+		if (islower(s[i])) lower[i / 1000]++, lowtot++;
+	}
+
+	string r=fmt::format("{}/{}", lowtot, s.size());
+	for(int i = 0; i < lower.size();i++)
+		r+=fmt::format(" {}:{}", i, lower[i]);
+	return r;
 }
 
 void check_wgac(string bed_path, string ref_path) 
@@ -181,6 +190,9 @@ void check_wgac(string bed_path, string ref_path)
 		ss.erase(ss.begin());
 		if (ss[0][3] == 'U' || ss[0].back() == 'm') continue;
 		if (ss[3][3] == 'U' || ss[3].back() == 'm') continue;
+
+		if (ss[0] != "chr1" || ss[3] != "chr1") continue;
+
 		lines.push_back(ss);
 
 		if (ref.find(ss[0]) == ref.end()) ref[ss[0]] = fr.getSubSequence(ss[0], 0, 300000000);
@@ -221,13 +233,14 @@ void check_wgac(string bed_path, string ref_path)
 		for (auto &a: alns) {
 			auto err = a.calculate_error();
 			parprnn(
-				"{}\t"
+				"{}\t{}\t{}\t"
 				"{}\t{}\t{}\t"  
 				"{}\t{}\t{}\t"
 				"{}\t{:.1f}\t+\t{}\t"
 				"{}\t{}\t"
 				"SUB:{};{}-{};{}-{}\t",
 				si,
+				pax(refa), pax(refb),
 				aln.chr_a, a.start_a, a.end_a,
 				a.chr_b, 
 				a.start_b < 0 ? -a.end_b + 1 : a.start_b, 
@@ -316,7 +329,7 @@ void check_wgac(string bed_path, string ref_path)
 
 		#pragma omp critical
 		{
-			if (i_pass == 0) prnn("{}", out);
+			/*if (i_pass == 0)*/ prnn("{}", out);
 			total += alns.size();
 			total_fails += i_total_fails;
 			pass += i_pass;

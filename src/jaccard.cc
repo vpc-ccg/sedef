@@ -68,18 +68,22 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 	TREE_t tree;
 
 	int total = 0;
-	for (int i = 0; i < query_hash->seq.size(); i += 250) {
-	// auto time=chrono::high_resolution_clock::now();
-	// int W=20317750; for (int i = W; i < W+1/*20365000+1000*/; i += 250) {
-		while (i < query_hash->seq.size() && query_hash->seq[i] == 'N') i++;
-		while (i < query_hash->seq.size() && i % 250 != 0) i++;
-		if (i % 5000 == 0) eprnn("\r   {} {:.1f}% ({})", 
-			string(int(pct(i, query_hash->seq.size()) / 2) + 1, '-'), 
-			pct(i, query_hash->seq.size()), i);
+	int pxx = 0;
+	for (auto &qm: query_hash->minimizers) {
+		auto pos = qm.second;
+		if (qm.first.first) continue; // ignore N hashes
+		// if (pos >= 1000000) break;
+	
+		//while (i < query_hash->seq.size() && query_hash->seq[i] == 'N') i++;
+		//while (i < query_hash->seq.size() && i % 250 != 0) i++;
+		if (pos / 10000 != pxx) eprnn("\r   {} {:.1f}% (loci={:n} hits={:n})", 
+			string(int(pct(pos, query_hash->seq.size()) / 2) + 1, '-'), 
+			pct(pos, query_hash->seq.size()), pos, total), pxx = pos / 10000;
 
-		auto mapping = search(i, ref_hash, *query_hash, tree, allow_overlaps);
+		auto mapping = search(pos, ref_hash, *query_hash, tree, allow_overlaps);
 		for (auto &pp: mapping)
-			prn("{}\n", print_mapping(pp, is_complement, query_chr, ref_chr, ref_hash.seq.size()));
+			prn("{}", print_mapping(pp, is_complement, query_chr, ref_chr, ref_hash.seq.size()));
+		// prn("// {} ~ {} ended", qm.first, pos);
 		total += mapping.size();
 
 		// eprn("--- {}s", 
@@ -107,7 +111,9 @@ string print_mapping(Hit &pp, bool is_complement,
 		pp.j = ref_size - pp.j + 1;
 		swap(pp.i, pp.j);
 	}
-	return fmt::format("{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t+\t{}\t{:n}\t{}\t{}",
+	return fmt::format(
+		"{}\t{}\t{}\t{}\t{}\t{}\t\t+\t{}\t{}\t{}\t{}",
+		//"{}\t{:n}\t{:n}\t{}\t{:n}\t{:n}\t\t+\t{}\t{:n}\t{}\t{}",
 		query_chr, pp.p, pp.q, 
 		ref_chr, pp.i, pp.j,
 		// pp.id, 

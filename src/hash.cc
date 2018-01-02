@@ -15,12 +15,13 @@ using namespace std;
 
 ostream& operator<<(ostream& os, const hash_t& dt)
 {  
-	os << int(dt.first) << '.' << hex << dt.second;  
+	os << int(dt.first) << '.' << std::hex << (unsigned long long)dt.second;  
 	return os;  
 }  
 
 /******************************************************************************/
 
+// https://people.cs.uct.ac.za/~ksmith/articles/sliding_window_minimum.html
 vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const int window_size)
 {
 	vector<minimizer_t> minimizers;
@@ -29,6 +30,7 @@ vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const i
 	uint32_t h = 0;
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 	int last_n = - kmer_size - window_size;
+	// window here is defined as list of WINDOW_SIZE k-mer starting positions (i.e. last k-mer goes outside of the window)
 	for (int i = 0; i < s.size(); i++) {
 		if (s[i] == 'N') last_n = i;
 
@@ -36,12 +38,11 @@ vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const i
 		h &= MASK;
 		if (i < kmer_size) continue;
 
-		hash_t hh = make_pair(bool(last_n >= (i - kmer_size + 1) - window_size), h);   
+		hash_t hh = make_pair(bool(last_n >= (i - kmer_size + 1)), h);   
 		while (!window.empty() && (window.back().first >= hh))
 			window.pop_back();
-		while (!window.empty() && window.back().second <= (i - kmer_size + 1) - window_size)
+		while (!window.empty() && window.back().second < (i - kmer_size + 1) - window_size)
 			window.pop_front();
-		// Do not add minimizers with N
 		window.push_back(make_pair(hh, i - kmer_size + 1));
 
 		if (i - kmer_size + 1 < window_size) continue;

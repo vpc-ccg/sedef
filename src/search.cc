@@ -68,6 +68,12 @@ bool check_overlap(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pf_
 	return true;
 }
 
+bool is_in_tree(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pfp_pos) 
+{
+	SUBTREE_t::const_iterator pfp;
+	return (pf != tree.end() && (pfp = pf->second.find(pfp_pos)) != pf->second.end());
+}
+
 auto parse_hits(vector<Hit> &hits)
 {
 	// COUNT SQUEEZED!
@@ -249,6 +255,9 @@ void extend(SlidingMap &winnow,
 		winnow.jaccard(),
 		"OK"
 	});
+	// add_overlaps(query_hash, query_start, query_end, 
+		// ref_hash, ref_start, ref_end);
+
 
 	eprn(">> success!");
 	
@@ -268,20 +277,27 @@ vector<Hit> search (int query_start,
 					bool allow_extend,
 					bool report_fails)
 { 
+	// TREE gives overlaps
+	//  query vs ref
+
 	if (query_start + init_len > query_hash.seq.size())
 		return vector<Hit>();
 
+	// if (memorized.size()) {
+	// for (auto &me: memorized) {
+	// 	prnn("{}-{} ", me.first, me.second);
+	// } prn("");
+	// }
+
+	// CAN BE OPTIMIZED
 	int st = query_hash.find_minimizers(query_start);
 	if (st == query_hash.minimizers.size()) 
 		return vector<Hit>();
 	int mi = st;
 	
-	auto pf = tree.find(query_start);
-
-	// Iterate through all unique hashes in query[query_start: query_start + init_len]
-	// `candidates` is a list of positions in the reference which match the query hashes
 	SlidingMap init_winnow;
 	set<int> candidates_prel;
+	auto pf = tree.find(query_start);
 	for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= init_len; mi++) { 
 		auto &h = query_hash.minimizers[mi].first;
 		init_winnow.add_to_query(h);
@@ -294,23 +310,17 @@ vector<Hit> search (int query_start,
 			// Make sure to have at least 1 kb spacing if reference = query
 			if (!allow_overlaps && pos < query_start + init_len)
 				continue;
-			if (!check_overlap(tree, pf, query_start, query_start + init_len, pos, pos + init_len))
-			    continue;
-			candidates_prel.insert(pos);
+			// if (!allow_overlaps && query_hash.minimizers[mi].second >= pos)
+				// continue;
+			if (!is_in_tree(tree, pf, query_hash.minimizers[mi].second, pos))
+				candidates_prel.insert(pos);
+			// if (!in_map(memorized, make_pair(query_hash.minimizers[mi].second, pos)))
 		}
 	}
 	if (!init_winnow.query_size)
 		return vector<Hit>();
 	int M = relaxed_jaccard_estimate(init_winnow.query_size);
 
-	// eprn("==MO {} M {}", MO, M);
-	// int M = init_winnow.query_size() * tau();	
-	// for (auto e: candidates) eprn("{:n}", e);
-	// eprn(">> search: {} candidates to evaluate (M={}, init_winnow_query={}, tau={})", candidates_prel.size(), M, init_winnow.query_size, tau());
-
-	// Find all locations in the `candidates` so that
-	// init_len read covers at least M (= s * tau) hashes
-	//sort(candidates.begin(), candidates.end());
 	vector<int> candidates(candidates_prel.begin(), candidates_prel.end());
 	vector<pair<int, int>> T;
 	for (int i = 0; i <= (int)candidates.size() - M; i++) {
@@ -388,16 +398,17 @@ vector<Hit> search (int query_start,
 			});
 			JACCARD_FAILED++;
 		} else if (allow_extend) {
-			if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
-				INTERVAL_FAILED++;
-			} else {
+			// if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
+			// 	INTERVAL_FAILED++;
+			// } else {
 				// eprn("init jacc === {}", best_jaccard);
 				extend(best_winnow,
 					query_hash, query_start, query_start + init_len, st, mi,
 					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
 					hits, allow_overlaps, tree, report_fails
-				); 
-			}
+				);
+				// pf = tree.find(query_start);
+			// }
 		} else {
 			auto f = filter(query_hash.seq, query_start, init_len, ref_hash.seq, best_ref_start, best_ref_end - best_ref_start);
 			if (f.first || report_fails) hits.push_back({
@@ -413,3 +424,29 @@ vector<Hit> search (int query_start,
 	return parse_hits(hits);
 }
 
+// void test(const int LIMIT)
+// {
+// 	vector<pair<int, hash_t>> hashes;
+// 	hashes.reserve(query_hash.size());
+// 	for (auto &qh: query_hash.index) {
+// 		auto &h = qh.first;
+// 		auto rh = ref_hash.index.find(h);
+// 		if (rh == ref_hash.end()) continue;
+// 		int w = qh.second.size();
+// 		// if (LIMIT) { w = 0; for (auto &l: qh.second) if (i < 50000) w++; else break; }
+// 		if (w) hashes.push_back({rh->second.size() * w, h});
+// 	}
+// 	sort(hashes.begin(), hashes.end());
+
+// 	for (auto &ih: hashes)
+// 	{
+// 		auto &h = ih.second;
+
+// 		for (auto query_start: query_hash.index[h]) {
+// 			for (auto ref_start: ref_hash.index[h]) {
+
+// 			}
+// 			if (query_start > LIMIT) break;
+// 		}
+// 	}
+// }
