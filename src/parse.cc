@@ -38,7 +38,7 @@ string seq(FastaReference &fr, loc_t l)
 		// a-=1;
 		// b-=1;
 	}
-    string s = fr.getSubSequence(get<0>(l), a, b-a);
+    string s = fr.get_sequence(get<0>(l), a, b);
     if (rc) {
         reverse(s.begin(), s.end());
         for (auto &c: s) c = qrev_dna[c];

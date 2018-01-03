@@ -1,4 +1,6 @@
 /// 786
+/// Adapted from SCALCE source code 
+/// https://github.com/sfu-compbio/scalce
 
 /******************************************************************************/
 
@@ -26,7 +28,7 @@ void AHOAutomata::Trie::insert_pattern (const string &s, int level, int id)
 	if (level < s.size()) {
 		char cx = hash_dna(s[level]);
 		if (child[cx] == nullptr) {
-			child[cx] = make_unique<Trie>();
+			child[cx] = make_shared<Trie>();
 		}
 		child[cx]->insert_pattern(s, level + 1, id); 
 	} else {
@@ -78,8 +80,9 @@ AHOAutomata::AHOAutomata():
 			pos += sz;
 			
 			patterns.push_back("");
-			for(int j = ln - 1; j >= 0; j--)
+			for (int j = ln - 1; j >= 0; j--) {
 				patterns.back() += "ACGT"[(x >> (2 * j)) & 3];
+			}
 
 			// prn("{}", patterns.back());
 
@@ -99,11 +102,12 @@ void AHOAutomata::initialize_automata()
 	queue<Trie*> q;
 	trie->fail = trie.get();
 
-	for (int i = 0; i < 4; i++) 
+	for (int i = 0; i < 4; i++) {
 		if (trie->child[i] != nullptr) {
 			trie->child[i]->fail = trie.get();
 			q.push(trie->child[i].get());
 		}
+	}
 
 	while (!q.empty()) {
 		auto cur = q.front(); q.pop();
@@ -111,8 +115,9 @@ void AHOAutomata::initialize_automata()
 			auto t = cur->child[i].get();
 			if (t != nullptr) {
 				auto f = cur->fail;
-				while (f != trie.get() && f->child[i] == nullptr)
+				while (f != trie.get() && f->child[i] == nullptr) {
 					f = f->fail;
+				}
 				t->fail = (f->child[i] != nullptr ? f->child[i].get() : trie.get());
 				q.push(t);
 				t->next_to_output = (t->fail->output >= 0) ? t->fail : t->fail->next_to_output;
@@ -125,15 +130,18 @@ void AHOAutomata::initialize_automata()
 	while (!q.empty()) {
 		auto cur = q.front(); q.pop();
 		for (int i = 0; i < 4; i++) {
-			if (cur->child[i] != nullptr) 
+			if (cur->child[i] != nullptr) {
 				q.push(cur->child[i].get());
+			}
 			auto tmp = cur;
-			while (tmp != trie.get() && tmp->child[i] == nullptr) 
+			while (tmp != trie.get() && tmp->child[i] == nullptr) {
 				tmp = tmp->fail;
+			}
 			cur->child[i] = (tmp->child[i] != nullptr ? tmp->child[i] : trie);
 			tmp = cur;
-			while (tmp != nullptr && tmp->output == -1)
+			while (tmp != nullptr && tmp->output == -1) {
 				tmp = tmp->next_to_output;
+			}
 			cur->next_to_output = tmp;
 		}
 	}
@@ -141,12 +149,14 @@ void AHOAutomata::initialize_automata()
 
 void AHOAutomata::search (const char *text, int len, map<int, int> &hits, int flag) //const
 {
-	auto cur = trie.get();
+	auto cur = trie;
 	for (int i = 0; i < len; i++) {
-		cur = cur->child[hash_dna(text[i])].get();
-		if (cur == nullptr) 
-			cur = trie.get();
-		if (cur->next_to_output != nullptr) 
+		cur = cur->child[hash_dna(text[i])];
+		if (cur == nullptr) {
+			cur = trie;
+		}
+		if (cur->next_to_output != nullptr) {
 			hits[cur->next_to_output->output] |= flag;
+		}
 	}
 }

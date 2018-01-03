@@ -195,8 +195,8 @@ void check_wgac(string bed_path, string ref_path)
 
 		lines.push_back(ss);
 
-		if (ref.find(ss[0]) == ref.end()) ref[ss[0]] = fr.getSubSequence(ss[0], 0, 300000000);
-		if (ref.find(ss[3]) == ref.end()) ref[ss[3]] = fr.getSubSequence(ss[3], 0, 300000000);
+		if (ref.find(ss[0]) == ref.end()) ref[ss[0]] = fr.get_sequence(ss[0]);
+		if (ref.find(ss[3]) == ref.end()) ref[ss[3]] = fr.get_sequence(ss[3]);
 	}
 	eprn("IN: {} lines", lines.size());
 	
@@ -214,8 +214,8 @@ void check_wgac(string bed_path, string ref_path)
 		string cb = ss[3]; int sb = atoi(ss[4].c_str()), eb = atoi(ss[5].c_str());
 		bool rb = (ss[9][0] == '_');
 
-		// if (ref.find(ca) == ref.end()) ref[ca] = fr.getSubSequence(ca, 0, 300000000);
-		// if (ref.find(cb) == ref.end()) ref[cb] = fr.getSubSequence(cb, 0, 300000000);
+		// if (ref.find(ca) == ref.end()) ref[ca] = fr.get_sequence(ca);
+		// if (ref.find(cb) == ref.end()) ref[cb] = fr.get_sequence(cb);
 
 		auto refa = ref[ca].substr(sa - OFF, ea - sa);
 		auto refb = ref[cb].substr(sb - OFF, eb - sb);

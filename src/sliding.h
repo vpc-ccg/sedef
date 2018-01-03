@@ -30,7 +30,6 @@ struct SlidingMap: public std::map<hash_t, char> {
 	SlidingMap();
 
 	int jaccard();
-	void rewind();
 
 	// when adding, if same hash is found: try to match earliest one if added by another set (i.e. try increase jaccard)
 	// when removing, if same hash is found: try to remove the latest one (try to preserve jaccard)

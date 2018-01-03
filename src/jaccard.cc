@@ -26,69 +26,58 @@ extern int64_t INTERVAL_FAILED;
 
 /******************************************************************************/
 
-void jaccard_search(string ref_path, string query_path, bool is_complement)
+pair<string, string> read_fasta(string ref_path, bool complement=false)
 {
-	string line, reference, query;
+	string line, reference, chr;
 
-	ifstream fin;
-
-	fin.open(ref_path.c_str());
-	string ref_chr;
+	ifstream fin(ref_path);
 	while (getline(fin, line)) {
-		if (line[0] != '>') reference += line;
-		else ref_chr = line.substr(1);
+		if (line[0] != '>') {
+			reference += line;
+		} else{
+			chr = line.substr(1);
+		}
 	}
 	fin.close();
-	fin.clear();
 
-	if (is_complement) {
-		eprn("Reversing reference...");
-		reference = rc(reference);
-	}
+	return make_pair(chr, complement ? rc(reference) : reference);
+}
 
-	// reference = reference.substr(0, 65000000);
-	Hash ref_hash = Hash(reference);
-
-	string query_chr = ref_chr;
+void jaccard_search(string ref_path, string query_path, bool is_complement)
+{
+	auto reference = read_fasta(ref_path, is_complement);
+	Hash ref_hash(reference.second);
+	pair<string, string> query(reference.first, "");
 	Hash *query_hash = &ref_hash; 
-	if (query_path != ref_path || is_complement) {
-		fin.open(query_path.c_str());
-		while (getline(fin, line)) {
-			if (line[0] != '>') query += line;
-			else query_chr = line.substr(1);
-		}
-		fin.close();
-		query_hash = new Hash(query);
-	}
 
 	bool allow_overlaps = (ref_path != query_path) || is_complement;
+	if (allow_overlaps) {
+		query = read_fasta(query_path);
+		query_hash = new Hash(query.second);
+	}
+
 	eprn("Allowing overlaps: {}", allow_overlaps);
 	eprn("Reverse complement: {}", is_complement);
 
 	TREE_t tree;
-
-	int total = 0;
-	int pxx = 0;
+	int total = 0, track = 0;
 	for (auto &qm: query_hash->minimizers) {
 		auto pos = qm.second;
-		if (qm.first.first) continue; // ignore N hashes
-		// if (pos >= 1000000) break;
-	
-		//while (i < query_hash->seq.size() && query_hash->seq[i] == 'N') i++;
-		//while (i < query_hash->seq.size() && i % 250 != 0) i++;
-		if (pos / 10000 != pxx) eprnn("\r   {} {:.1f}% (loci={:n} hits={:n})", 
-			string(int(pct(pos, query_hash->seq.size()) / 2) + 1, '-'), 
-			pct(pos, query_hash->seq.size()), pos, total), pxx = pos / 10000;
+		if (qm.first.first) continue; // ignore N or lowercase hashes
+
+		if (pos / 10000 != track) {
+			eprnn("\r   {} {:.1f}% (loci={:n} hits={:n})", 
+				string(int(pct(pos, query_hash->seq.size()) / 2) + 1, '-'), 
+				pct(pos, query_hash->seq.size()), pos, total
+			);
+			track = pos / 10000;
+		}
 
 		auto mapping = search(pos, ref_hash, *query_hash, tree, allow_overlaps);
-		for (auto &pp: mapping)
-			prn("{}", print_mapping(pp, is_complement, query_chr, ref_chr, ref_hash.seq.size()));
-		// prn("// {} ~ {} ended", qm.first, pos);
+		for (auto &pp: mapping) {
+			prn("{}", print_mapping(pp, is_complement, query.first, reference.first, ref_hash.seq.size()));
+		}
 		total += mapping.size();
-
-		// eprn("--- {}s", 
-		// chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - time).count() / 1000.00);
-		// time = chrono::high_resolution_clock::now() ;
 	}
 
 	eprn("");
@@ -101,6 +90,10 @@ void jaccard_search(string ref_path, string query_path, bool is_complement)
 		 "       lowercase         {:10n}", 
 		 TOTAL_ATTEMPTED, JACCARD_FAILED, INTERVAL_FAILED, 
 		 CORE_FAILED, QGRAM_NORMAL_FAILED, OTHER_FAILED);
+
+	if (query_hash != &ref_hash) {
+		delete query_hash;
+	}
 }
 
 string print_mapping(Hit &pp, bool is_complement, 

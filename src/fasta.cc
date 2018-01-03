@@ -1,5 +1,6 @@
 /// 786
-/// Taken from Bedtools source code 
+/// Adapted from Bedtools source code 
+/// https://github.com/arq5x/bedtools/tree/master/src/fastaFromBed
 
 /******************************************************************************/
 
@@ -66,9 +67,9 @@ FastaIndexEntry FastaIndex::entry(const string &name)
 FastaReference::FastaReference(string filename) 
 {
 	if (!(file = fopen(filename.c_str(), "r"))) {
-		cerr << "could not open " << filename << endl;
-		assert(false);
+		throw fmt::format("Cannot open file {}", filename);
 	}
+
 	struct stat stFileInfo; 
 	string indexFileName = filename + ".fai"; 
 	// if we can find an index file, use it
@@ -78,14 +79,15 @@ FastaReference::FastaReference(string filename)
 		stat(indexFileName.c_str(), &index_attrib);
 		stat(filename.c_str(), &fasta_attrib);
 		if (fasta_attrib.st_mtime > index_attrib.st_mtime) {
-			cerr << "Warning: the index file is older than the FASTA file." << endl;
+			eprn("Warning: the index file is older than the FASTA file");
 		}
 		index = FastaIndex(indexFileName);
 	} 
 	int fd = fileno(file);
 	struct stat sb;
-	if (fstat(fd, &sb) == -1)
-		cerr << "could not stat file" << filename << endl;
+	if (fstat(fd, &sb) == -1) {
+		throw fmt::format("Cannot stat file {}", filename);
+	}
 	filesize = sb.st_size;
 	// map the whole file
 	filemm = mmap(NULL, filesize, PROT_READ, MAP_SHARED, fd, 0);
@@ -97,21 +99,22 @@ FastaReference::~FastaReference(void)
 	munmap(filemm, filesize);
 }
 
-string FastaReference::getSubSequence(string seqname, int start, int length) 
+string FastaReference::get_sequence(string seqname, int start, int end) 
 {
 	FastaIndexEntry entry = index.entry(seqname);
 	
-	if (start < 0 || length < 1) {
-		cerr << "Error: cannot construct subsequence with negative offset or length < 1" << endl;
-		assert(false);
+	if (start < 0) {
+		start = 0;
 	}
+	if (end < 0 || end > entry.length) {
+		end = entry.length;
+	}
+	int length = end - start;
+
 	// we have to handle newlines
 	// approach: count newlines before start
 	//           count newlines by end of read
 	//             subtracting newlines before start find count of embedded newlines
-	if (start + length > entry.length) {
-		length = entry.length - start;
-	}
 	int newlines_before = start > 0 ? (start - 1) / entry.line_blen : 0;
 	int newlines_by_end = (start + length - 1) / entry.line_blen;
 	int newlines_inside = newlines_by_end - newlines_before;
@@ -121,11 +124,11 @@ string FastaReference::getSubSequence(string seqname, int start, int length)
 	memcpy(seq, (char*) filemm + entry.offset + newlines_before + start, seqlen);
 	seq[seqlen] = '\0';
 	char* pbegin = seq;
-	char* pend = seq + (seqlen/sizeof(char));
+	char* pend = seq + (seqlen / sizeof(char));
 	pend = remove(pbegin, pend, '\n');
 	pend = remove(pbegin, pend, '\0');
 	string s = seq;
 	free(seq);
-	s.resize((pend - pbegin)/sizeof(char));
+	s.resize((pend - pbegin) / sizeof(char));
 	return s;
 }

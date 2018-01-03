@@ -41,20 +41,27 @@ alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int
 			gapo, gape, 
 			-1, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
 			0, &ez);
-		for (int i = 0; i < ez.n_cigar; ++i) 
-			cigar.push_back(make_pair("MID"[ez.cigar[i]&0xf], ez.cigar[i]>>4));
+		for (int i = 0; i < ez.n_cigar; i++) {
+			cigar.push_back({"MID"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
+		}
 		free(ez.cigar);
 	}
-	return alignment_t{ "A", 0, (int)qseq.size(), "B", 0, (int)tseq.size(), qseq, tseq, "", "", "", cigar };
+	return alignment_t{ 
+		"A", 0, (int)qseq.size(), 
+		"B", 0, (int)tseq.size(), 
+		qseq, tseq, "", "", "", cigar 
+	};
 }
 
-alignment_t align(string fa, string fb, int match, int mismatch, int gap_open, int gap_extend)
+alignment_t align(const string &fa, const string &fb, int match, int mismatch, int gap_open, int gap_extend)
 {
 	string xa = fa, xb = fb;
-	for (auto &c: fa) c = align_dna(c);
-	for (auto &c: fb) c = align_dna(c);
+
+	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
+	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
+
 	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend);
-	a.a = xa, a.b = xb;
+	a.a = fa, a.b = fb;
 	a.populate_nice_alignment();
 	return a;
 }
@@ -65,36 +72,30 @@ void align_ref(FastaReference &fr, int line, const string &s, chrono::time_point
 {
 	vector<string> ss = split(s, '\t');
 
-	char ca[500]; int sa, ea;
-	char cb[500]; int sb, eb;
-	char sta[10], stb[10];
-	sscanf(s.c_str(), "%s %d %d %s %d %d %*s %s %s", ca, &sa, &ea, cb, &sb, &eb, sta, stb);
+	string ca = ss[0];
+	int sa = atoi(ss[1].c_str()), ea = atoi(ss[2].c_str());
+	string cb = ss[3];
+	int sb = atoi(ss[4].c_str()), eb = atoi(ss[5].c_str());
 
-	// sta[0] = '+';
-	// sscanf(s.c_str(), "%s %d %d %*s %*s %s %s %d %d", ca, &sa, &ea, stb,  cb, &sb, &eb);
-	// stb[0] = stb[0] == '_' ? '-' : '+';
- 
-	assert(sta[0] == '+');
-	bool rc = (stb[0] == '-');
+	char sta = ss[7][0], stb = ss[8][0];
 
-	string fa = fr.getSubSequence(ca, sa, ea - sa);
-	string fb = fr.getSubSequence(cb, sb, eb - sb);
-	if (rc) {
-		reverse(fb.begin(), fb.end());
-		transform(fb.begin(), fb.end(), fb.begin(), rev_dna);
-	}
+	assert(sta == '+');
+	bool is_rc = (stb != '+');
+
+	string fa = fr.get_sequence(ca, sa, ea);
+	string fb = fr.get_sequence(cb, sb, eb);
+	if (is_rc) fb = rc(fb);
 
 	auto aln = align(fa, fb);
 
-	eprn("\t{}s\t{}", 
-		chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - t_start).count() / 1000.00, 
-		line);
-	cout << s << "\t" << aln.cigar_string() << "\t" << fa << "\t" << fb << endl;
+	eprn("\t{}s\t{}", elapsed(t_start), line);
+	prn("{}\t{}\t{}\t{}", s, aln.cigar_string(), fa, fb);
+	fflush(stdout);
 }
 
-void align_main(string ref_path, string bed_path, int resume_after) 
+void align_main(const string &ref_path, const string &bed_path, int resume_after) 
 {
-	auto start = chrono::high_resolution_clock::now();
+	auto start = cur_time();
 	
 	FastaReference fr(ref_path);
 	ifstream fin(bed_path.c_str());
@@ -102,7 +103,9 @@ void align_main(string ref_path, string bed_path, int resume_after)
 	int nl = 0;
 	string s;
 	while (getline(fin, s)) {
-		if (nl > resume_after) align_ref(fr, nl, s, start);
+		if (nl > resume_after) {
+			align_ref(fr, nl, s, start);
+		}
 		nl++;
 	}
 
@@ -132,7 +135,9 @@ alignment_t alignment_t::from_cigar(const string &a, const string &b, const stri
 string alignment_t::cigar_string()
 {
 	string res;
-	for (auto &p: cigar) res += fmt::format("{}{}", p.second, p.first);
+	for (auto &p: cigar) {
+		res += fmt::format("{}{}", p.second, p.first);
+	}
 	return res;
 }
 
@@ -144,27 +149,21 @@ alignment_t alignment_t::trim()
 			result.a = result.a.substr(result.cigar[0].second);
 			result.start_a += result.cigar[0].second;
 			result.cigar.pop_front();
-			continue;
-		}
-		if (result.cigar[0].first == 'I') {
+		} else if (result.cigar[0].first == 'I') {
 			result.b = result.b.substr(result.cigar[0].second);
 			result.start_b += result.cigar[0].second;
 			result.cigar.pop_front();
-			continue;
-		}
-		if (result.cigar.back().first == 'D') {
+		} else if (result.cigar.back().first == 'D') {
 			result.end_a -= result.cigar.back().second;
 			result.a = result.a.substr(0, result.a.size() - result.cigar.back().second);
 			result.cigar.pop_back();
-			continue;
-		}
-		if (result.cigar.back().first == 'I') {
+		} else if (result.cigar.back().first == 'I') {
 			result.end_b -= result.cigar.back().second;
 			result.b = result.b.substr(0, result.b.size() - result.cigar.back().second);
 			result.cigar.pop_back();
-			continue;
+		} else {
+			break;
 		}
-		break;
 	}
 
 	result.populate_nice_alignment();
@@ -216,7 +215,9 @@ alignment_t::aln_error_t alignment_t::calculate_error()
 
 string alignment_t::print(int width)
 {
-	if (!alignment.size()) populate_nice_alignment();
+	if (!alignment.size()) {
+		populate_nice_alignment();
+	}
 
 	string res;
 	int qa = start_a, sa = 0;
@@ -241,16 +242,19 @@ string alignment_t::print(int width)
 			qb, align_b.substr(i, width), sb);
 		for (auto c: align_a.substr(i, width)) if (c != '-') qa++, sa++;
 		for (auto c: align_b.substr(i, width)) if (c != '-') qb++, sb++;
-		// res += "\n";
 	}
 	return res;
 }
 
 string alignment_t::print_only_alignment(int width)
 {
-	if (!alignment.size()) populate_nice_alignment();
+	if (!alignment.size()) {
+		populate_nice_alignment();
+	}
 
-	if (width == -1) width = alignment.size();
+	if (width == -1) { 
+		width = alignment.size();
+	}
 	string res;
 	for (int i = 0; i < alignment.size(); i += width) {
 		res += fmt::format(

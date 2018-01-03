@@ -1,5 +1,6 @@
 /// 786
-/// Taken from Bedtools source code 
+/// Adapted from Bedtools source code 
+/// https://github.com/arq5x/bedtools/tree/master/src/fastaFromBed
 
 /******************************************************************************/
 
@@ -49,5 +50,5 @@ struct FastaReference {
 	
 	FastaReference(string filename);
 	~FastaReference();
-	string getSubSequence(string seqname, int start, int length);
+	string get_sequence(string seqname, int start = 0, int end = -1);
 };

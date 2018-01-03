@@ -27,13 +27,11 @@ using namespace std;
 /******************************************************************************/
 
 const int MAX_MATCH = 1000 * 1000;   /// 1MB at most
-const int RECOVER_BP = 1000;        /// We allow 250bp extra extend just in case!
 
 /******************************************************************************/
 
 #define eprn(f, ...)   // fmt::print(stderr, f "\n",  ##__VA_ARGS__)
 #define eprnn(...)     // fmt::print(stderr, __VA_ARGS__)
-
 
 /******************************************************************************/
 
@@ -76,14 +74,8 @@ bool is_in_tree(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pfp_po
 
 auto parse_hits(vector<Hit> &hits)
 {
-	// COUNT SQUEEZED!
 	vector<Hit> hits_real;
-	// sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
-	//     // if (a.q != b.q) return a.q > b.q; // .query_start are all equal
-	//     return make_pair(a.i, -a.j) < make_pair(b.i, -b.j);   // larger intervals at the top! then by other ints
-	// });
-	for (auto &h: hits) { // brute force, but maybe easier than doing full interval thing
-		// eprn("{:>9} {:>9} --- {:>9} {:>9}", h.p, h.q, h.i, h.j);
+	for (auto &h: hits) { // TODO fix brute force
 		bool add = true;
 		for (auto &ph: hits) if ((&h - &hits[0]) != (&ph - &hits[0])) {
 			if (h.i >= ph.i && h.j <= ph.j && h.p >= ph.p && h.q <= ph.q) { // if full match
@@ -93,7 +85,6 @@ auto parse_hits(vector<Hit> &hits)
 		}
 		if (add) hits_real.push_back(h);
 	}
-	//reverse(hits_real.begin(), hits_real.end()); // smaller to larger
 	return hits_real;
 }
 
@@ -109,14 +100,13 @@ void extend(SlidingMap &winnow,
 	TREE_t &tree,
 	bool report_fails) 
 {
-	auto time = chrono::high_resolution_clock::now();
-
 	eprn(">> extend query:{}..{} vs ref:{}..{}", query_start, query_end, ref_start, ref_end);
 	
 	assert(query_start < query_hash.seq.size());
 	assert(ref_start < ref_hash.seq.size());
 	assert(query_end <= query_hash.seq.size());
 	assert(ref_end <= ref_hash.seq.size());
+
 	auto f = filter(query_hash.seq, query_start, query_end - query_start, ref_hash.seq, ref_start, ref_end - ref_start);
 	if (!f.first) {
 		if (report_fails) hits.push_back({
@@ -212,14 +202,20 @@ void extend(SlidingMap &winnow,
 		make_pair(fn_rs, fn_u_rs)
 	};
 
+	// TODO: speed up by moving directly to next winnow
+
 	for (int i = 0, j = winnow.jaccard(); ;) {
 		int max_match = MAX_MATCH;
-		if (!allow_overlaps)
+		if (!allow_overlaps) {
 			max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)));
-		if (max(query_end - query_start, ref_end - ref_start) > max_match)
+		}
+		if (max(query_end - query_start, ref_end - ref_start) > max_match) {
 			break;
-		if (min(query_end - query_start, ref_end - ref_start) / (double)max(query_end - query_start, ref_end - ref_start) < (1 - 2 * MAX_GAP_ERROR))
+		}
+		if (min(query_end - query_start, ref_end - ref_start) / (double)max(query_end - query_start, ref_end - ref_start) < (1 - 2 * MAX_GAP_ERROR)) {
 			break;
+		}
+
 		bool succeeded = false;
 		for (auto &fn: fns) {
 			if ((i = fn.first()) == 0) 
@@ -255,9 +251,6 @@ void extend(SlidingMap &winnow,
 		winnow.jaccard(),
 		"OK"
 	});
-	// add_overlaps(query_hash, query_start, query_end, 
-		// ref_hash, ref_start, ref_end);
-
 
 	eprn(">> success!");
 	
@@ -301,20 +294,19 @@ vector<Hit> search (int query_start,
 	for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= init_len; mi++) { 
 		auto &h = query_hash.minimizers[mi].first;
 		init_winnow.add_to_query(h);
-		if (h.first) continue; // If it is N hash, ignore it
+		if (h.first != 0) // use only hashes with uppercase character!
+			continue; 
 		
 		auto ptr = ref_hash.index.find(h);
-		if (ptr == ref_hash.index.end() || ptr->second.size() >= ref_hash.threshold) 
+		if (ptr == ref_hash.index.end() || ptr->second.size() >= ref_hash.threshold) {
 			continue;
-		for (auto &pos: ptr->second) {
-			// Make sure to have at least 1 kb spacing if reference = query
-			if (!allow_overlaps && pos < query_start + init_len)
+		} else for (auto &pos: ptr->second) {
+			if (!allow_overlaps && pos < query_start + init_len) { // Make sure to have at least 1 kb spacing if reference = query
 				continue;
-			// if (!allow_overlaps && query_hash.minimizers[mi].second >= pos)
-				// continue;
-			if (!is_in_tree(tree, pf, query_hash.minimizers[mi].second, pos))
+			}
+			if (!is_in_tree(tree, pf, query_hash.minimizers[mi].second, pos)) {
 				candidates_prel.insert(pos);
-			// if (!in_map(memorized, make_pair(query_hash.minimizers[mi].second, pos)))
+			}
 		}
 	}
 	if (!init_winnow.query_size)
@@ -398,9 +390,9 @@ vector<Hit> search (int query_start,
 			});
 			JACCARD_FAILED++;
 		} else if (allow_extend) {
-			// if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
-			// 	INTERVAL_FAILED++;
-			// } else {
+			if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
+				INTERVAL_FAILED++;
+			} else {
 				// eprn("init jacc === {}", best_jaccard);
 				extend(best_winnow,
 					query_hash, query_start, query_start + init_len, st, mi,
@@ -408,7 +400,7 @@ vector<Hit> search (int query_start,
 					hits, allow_overlaps, tree, report_fails
 				);
 				// pf = tree.find(query_start);
-			// }
+			}
 		} else {
 			auto f = filter(query_hash.seq, query_start, init_len, ref_hash.seq, best_ref_start, best_ref_end - best_ref_start);
 			if (f.first || report_fails) hits.push_back({
@@ -420,33 +412,6 @@ vector<Hit> search (int query_start,
 		}
 	}
    
-	tree -= INTERVAL(0, query_start);
+	tree -= INTERVAL(0, query_start - MIN_READ_SIZE);
 	return parse_hits(hits);
 }
-
-// void test(const int LIMIT)
-// {
-// 	vector<pair<int, hash_t>> hashes;
-// 	hashes.reserve(query_hash.size());
-// 	for (auto &qh: query_hash.index) {
-// 		auto &h = qh.first;
-// 		auto rh = ref_hash.index.find(h);
-// 		if (rh == ref_hash.end()) continue;
-// 		int w = qh.second.size();
-// 		// if (LIMIT) { w = 0; for (auto &l: qh.second) if (i < 50000) w++; else break; }
-// 		if (w) hashes.push_back({rh->second.size() * w, h});
-// 	}
-// 	sort(hashes.begin(), hashes.end());
-
-// 	for (auto &ih: hashes)
-// 	{
-// 		auto &h = ih.second;
-
-// 		for (auto query_start: query_hash.index[h]) {
-// 			for (auto ref_start: ref_hash.index[h]) {
-
-// 			}
-// 			if (query_start > LIMIT) break;
-// 		}
-// 	}
-// }

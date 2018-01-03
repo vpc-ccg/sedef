@@ -15,7 +15,7 @@ using namespace std;
 
 /******************************************************************************/
 
-typedef pair<bool, uint32_t> hash_t; // 1 if does not contain N, 0 otherwise
+typedef pair<char, uint32_t> hash_t; // 2 if N, 1 if lowercase, 0 otherwise
 typedef pair<hash_t, int> minimizer_t;
 
 /******************************************************************************/

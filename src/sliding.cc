@@ -27,22 +27,6 @@ int SlidingMap::jaccard()
 	}
 }
 
-void SlidingMap::rewind()
-{
-	assert(0);
-	
-	// boundary = this->begin();
-	// if (query_size == 0) {
-	// 	intersection = 0;
-	// 	return;
-	// }
-	// std::advance(boundary, query_size - 1); // it is inflated for 1
-	// assert(boundary != this->end());
-	// intersection = (boundary->second == 3);
-	// for (auto it = this->begin(); it != boundary; it++)
-	// 	intersection += (it->second == 3);
-}
-
 bool SlidingMap::add(const hash_t &h, int BIT, int FULL) // bit: var with only one bit set
 {
 	// eprn("> h={}", h);
@@ -131,13 +115,13 @@ void SlidingMap::remove_from_query(const hash_t &h)
 
 void SlidingMap::add_to_reference(const hash_t &h) 
 {	
-	if (h.first) return;
+	if (h.first == 2) return;
 	add(h, 2);
 }
 
 void SlidingMap::remove_from_reference(const hash_t &h) 
 {
-	if (h.first) return;
+	if (h.first == 2) return;
 	remove(h, 2);
 }
 

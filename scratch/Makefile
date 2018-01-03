@@ -13,4 +13,4 @@ $(TARGET).so: $(TARGET).o
 	g++ -shared -Wl,--export-dynamic $(TARGET).o -L$(BOOST_LIB) -lboost_python -L/usr/lib/python$(PYTHON_VERSION)/config -lpython$(PYTHON_VERSION) -o $(TARGET).so
  
 $(TARGET).o: $(TARGET).cpp
-	g++ -I$(PYTHON_INCLUDE) -I .. -I$(BOOST_INC) -fPIC -c $(TARGET).cpp -std=c++11
+	g++ -I$(PYTHON_INCLUDE) -I .. -I$(BOOST_INC) -fPIC -c $(TARGET).cpp -std=c++14

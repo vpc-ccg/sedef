@@ -1,4 +1,6 @@
 /// 786
+/// Fast winnowing algorithm: 
+//  https://people.cs.uct.ac.za/~ksmith/articles/sliding_window_minimum.html
 
 /******************************************************************************/
 
@@ -21,31 +23,42 @@ ostream& operator<<(ostream& os, const hash_t& dt)
 
 /******************************************************************************/
 
-// https://people.cs.uct.ac.za/~ksmith/articles/sliding_window_minimum.html
 vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const int window_size)
 {
+	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
+
 	vector<minimizer_t> minimizers;
 	minimizers.reserve((2 * s.size()) / window_size);
 	deque<minimizer_t> window;
-	uint32_t h = 0;
-	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 	int last_n = - kmer_size - window_size;
-	// window here is defined as list of WINDOW_SIZE k-mer starting positions (i.e. last k-mer goes outside of the window)
-	for (int i = 0; i < s.size(); i++) {
-		if (s[i] == 'N') last_n = i;
+	int last_u = last_n;
+	// window here is defined as list of WINDOW_SIZE 
+	// k-mer *starting positions* (i.e. last k-mer goes outside of the window)
+	for (uint32_t i = 0, h = 0; i < s.size(); i++) {
+		if (s[i] == 'N') {
+			last_n = i;
+		} else if (isupper(s[i])) {
+			last_u = i;
+		}
 
-		h = (h << 2) | hash_dna(s[i]); 
-		h &= MASK;
-		if (i < kmer_size) continue;
+		h = ((h << 2) | hash_dna(s[i])) & MASK; 
+		if (i < kmer_size) 
+			continue;
 
-		hash_t hh = make_pair(bool(last_n >= (i - kmer_size + 1)), h);   
-		while (!window.empty() && (window.back().first >= hh))
+		char status = 1 - char(last_u >= (i - kmer_size + 1)); // 1 for no-uppercase, 0 for uppercase
+		if (last_n >= (i - kmer_size + 1)) 
+			status = 2;
+		hash_t hh = make_pair(status, h);   
+		while (!window.empty() && (window.back().first >= hh)) {
 			window.pop_back();
-		while (!window.empty() && window.back().second < (i - kmer_size + 1) - window_size)
+		}
+		while (!window.empty() && window.back().second < (i - kmer_size + 1) - window_size) {
 			window.pop_front();
+		}
 		window.push_back(make_pair(hh, i - kmer_size + 1));
 
-		if (i - kmer_size + 1 < window_size) continue;
+		if (i - kmer_size + 1 < window_size) 
+			continue;
 		if (!minimizers.size() || window.front() != minimizers.back()) {
 			minimizers.push_back(window.front());
 		}
@@ -77,8 +90,11 @@ Hash::Hash(const string &s, int kmer_size, int window_size):
 	threshold = 1 << 31;
 	for (auto i = hist.rbegin(); i != hist.rend(); i++) {
 		sum += i->second;
-		if (sum <= ignore) threshold = i->first;
-		else break;
+		if (sum <= ignore) { 
+			threshold = i->first;
+		} else { 
+			break;
+		}
 	}
 	// eprn("Index cut-off threshold: {}", threshold);
 }
@@ -90,11 +106,16 @@ int Hash::find_minimizers(int p) const
 		mid = lo + (hi - lo) / 2;
 		if (minimizers[mid].second >= p && (!mid || minimizers[mid - 1].second < p))
 			break;
-		if (minimizers[mid].second < p) lo = mid + 1;
-		else hi = mid;
+		if (minimizers[mid].second < p) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
 	}
-	assert(minimizers[mid].second >= p || mid == minimizers.size() - 1); // if last one, well, what can we do...
+	assert(minimizers[mid].second >= p || mid == minimizers.size() - 1); 
 	assert(!mid || minimizers[mid-1].second < p);
-	if (minimizers[mid].second < p) mid++; // zadnji, nema rjesenja
+	if (minimizers[mid].second < p) {
+		mid++; // the last one--- no solution
+	}
 	return mid;
 }
