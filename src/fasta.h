@@ -52,3 +52,25 @@ struct FastaReference {
 	~FastaReference();
 	string get_sequence(string seqname, int start = 0, int end = -1);
 };
+
+/******************************************************************************/
+
+// struct BEDItem {
+// 	const Index &query;
+// 	int query_start, query_end; // query range
+// 	bool query_rc;
+
+// 	const Index &ref;
+// 	int ref_start, ref_end; // reference range
+// 	bool ref_rc;
+
+// 	string name;
+
+// 	Alignment aln;
+
+// 	// prnn("chromA\tstartA\tendA\tchromB\tstartB\tendB\tname\tdiff\tstrandA\tstrandB\talnSize\tcigar\twgacAlnSize\twgacLocation");
+
+
+// 	int jaccard; // coordinates of seed matches
+// 	string reason;
+// };

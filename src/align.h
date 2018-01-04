@@ -56,10 +56,11 @@ struct alignment_t {
 
 /******************************************************************************/
 
+void align_main(int argc, char **argv);
+
 alignment_t align(const std::string &fa, const std::string &fb, 
 	int match = 5, 
 	int mismatch = -4, 
 	int gap_open = 40, 
 	int gap_extend = 1);
 
-void align_main(const std::string &ref_path, const std::string &bed_path, int resume_after);

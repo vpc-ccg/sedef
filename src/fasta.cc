@@ -22,7 +22,7 @@ FastaIndex::FastaIndex(const string &fname)
 	ifstream indexFile;
 	indexFile.open(fname.c_str(), ifstream::in);
 	if (indexFile.is_open()) {
-		while (getline (indexFile, line)) {
+		while (getline(indexFile, line)) {
 			++linenum;
 			// the fai format defined in samtools is tab-delimited, every line being:
 			// fai->name[i], (int)x.len, (long long)x.offset, (int)x.line_blen, (int)x.line_len
@@ -36,16 +36,14 @@ FastaIndex::FastaIndex(const string &fname)
 								fields[0], atoi(fields[1].c_str()),
 								strtoll(fields[2].c_str(), &end, 10),
 								atoi(fields[3].c_str()),
-								atoi(fields[4].c_str())) ));
+								atoi(fields[4].c_str()))));
 			} else {
-				cerr << "Warning: malformed fasta index file " << fname <<  "does not have enough fields @ line " << linenum << endl;
-				exit(1);
+				throw fmt::format("Index file {} is malformed at line {}", fname, linenum);
 			}
 		}
 		indexFile.close();
 	} else {
-		cerr << "could not open index file " << fname << endl;
-		exit(1);
+		throw fmt::format("Index file {} does not exist", fname);
 	}
 }
 
@@ -55,8 +53,7 @@ FastaIndexEntry FastaIndex::entry(const string &name)
 {
 	FastaIndex::iterator e = this->find(name);
 	if (e == this->end()) {
-		cerr << "unable to find FASTA index entry for '" << name << "'" << endl;
-		exit(1);
+		throw fmt::format("Chromosome {} does not exist", name);
 	} else {
 		return e->second;
 	}

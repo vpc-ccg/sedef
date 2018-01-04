@@ -25,7 +25,7 @@ using namespace std;
 
 /******************************************************************************/
 
-const double MIN_ID = .95;
+const double MIN_ID = .95; // Minimum overlap percentage to call successful WGAC hit
 
 /******************************************************************************/
 
@@ -63,13 +63,17 @@ string print_mappings(vector<Hit> &mapping, const Index &ca, const Index &cb, in
 
 /******************************************************************************/
 
-void align_wgac(string tab_path, string ref_path)
+void align_wgac(string ref_path, string tab_path)
 {
 	eprnn("Loading reference... ");
 	unordered_map<string, string> ref;
 	FastaReference fr(ref_path);
 
 	ifstream fin(tab_path.c_str());
+	if (!fin.is_open()) {
+		throw fmt::format("WGAC TAB file {} does not exist", tab_path);
+	}
+
 	string s;
 	getline(fin, s); // header
 	unordered_set<string> seen;
@@ -137,12 +141,16 @@ void align_wgac(string tab_path, string ref_path)
 	}
 }
 
-void check_wgac(string bed_path, string ref_path) 
+void check_wgac(string ref_path, string bed_path) 
 {
 	unordered_map<string, string> ref;
 	FastaReference fr(ref_path);
 
 	ifstream fin(bed_path.c_str());
+	if (!fin.is_open()) {
+		throw fmt::format("BED file {} does not exist", bed_path);
+	}
+
 	vector<vector<string>> lines;
 	string s;
 	while (getline(fin, s)) {
@@ -296,3 +304,22 @@ void check_wgac(string bed_path, string ref_path)
 		total - pass  - total_fails, pct(total - pass  - total_fails, total)
 	);
 }
+
+/******************************************************************************/
+
+void wgac_main (int argc, char **argv)
+{
+	if (argc < 3) {
+		throw fmt::format("Not enough arguments to wgac");
+	}
+
+	string command = argv[0];
+	if (command == "align") {
+		align_wgac(argv[1], argv[2]);
+	} else if (command == "check") {
+		check_wgac(argv[1], argv[2]);
+	} else {
+		throw fmt::format("Unknown wgac command");
+	}
+}
+

@@ -57,8 +57,7 @@ vector<Minimizer> get_minimizers(const string &s, const int kmer_size, const int
 	deque<Minimizer> window;
 	int last_n = - kmer_size - window_size;
 	int last_u = last_n;
-	// window here is defined as list of WINDOW_SIZE 
-	// k-mer *starting positions* (i.e. last k-mer goes outside of the window)
+	// window contains k-mer *starting positions* (i.e. the last k-mer's end might go outside of the window)
 	for (uint32_t i = 0, h = 0; i < s.size(); i++) {
 		if (s[i] == 'N') {
 			last_n = i;

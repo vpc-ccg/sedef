@@ -31,6 +31,9 @@ pair<string, string> read_fasta(string ref_path, bool complement=false)
 	string line, reference, chr;
 
 	ifstream fin(ref_path);
+	if (!fin.is_open()) {
+		throw fmt::format("FASTA file {} does not exist", ref_path);
+	}
 	while (getline(fin, line)) {
 		if (line[0] != '>') {
 			reference += line;
@@ -43,7 +46,7 @@ pair<string, string> read_fasta(string ref_path, bool complement=false)
 	return make_pair(chr, complement ? rc(reference) : reference);
 }
 
-void jaccard_search(string ref_path, string query_path, bool is_complement)
+void search_main(string ref_path, string query_path, bool is_complement)
 {
 	auto reference = read_fasta(ref_path, is_complement);
 	Index ref_hash(reference.first, reference.second);

@@ -19,102 +19,6 @@ using namespace std;
 
 /******************************************************************************/
 
-alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int sc_mis, int gapo, int gape)
-{
-	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
-
-	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
-	int8_t mat[25] = { 
-		a, b, b, b, 0, 
-		b, a, b, b, 0, 
-		b, b, a, b, 0, 
-		b, b, b, a, 0, 
-		0, 0, 0, 0, 0 
-	};
-	deque<pair<char, int>> cigar;
-	for (int SP = 0; SP < min(tseq.size(), qseq.size()); SP += STEP) {
-		ksw_extz_t ez;
-		ksw_extz2_sse(0, 
-			min(STEP, (int)(qseq.size() - SP)), (const uint8_t*)(qseq.c_str() + SP), 
-			min(STEP, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
-			5, mat, // M; MxM matrix
-			gapo, gape, 
-			-1, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
-			0, &ez);
-		for (int i = 0; i < ez.n_cigar; i++) {
-			cigar.push_back({"MID"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
-		}
-		free(ez.cigar);
-	}
-	return alignment_t{ 
-		"A", 0, (int)qseq.size(), 
-		"B", 0, (int)tseq.size(), 
-		qseq, tseq, "", "", "", cigar 
-	};
-}
-
-alignment_t align(const string &fa, const string &fb, int match, int mismatch, int gap_open, int gap_extend)
-{
-	string xa = fa, xb = fb;
-
-	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
-	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
-
-	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend);
-	a.a = fa, a.b = fb;
-	a.populate_nice_alignment();
-	return a;
-}
-
-/******************************************************************************/
-
-void align_ref(FastaReference &fr, int line, const string &s, chrono::time_point<chrono::high_resolution_clock> &t_start)
-{
-	vector<string> ss = split(s, '\t');
-
-	string ca = ss[0];
-	int sa = atoi(ss[1].c_str()), ea = atoi(ss[2].c_str());
-	string cb = ss[3];
-	int sb = atoi(ss[4].c_str()), eb = atoi(ss[5].c_str());
-
-	char sta = ss[7][0], stb = ss[8][0];
-
-	assert(sta == '+');
-	bool is_rc = (stb != '+');
-
-	string fa = fr.get_sequence(ca, sa, ea);
-	string fb = fr.get_sequence(cb, sb, eb);
-	if (is_rc) fb = rc(fb);
-
-	auto aln = align(fa, fb);
-
-	eprn("\t{}s\t{}", elapsed(t_start), line);
-	prn("{}\t{}\t{}\t{}", s, aln.cigar_string(), fa, fb);
-	fflush(stdout);
-}
-
-void align_main(const string &ref_path, const string &bed_path, int resume_after) 
-{
-	auto start = cur_time();
-	
-	FastaReference fr(ref_path);
-	ifstream fin(bed_path.c_str());
-
-	int nl = 0;
-	string s;
-	while (getline(fin, s)) {
-		if (nl > resume_after) {
-			align_ref(fr, nl, s, start);
-		}
-		nl++;
-	}
-
-	eprn("Finished bucket {}: read {} lines", string(bed_path), nl);
-	eprnn("Done!\n");
-}
-
-/******************************************************************************/
-
 alignment_t alignment_t::from_cigar(const string &a, const string &b, const string &cigar_str)
 {
 	auto aln = alignment_t{ "A", 0, (int)a.size(), "B", 0, (int)b.size(), a, b, "", "", "", {} };
@@ -359,3 +263,123 @@ vector<alignment_t> alignment_t::max_sum(int min_span)
 
 	return results;
 }
+
+/******************************************************************************/
+
+alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int sc_mis, int gapo, int gape)
+{
+	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
+
+	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
+	int8_t mat[25] = { 
+		a, b, b, b, 0, 
+		b, a, b, b, 0, 
+		b, b, a, b, 0, 
+		b, b, b, a, 0, 
+		0, 0, 0, 0, 0 
+	};
+	deque<pair<char, int>> cigar;
+	for (int SP = 0; SP < min(tseq.size(), qseq.size()); SP += STEP) {
+		ksw_extz_t ez;
+		ksw_extz2_sse(0, 
+			min(STEP, (int)(qseq.size() - SP)), (const uint8_t*)(qseq.c_str() + SP), 
+			min(STEP, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
+			5, mat, // M; MxM matrix
+			gapo, gape, 
+			-1, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
+			0, &ez);
+		for (int i = 0; i < ez.n_cigar; i++) {
+			cigar.push_back({"MID"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
+		}
+		free(ez.cigar);
+	}
+	return alignment_t{ 
+		"A", 0, (int)qseq.size(), 
+		"B", 0, (int)tseq.size(), 
+		qseq, tseq, "", "", "", cigar 
+	};
+}
+
+alignment_t align(const string &fa, const string &fb, int match, int mismatch, int gap_open, int gap_extend)
+{
+	string xa = fa, xb = fb;
+
+	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
+	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
+
+	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend);
+	a.a = fa, a.b = fb;
+	a.populate_nice_alignment();
+	return a;
+}
+
+/******************************************************************************/
+
+void generate_alignments(const string &ref_path, const string &bed_path, int resume_after) 
+{
+	auto start = cur_time();
+	
+	FastaReference fr(ref_path);
+	ifstream fin(bed_path.c_str());
+	if (!fin.is_open()) {
+		throw fmt::format("BED file {} does not exist", bed_path);
+	}
+
+	int nl = 0;
+	string s;
+	while (getline(fin, s)) {
+		if (nl <= resume_after) 
+			continue;
+
+		vector<string> ss = split(s, '\t');
+
+		string ca = ss[0];
+		int sa = atoi(ss[1].c_str()), ea = atoi(ss[2].c_str());
+		string cb = ss[3];
+		int sb = atoi(ss[4].c_str()), eb = atoi(ss[5].c_str());
+		char sta = ss[7][0], stb = ss[8][0];
+
+		assert(sta == '+');
+		bool is_rc = (stb != '+');
+
+		string fa = fr.get_sequence(ca, sa, ea);
+		string fb = fr.get_sequence(cb, sb, eb);
+		if (is_rc) fb = rc(fb);
+
+		auto aln = align(fa, fb);
+		aln.chr_a = ca; aln.start_a = sa; aln.start_b = sb;
+		aln.chr_a = ca; aln.start_a = sa; aln.start_b = sb;
+
+		eprn("\t{}s\t{}", elapsed(start), nl);
+		prn("{}\t{}\t{}\t{}", s, aln.cigar_string(), fa, fb);
+		fflush(stdout);
+
+		nl++;
+	}
+
+	eprn("Finished BED {}: read {} lines", string(bed_path), nl);
+	eprnn("Done!\n");
+}
+
+void postprocess(const string &ref_path, const string &bed_path)
+{
+	throw fmt::format("NOT IMPLEMENTED");
+}
+
+void align_main(int argc, char **argv)
+{
+	if (argc < 3) {
+		throw fmt::format("Not enough arguments to align");
+	}
+
+	string command = argv[0];
+	if (command == "generate") {
+		int resume_after = argc < 4 ? -1 : atoi(argv[3]);
+		generate_alignments(argv[1], argv[2], resume_after);
+	} else if (command == "process") {
+		postprocess(argv[1], argv[2]);
+	} else {
+		throw fmt::format("Unknown align command");
+	}
+}
+
