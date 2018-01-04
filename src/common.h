@@ -39,15 +39,6 @@ const double GAP_FREQUENCY  = 0.005;
 
 /******************************************************************************/
 
-struct pair_hash {
-	template<class T1, class T2>
-	size_t operator () (const std::pair<T1, T2> &p) const {
-		return std::hash<T2>{}(p.second);
-	}
-};
-
-/******************************************************************************/
-
 struct DNA {
 	char val[128];
 	constexpr DNA(int def): val()

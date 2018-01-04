@@ -15,30 +15,57 @@ using namespace std;
 
 /******************************************************************************/
 
-typedef pair<char, uint32_t> hash_t; // 2 if N, 1 if lowercase, 0 otherwise
-typedef pair<hash_t, int> minimizer_t;
+struct Hash {
+	enum Status {
+		HAS_UPPERCASE, ALL_LOWERCASE, HAS_N
+	};
+	uint32_t hash; 
+	Status status; // 2 if N, 1 if lowercase, 0 otherwise
+};
+
+struct Minimizer {
+	Hash hash;
+	int loc;
+};
+
+namespace std {
+	template <> struct hash<Hash> {
+		size_t operator()(const Hash &h) const
+		{
+			return std::hash<uint32_t>()(h.hash) ^ std::hash<char>()((char)h.status);
+		}
+	};
+}
 
 /******************************************************************************/
 
-struct Hash {
+struct Index {
 	const int kmer_size;
 	const int window_size;
 
 	unsigned int threshold;
+
+	string name;
 	string seq;
 
 	// (hash, loci), sorted by loci
-	vector<minimizer_t> minimizers;
+	vector<Minimizer> minimizers;
 	// hash -> list of locations
-	unordered_map<hash_t, list<int>, pair_hash> index;
+	unordered_map<Hash, list<int>> index;
 
 public:
-	Hash(const string &s, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE);
+	Index(const string &name, const string &s, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE);
 
 	// Find first minimizer at loci p
 	int find_minimizers(int p) const;
 };
 
-
 #include "extern/ostream.h"
-ostream& operator<<(ostream& os, const hash_t& dt);
+
+ostream& operator<<(ostream& os, const Hash& dt);
+
+bool operator<(const Hash &x, const Hash &y);
+bool operator<=(const Hash &x, const Hash &y);
+bool operator==(const Hash &x, const Hash &y);
+bool operator!=(const Hash &x, const Hash &y);
+bool operator==(const Minimizer &x, const Minimizer &y);

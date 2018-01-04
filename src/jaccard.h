@@ -9,6 +9,7 @@
 #include <string>
 
 #include "common.h"
+#include "hash.h"
 #include "search.h"
 
 /******************************************************************************/
@@ -17,6 +18,5 @@ void jaccard_search (std::string ref_path, std::string query_path, bool is_compl
 
 std::string print_mapping(Hit &pp, 
 	bool is_complement, 
-	const std::string &query_chr, 
-	const std::string &ref_chr,
-	int ref_size);
+	const Index &query, 
+	const Index &ref);

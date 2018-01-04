@@ -15,21 +15,46 @@ using namespace std;
 
 /******************************************************************************/
 
-ostream& operator<<(ostream& os, const hash_t& dt)
+ostream& operator<<(ostream& os, const Hash& dt)
 {  
-	os << int(dt.first) << '.' << std::hex << (unsigned long long)dt.second;  
+	os << int(dt.status) << '.' << std::hex << dt.hash;
 	return os;  
 }  
 
+bool operator<(const Hash &x, const Hash &y) 
+{
+	return tie(x.status, x.hash) < tie(y.status, y.hash);
+}
+
+bool operator==(const Hash &x, const Hash &y) 
+{
+	return tie(x.status, x.hash) == tie(y.status, y.hash);
+}
+
+bool operator!=(const Hash &x, const Hash &y) 
+{
+	return tie(x.status, x.hash) != tie(y.status, y.hash);
+}
+
+bool operator<=(const Hash &x, const Hash &y) 
+{
+	return (x < y) || (x == y);
+}
+
+bool operator==(const Minimizer &x, const Minimizer &y) 
+{
+	return tie(x.loc, x.hash) == tie(y.loc, y.hash);
+}
+
 /******************************************************************************/
 
-vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const int window_size)
+vector<Minimizer> get_minimizers(const string &s, const int kmer_size, const int window_size)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
-	vector<minimizer_t> minimizers;
+	vector<Minimizer> minimizers;
 	minimizers.reserve((2 * s.size()) / window_size);
-	deque<minimizer_t> window;
+	deque<Minimizer> window;
 	int last_n = - kmer_size - window_size;
 	int last_u = last_n;
 	// window here is defined as list of WINDOW_SIZE 
@@ -45,21 +70,21 @@ vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const i
 		if (i < kmer_size) 
 			continue;
 
-		char status = 1 - char(last_u >= (i - kmer_size + 1)); // 1 for no-uppercase, 0 for uppercase
-		if (last_n >= (i - kmer_size + 1)) 
-			status = 2;
-		hash_t hh = make_pair(status, h);   
-		while (!window.empty() && (window.back().first >= hh)) {
+		Hash hh { h, last_n >= (i - kmer_size + 1) 
+			? Hash::Status::HAS_N 
+			: (last_u >= (i - kmer_size + 1) ? Hash::Status::HAS_UPPERCASE : Hash::Status::ALL_LOWERCASE) 
+		};   
+		while (!window.empty() && !(window.back().hash < hh)) {
 			window.pop_back();
 		}
-		while (!window.empty() && window.back().second < (i - kmer_size + 1) - window_size) {
+		while (!window.empty() && window.back().loc < (i - kmer_size + 1) - window_size) {
 			window.pop_front();
 		}
-		window.push_back(make_pair(hh, i - kmer_size + 1));
+		window.push_back({hh, i - kmer_size + 1});
 
 		if (i - kmer_size + 1 < window_size) 
 			continue;
-		if (!minimizers.size() || window.front() != minimizers.back()) {
+		if (!minimizers.size() || !(window.front() == minimizers.back())) {
 			minimizers.push_back(window.front());
 		}
 	}
@@ -68,8 +93,8 @@ vector<minimizer_t> get_minimizers(const string &s, const int kmer_size, const i
 
 /******************************************************************************/
 
-Hash::Hash(const string &s, int kmer_size, int window_size): 
-	seq(s), kmer_size(kmer_size), window_size(window_size) 
+Index::Index(const string &name, const string &s, int kmer_size, int window_size): 
+	name(name), seq(s), kmer_size(kmer_size), window_size(window_size) 
 {
 	// eprn("Hashing {} bps", s.size());
 
@@ -77,7 +102,7 @@ Hash::Hash(const string &s, int kmer_size, int window_size):
 	minimizers = get_minimizers(s, kmer_size, window_size);
 	
 	for (auto &i: minimizers) {
-		index[i.first].push_back(i.second);
+		index[i.hash].push_back(i.loc);
 	}
 
 	int ignore = (minimizers.size() * 0.001) / 100.0;
@@ -96,25 +121,24 @@ Hash::Hash(const string &s, int kmer_size, int window_size):
 			break;
 		}
 	}
-	// eprn("Index cut-off threshold: {}", threshold);
 }
 
-int Hash::find_minimizers(int p) const
+int Index::find_minimizers(int p) const
 {
 	int lo = 0, hi = minimizers.size() - 1, mid;
 	while (lo <= hi) {
 		mid = lo + (hi - lo) / 2;
-		if (minimizers[mid].second >= p && (!mid || minimizers[mid - 1].second < p))
+		if (minimizers[mid].loc >= p && (!mid || minimizers[mid - 1].loc < p))
 			break;
-		if (minimizers[mid].second < p) {
+		if (minimizers[mid].loc < p) {
 			lo = mid + 1;
 		} else {
 			hi = mid;
 		}
 	}
-	assert(minimizers[mid].second >= p || mid == minimizers.size() - 1); 
-	assert(!mid || minimizers[mid-1].second < p);
-	if (minimizers[mid].second < p) {
+	assert(minimizers[mid].loc >= p || mid == minimizers.size() - 1); 
+	assert(!mid || minimizers[mid-1].loc < p);
+	if (minimizers[mid].loc < p) {
 		mid++; // the last one--- no solution
 	}
 	return mid;

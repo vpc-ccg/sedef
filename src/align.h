@@ -56,8 +56,6 @@ struct alignment_t {
 
 /******************************************************************************/
 
-std::string getfasta(FastaReference &fr, const std::string &chrom, int start, int end, bool rc);
-
 alignment_t align(const std::string &fa, const std::string &fb, 
 	int match = 5, 
 	int mismatch = -4, 

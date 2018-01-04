@@ -103,15 +103,15 @@ pair<bool, string> core_filter(const string &q, int q_pos, int q_len, const stri
 
 /******************************************************************************/
 
-pair<bool, string> filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
+pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r, int r_pos, int r_end) 
 {	
-	auto f = uppercase_filter(q, q_pos, q_len, r, r_pos, r_len);
+	auto f = uppercase_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
 	if (!f.first) return f;
 
-	// f = core_filter(q, q_pos, q_len, r, r_pos, r_len);
+	// f = core_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
 	// if (!f.first) return f;
 
-	f = qgram_filter(q, q_pos, q_len, r, r_pos, r_len);
+	f = qgram_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
 	if (!f.first) return f;
 
 	return {true, ""};

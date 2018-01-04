@@ -16,16 +16,11 @@
 
 /******************************************************************************/
 
-// struct _X {
-// 	int
-// };
-
-struct SlidingMap: public std::map<hash_t, char> {
+struct SlidingMap: public std::map<Hash, char> {
 	typename SlidingMap::iterator boundary; // this is inclusive!
 	int query_size;
 	int intersection;
 	double limit;
-	int64_t time;
 
 	SlidingMap();
 
@@ -34,11 +29,11 @@ struct SlidingMap: public std::map<hash_t, char> {
 	// when adding, if same hash is found: try to match earliest one if added by another set (i.e. try increase jaccard)
 	// when removing, if same hash is found: try to remove the latest one (try to preserve jaccard)
 
-	bool add(const hash_t &h, int BIT, int FULL = 3);
-	bool remove(const hash_t &h, int BIT, int FULL = 3);
+	bool add(const Hash &h, int BIT, int FULL = 3);
+	bool remove(const Hash &h, int BIT, int FULL = 3);
 
-	void add_to_query(const hash_t &h);
-	void remove_from_query(const hash_t &h);
-	void add_to_reference(const hash_t &h);
-	void remove_from_reference(const hash_t &h);
+	void add_to_query(const Hash &h);
+	void remove_from_query(const Hash &h);
+	void add_to_reference(const Hash &h);
+	void remove_from_reference(const Hash &h);
 };

@@ -19,6 +19,6 @@ using namespace std;
 /******************************************************************************/
 
 pair<bool, string> filter(
-	const string &q, int q_pos, int q_len, 
-	const string &r, int r_pos, int r_len);
+	const string &q, int q_pos, int q_end, 
+	const string &r, int r_pos, int r_end);
 

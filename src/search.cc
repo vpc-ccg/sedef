@@ -26,50 +26,50 @@ using namespace std;
 
 /******************************************************************************/
 
-const int MAX_MATCH = 1000 * 1000;   /// 1MB at most
+const int MAX_MATCH = 1 * 1000 * 1000;   /// 1MB at most
 
 /******************************************************************************/
 
-#define eprn(f, ...)   // fmt::print(stderr, f "\n",  ##__VA_ARGS__)
-#define eprnn(...)     // fmt::print(stderr, __VA_ARGS__)
+// #define eprn(f, ...)   // fmt::print(stderr, f "\n",  ##__VA_ARGS__)
+// #define eprnn(...)     // fmt::print(stderr, __VA_ARGS__)
 
 /******************************************************************************/
 
-bool check_overlap(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pf_end, int pfp_pos, int pfp_end) 
+bool is_overlap(Tree &tree, int pf_pos, int pf_end, int pfp_pos, int pfp_end) 
 {
+	const int RIGHT_ALLOWANCE = MIN_READ_SIZE;    /// TODO more mathy formulation
+	
 	assert(pf_pos <= pf_end);
 	assert(pfp_pos <= pfp_end);
 
-	const int RIGHT_ALLOWANCE = 750;    /// TODO more mathy formulation
+	auto pf = tree.find(pf_pos);
+	if (pf == tree.end()) 
+		return false;
+	
+	auto pfp = pf->second.find(pfp_pos);
+	if (pfp == pf->second.end()) 
+		return false;
+	
+	for (auto &it: pfp->second) {
+		int sA = it.first.lower(),  eA = it.first.upper();
+		int sB = it.second.lower(), eB = it.second.upper();
 
-	SUBTREE_t::const_iterator pfp;
-	if (pf != tree.end() && (pfp = pf->second.find(pfp_pos)) != pf->second.end()) { // check overlap!
-		for (auto &it: pfp->second) {
-			int sA = it.first.lower(),  eA = it.first.upper();
-			int sB = it.second.lower(), eB = it.second.upper();
+		// 1. total overlap
+		if (pf_pos >= sA && pf_end <= eA && pfp_pos >= sB && pfp_end <= eB)
+			return true;
 
-			if (pf_pos >= sA && pf_end <= eA && pfp_pos >= sB && pfp_end <= eB)
-				return false;
+		// 2. do not check overlaps with too small intervals
+		if (min(eA - sA, eB - sB) < MIN_READ_SIZE * 1.5) 
+			continue;
 
-			if (min(eA - sA, eB - sB) < MIN_READ_SIZE * 1.5) 
-				continue;
-
-			/*
-			-------+     
-			  +---------
-			  <----> must be at least RIGHT_ALLOWANCE 
-			*/
-			if (eA - pf_pos  >= RIGHT_ALLOWANCE && eB - pfp_pos >= RIGHT_ALLOWANCE) 
-				return false;
-		}
+		// 3. if partial overlap, it must be greater than RIGHT_ALLOWANCE (i.e. do not count small overlaps as hits)
+		// ----------+
+		//     +------------
+		//     |*****| the space inside must be at least RIGHT_ALLOWANCE to trigger overlap
+		if (eA - pf_pos >= RIGHT_ALLOWANCE && eB - pfp_pos >= RIGHT_ALLOWANCE) 
+			return true;
 	}
-	return true;
-}
-
-bool is_in_tree(TREE_t &tree, TREE_t::const_iterator &pf, int pf_pos, int pfp_pos) 
-{
-	SUBTREE_t::const_iterator pfp;
-	return (pf != tree.end() && (pfp = pf->second.find(pfp_pos)) != pf->second.end());
+	return false;
 }
 
 auto parse_hits(vector<Hit> &hits)
@@ -78,248 +78,293 @@ auto parse_hits(vector<Hit> &hits)
 	for (auto &h: hits) { // TODO fix brute force
 		bool add = true;
 		for (auto &ph: hits) if ((&h - &hits[0]) != (&ph - &hits[0])) {
-			if (h.i >= ph.i && h.j <= ph.j && h.p >= ph.p && h.q <= ph.q) { // if full match
+			if (h.ref_start >= ph.ref_start && h.ref_end <= ph.ref_end && 
+				h.query_start >= ph.query_start && h.query_end <= ph.query_end) 
+			{ // if full match
 				add = false;
 				break;
 			}
 		}
-		if (add) hits_real.push_back(h);
+		if (add) {
+			hits_real.push_back(h);
+		}
 	}
 	return hits_real;
 }
 
 /******************************************************************************/
 
-void extend(SlidingMap &winnow,
-	const Hash &query_hash, int query_start, int query_end,
-	int query_winnow_start, int query_winnow_end,
-	const Hash &ref_hash, int ref_start, int ref_end,
-	int ref_winnow_start, int ref_winnow_end,
-	vector<Hit> &hits,
-	bool allow_overlaps,
-	TREE_t &tree,
-	bool report_fails) 
-{
-	eprn(">> extend query:{}..{} vs ref:{}..{}", query_start, query_end, ref_start, ref_end);
-	
+Hit extend(SlidingMap &winnow,
+	const Index &query_hash, int query_start, int query_end, int query_winnow_start, int query_winnow_end,
+	const Index &ref_hash, int ref_start, int ref_end, int ref_winnow_start, int ref_winnow_end,
+	bool same_genome) 
+{	
 	assert(query_start < query_hash.seq.size());
 	assert(ref_start < ref_hash.seq.size());
 	assert(query_end <= query_hash.seq.size());
 	assert(ref_end <= ref_hash.seq.size());
 
-	auto f = filter(query_hash.seq, query_start, query_end - query_start, ref_hash.seq, ref_start, ref_end - ref_start);
-	if (!f.first) {
-		if (report_fails) hits.push_back({
-			query_start, query_end, 
-			ref_start, ref_end, 
-			0,
-			f.second
-		});
-		eprn(">> failed first filter {}", f.second);
-		return;
-	}
-
-	auto fn_qe = [&]() {
-		if (query_end >= query_hash.seq.size()) return 0;
-		int i = 1;
-		if (query_winnow_end < query_hash.minimizers.size() && query_hash.minimizers[query_winnow_end].second == query_end)
-			winnow.add_to_query(query_hash.minimizers[query_winnow_end++].first), i++;
-		query_end++;
-		return i;
+	// Always extend to the boundary of the next winnow
+	auto do_extend_query_right = [&]() {
+		if (query_winnow_end >= query_hash.minimizers.size()) return false;
+		winnow.add_to_query(query_hash.minimizers[query_winnow_end++].hash);
+		query_end = query_winnow_end < query_hash.minimizers.size() ? query_hash.minimizers[query_winnow_end].loc : query_hash.seq.size();
+		return true;
 	};
-	auto fn_u_qe = [&](int i) {
-		if (!i) return;
-		if (i == 2) winnow.remove_from_query(query_hash.minimizers[--query_winnow_end].first);
-		query_end--;
+	auto undo_extend_query_right = [&]() {
+		winnow.remove_from_query(query_hash.minimizers[--query_winnow_end].hash);
+		query_end = query_hash.minimizers[query_winnow_end].loc;
 	};
 
-	auto fn_re = [&]() {
-		if (ref_end >= ref_hash.seq.size()) return 0;
-		int i = 1;
-		if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second == ref_end) 
-			winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end++].first), i++;
-		ref_end++;
-		return i;
+	auto do_extend_ref_right = [&]() {
+		if (ref_winnow_end >= ref_hash.minimizers.size()) return false;
+		winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end++].hash);
+		ref_end = ref_winnow_end < ref_hash.minimizers.size() ? ref_hash.minimizers[ref_winnow_end].loc : ref_hash.seq.size();
+		return true;
 	};
-	auto fn_u_re = [&](int i) {
-		if (!i) return;
-		if (i == 2) winnow.remove_from_reference(ref_hash.minimizers[--ref_winnow_end].first);
-		ref_end--;
+	auto undo_extend_ref_right = [&]() {
+		winnow.remove_from_reference(ref_hash.minimizers[--ref_winnow_end].hash);
+		ref_end = ref_hash.minimizers[ref_winnow_end].loc;
 	};
 
-	auto fn_qre = [&]() {
-		if (query_end >= query_hash.seq.size() || ref_end >= ref_hash.seq.size()) return 0;
-		return fn_qe() * 10 + fn_re();
+	auto do_extend_both_right = [&]() {
+		if (ref_winnow_end >= ref_hash.minimizers.size() || query_winnow_end >= query_hash.minimizers.size())
+			return false;
+		return do_extend_query_right() && do_extend_ref_right();
 	};
-	auto fn_u_qre = [&](int i) {
-		if (!i) return;
-		fn_u_qe(i / 10), fn_u_re(i % 10);
-	};
-
-	auto fn_qs = [&]() {
-		if (!query_start) return 0;
-		int i = 1;
-		if (query_winnow_start && query_hash.minimizers[query_winnow_start - 1].second == query_start - 1)
-			winnow.add_to_query(query_hash.minimizers[--query_winnow_start].first), i++;
-		query_start--;
-		return i;
-	};
-	auto fn_u_qs = [&](int i) {
-		if (!i) return;
-		if (i == 2) winnow.remove_from_query(query_hash.minimizers[query_winnow_start++].first);
-		query_start++;
+	auto undo_extend_both_right = [&]() {
+		undo_extend_query_right();
+		undo_extend_ref_right();
 	};
 
-	auto fn_rs = [&]() {
-		if (!ref_start) return 0;
-		int i = 1;
-		if (ref_winnow_start && ref_hash.minimizers[ref_winnow_start - 1].second == ref_start - 1) 
-			winnow.add_to_reference(ref_hash.minimizers[--ref_winnow_start].first), i++; 
-		ref_start--;
-		return i;
+	auto do_extend_query_left = [&]() {
+		if (!query_winnow_start) return false;
+		winnow.add_to_query(query_hash.minimizers[--query_winnow_start].hash);
+		query_start = query_winnow_start ? query_hash.minimizers[query_winnow_start - 1].loc + 1 : 0;
+		return true;
 	};
-	auto fn_u_rs = [&](int i) {
-		if (!i) return;
-		if (i == 2) winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start++].first);
-		ref_start++;
+	auto undo_extend_query_left = [&]() {
+		query_start = query_hash.minimizers[query_winnow_start].loc + 1;
+		winnow.remove_from_query(query_hash.minimizers[query_winnow_start++].hash);
 	};
 
-	auto fn_qrs = [&]() {
-		if (!query_start || !ref_start) return 0;
-		return fn_qs() * 10 + fn_rs();
+	auto do_extend_ref_left = [&]() {
+		if (!ref_winnow_start) return false;
+		winnow.add_to_reference(ref_hash.minimizers[--ref_winnow_start].hash);
+		ref_start = ref_winnow_start ? ref_hash.minimizers[ref_winnow_start - 1].loc + 1 : 0;
+		return true;
 	};
-	auto fn_u_qrs = [&](int i) {
-		if (!i) return;
-		fn_u_qs(i / 10), fn_u_rs(i % 10);
+	auto undo_extend_ref_left = [&]() {
+		ref_start = ref_hash.minimizers[ref_winnow_start].loc + 1;
+		winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start++].hash);
+	};
+
+	auto do_extend_both_left = [&]() {
+		if (!query_winnow_start || !ref_winnow_start) 
+			return false;
+		return do_extend_query_left() && do_extend_ref_left();
+	};
+	auto undo_extend_both_left = [&]() {
+		undo_extend_query_left();
+		undo_extend_ref_left();
 	};
 	
-	auto fns = vector<pair<function<int(void)>, function<void(int)>>>{
-		make_pair(fn_qre, fn_u_qre),
-		make_pair(fn_qe, fn_u_qe),
-		make_pair(fn_re, fn_u_re),
-		make_pair(fn_qrs, fn_u_qrs),
-		make_pair(fn_qs, fn_u_qs),
-		make_pair(fn_rs, fn_u_rs)
+	#define p(q) make_pair(do_extend_##q, undo_extend_##q)
+	auto extensions = vector<pair<function<bool(void)>, function<void(void)>>>{
+		p(both_right), p(query_right), p(ref_right),
+		p(both_left),  p(query_left),  p(ref_left)
 	};
+	#undef p
 
-	// TODO: speed up by moving directly to next winnow
-
+	// First extend to the boundaries
+	query_start = query_winnow_start ? query_hash.minimizers[query_winnow_start - 1].loc + 1 : 0;
+	query_end = query_winnow_end < query_hash.minimizers.size() ? query_hash.minimizers[query_winnow_end].loc : query_hash.seq.size();
+	ref_start = ref_winnow_start ? ref_hash.minimizers[ref_winnow_start - 1].loc + 1 : 0;
+	ref_end = ref_winnow_end < ref_hash.minimizers.size() ? ref_hash.minimizers[ref_winnow_end].loc : ref_hash.seq.size();
+	
 	for (int i = 0, j = winnow.jaccard(); ;) {
-		int max_match = MAX_MATCH;
-		if (!allow_overlaps) {
-			max_match = min(max_match, int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)));
-		}
-		if (max(query_end - query_start, ref_end - ref_start) > max_match) {
-			break;
-		}
-		if (min(query_end - query_start, ref_end - ref_start) / (double)max(query_end - query_start, ref_end - ref_start) < (1 - 2 * MAX_GAP_ERROR)) {
+		int max_match = min(MAX_MATCH, same_genome 
+			? int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)) 
+			: MAX_MATCH);
+		int aln_len = max(query_end - query_start, ref_end - ref_start);
+		int seq_len = min(query_end - query_start, ref_end - ref_start);
+		if (aln_len > max_match || pct(seq_len, aln_len) < 100 * (1 - 2 * MAX_GAP_ERROR)) {
 			break;
 		}
 
-		bool succeeded = false;
-		for (auto &fn: fns) {
-			if ((i = fn.first()) == 0) 
-				continue;
-			if ((j = winnow.jaccard()) >= 0) {
-				succeeded = true;
+		bool extended = false;
+		for (auto &fn: extensions) {
+			if (!fn.first())
+				continue; 
+			if (winnow.jaccard() >= 0) {
+				extended = true;
 				break;
 			} else {
-				fn.second(i); // undo
+				fn.second(); // undo
 			}
 		}
-		if (!succeeded) break;
-	}
-				
-	eprn(">> extended to {}..{}; {}..{}", query_start, query_end, ref_start, ref_end);
-	eprn(">>     took {}s", chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - time).count() / 1000.00);
-
-	f = filter(query_hash.seq, query_start, query_end - query_start, ref_hash.seq, ref_start, ref_end - ref_start);
-	if (!f.first) {
-		if (report_fails) hits.push_back({
-			query_start, query_end, 
-			ref_start, ref_end, 
-			winnow.jaccard(),
-			f.second
-		});
-		eprn(">> failed second filter {}", f.second);
-		return;
+		if (!extended) 
+			break;
 	}
 	
-	hits.push_back({
+	return Hit {
 		query_start, query_end, 
 		ref_start, ref_end, 
 		winnow.jaccard(),
 		"OK"
-	});
-
-	eprn(">> success!");
-	
-	auto a = INTERVAL(query_start, query_end);
-	auto b = INTERVAL(ref_start, ref_end);
-	tree += make_pair(a, SUBTREE_t({b, {make_pair(a, b)}}));
+	};
 }
 
 /******************************************************************************/
 
-vector<Hit> search (int query_start, 
-					const Hash &ref_hash, 
-					const Hash &query_hash, 
-					TREE_t &tree, 
-					bool allow_overlaps,
-					int init_len,
-					bool allow_extend,
-					bool report_fails)
+vector<Hit> search_in_reference_interval ( 
+	int query_start, int query_winnow_start, int query_winnow_end,
+	const Index &ref_hash, const Index &query_hash, 
+	Tree &tree, 
+	bool same_genome, int init_len, bool allow_extend, bool report_fails,
+	SlidingMap winnow, int t_start, int t_end)
+{
+	assert(t_start < t_end);
+	assert(t_start >= 0);
+	assert(winnow.query_size > 0);
+
+	TOTAL_ATTEMPTED++; 
+ 
+	int ref_start = t_start, 
+	    ref_end = min(t_start + init_len, (int)ref_hash.seq.size());
+	int ref_winnow_start = ref_hash.find_minimizers(ref_start);
+	assert(ref_winnow_start < ref_hash.minimizers.size());
+
+	int ref_winnow_end = ref_winnow_start; // winnow is W(query) ; extend it to W(query) | W(ref)
+	for (; ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].loc < ref_end; ref_winnow_end++) {
+		winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].hash);
+	}
+
+	// Roll until we find best inital match
+	// TODO: optimize
+	auto best_winnow = winnow;
+	int best_ref_start = ref_start, 
+	    best_ref_end = ref_end;
+	int best_ref_winnow_start = ref_winnow_start, 
+	    best_ref_winnow_end = ref_winnow_end;
+	while (ref_start < t_end && ref_end < ref_hash.seq.size()) {
+		if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].loc < ref_start + 1) {
+			winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start++].hash);
+		}
+		if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].loc == ref_end) {
+			winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end++].hash);
+		}
+		if (winnow.jaccard() > best_winnow.jaccard()) {
+			best_ref_start = ref_start;
+			best_ref_end = ref_end;
+			best_ref_winnow_start = ref_winnow_start;
+			best_ref_winnow_end = ref_winnow_end;
+			best_winnow = winnow;
+		}
+		ref_start++, ref_end++;
+		if (ref_end == ref_hash.seq.size()) 
+			break;
+	}
+	// END TODO
+
+	vector<Hit> hits;
+	if (best_winnow.jaccard() < 0) {
+		JACCARD_FAILED++;
+		if (report_fails) hits.push_back({
+			query_start, query_start + init_len, best_ref_start, best_ref_end, best_winnow.jaccard(),
+			fmt::format("jaccard: {} < {}", best_winnow.limit + best_winnow.jaccard(), best_winnow.limit)
+		});
+	} else if (allow_extend) {
+		if (!is_overlap(tree, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
+			auto f = filter(query_hash.seq, query_start, query_start + init_len, ref_hash.seq, ref_start, ref_end);
+			if (!f.first) {
+				if (report_fails) hits.push_back({query_start, query_start + init_len, ref_start, ref_end, 0, f.second });
+			} else {
+				Hit h = extend(best_winnow,
+					query_hash, query_start, query_start + init_len, query_winnow_start, query_winnow_end,
+					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
+					same_genome
+				);	
+				f = filter(query_hash.seq, h.query_start, h.query_end, ref_hash.seq, h.ref_start, h.ref_end);
+				if (!f.first) {
+					if (report_fails) {
+						h.reason = f.second;
+						hits.push_back(h);
+					}
+				} else {
+					hits.push_back(h);
+					auto a = Interval(h.query_start, h.query_end);
+					auto b = Interval(h.ref_start, h.ref_end);
+					tree += make_pair(a, Subtree({b, {make_pair(a, b)}}));
+				}
+			}
+		} else {
+			INTERVAL_FAILED++;
+		}
+	} else {
+		auto f = filter(query_hash.seq, query_start, query_start + init_len, ref_hash.seq, best_ref_start, best_ref_end);
+		if (f.first || report_fails) {
+			hits.push_back({
+				query_start, query_start + init_len, best_ref_start, best_ref_end, best_winnow.jaccard(), 
+				f.second == "" ? "OK_INIT" : f.second 
+			});
+		}
+	}
+
+	return hits;
+}
+
+/******************************************************************************/
+
+vector<Hit> search (int query_winnow_start, 
+	const Index &ref_hash, 
+	const Index &query_hash, 
+	Tree &tree, 
+	bool same_genome,
+	int init_len,
+	bool allow_extend,
+	bool report_fails)
 { 
-	// TREE gives overlaps
-	//  query vs ref
-
+	if (query_winnow_start >= query_hash.minimizers.size())
+		return {};
+	int query_start = query_hash.minimizers[query_winnow_start].loc;
 	if (query_start + init_len > query_hash.seq.size())
-		return vector<Hit>();
+		return {};
 
-	// if (memorized.size()) {
-	// for (auto &me: memorized) {
-	// 	prnn("{}-{} ", me.first, me.second);
-	// } prn("");
-	// }
-
-	// CAN BE OPTIMIZED
-	int st = query_hash.find_minimizers(query_start);
-	if (st == query_hash.minimizers.size()) 
-		return vector<Hit>();
-	int mi = st;
-	
 	SlidingMap init_winnow;
 	set<int> candidates_prel;
-	auto pf = tree.find(query_start);
-	for (; mi < query_hash.minimizers.size() && query_hash.minimizers[mi].second - query_start <= init_len; mi++) { 
-		auto &h = query_hash.minimizers[mi].first;
+	int query_winnow_end = query_winnow_start;
+	for (; query_winnow_end < query_hash.minimizers.size() && 
+			query_hash.minimizers[query_winnow_end].loc - query_start <= init_len; 
+			query_winnow_end++) 
+	{ 
+		auto &h = query_hash.minimizers[query_winnow_end].hash;
 		init_winnow.add_to_query(h);
-		if (h.first != 0) // use only hashes with uppercase character!
+		if (h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
 			continue; 
 		
 		auto ptr = ref_hash.index.find(h);
 		if (ptr == ref_hash.index.end() || ptr->second.size() >= ref_hash.threshold) {
 			continue;
-		} else for (auto &pos: ptr->second) {
-			if (!allow_overlaps && pos < query_start + init_len) { // Make sure to have at least 1 kb spacing if reference = query
-				continue;
-			}
-			if (!is_in_tree(tree, pf, query_hash.minimizers[mi].second, pos)) {
-				candidates_prel.insert(pos);
+		} else for (auto pos: ptr->second) {
+			if (!same_genome || pos >= query_start + init_len) { // Make sure to have at least read_len spacing if reference = query
+				auto pf = tree.find(query_hash.minimizers[query_winnow_end].loc);
+				if (pf == tree.end() || pf->second.find(pos) == pf->second.end()) {
+					candidates_prel.insert(pos);
+				}
 			}
 		}
 	}
 	if (!init_winnow.query_size)
-		return vector<Hit>();
-	int M = relaxed_jaccard_estimate(init_winnow.query_size);
-
-	vector<int> candidates(candidates_prel.begin(), candidates_prel.end());
+		return {};
+	
 	vector<pair<int, int>> T;
-	for (int i = 0; i <= (int)candidates.size() - M; i++) {
-		int j = i + (M - 1);
+	vector<int> candidates(candidates_prel.begin(), candidates_prel.end());
+	for (int i = 0; i <= (int)candidates.size() - init_winnow.limit; i++) {
+		int j = i + (init_winnow.limit - 1);
 		if (candidates[j] - candidates[i] < init_len) {
 			int x = max(0, candidates[j] - init_len + 1), 
-				y = candidates[i] + 1;
+			    y = candidates[i] + 1;
 			if (T.size() && x < T.back().second) {
 				T.back().second = max(T.back().second, y);
 			} else {
@@ -327,91 +372,21 @@ vector<Hit> search (int query_start,
 			}
 		}
 	}
+
 	vector<Hit> hits;
 	for (auto &t: T) {
-		if (!allow_overlaps)
+		if (same_genome) {
 			t.first = max(t.first, query_start + init_len);
+		}
 		if (t.first > t.second) 
 			continue;
-
-		// eprn(">> BEGIN extend query:{:n} vs ref:{:n}...{:n}", query_start, t.first, t.second);
-	
-		TOTAL_ATTEMPTED++; 
-		auto winnow = init_winnow;
-	 
-		int ref_start = t.first, 
-			ref_end   = min(t.first + init_len, (int)ref_hash.seq.size());
-		assert(ref_start >= 0);
-		int ref_winnow_start = ref_hash.find_minimizers(ref_start);
-		assert(ref_winnow_start < ref_hash.minimizers.size());
-		assert(winnow.query_size > 0);
-
-		// winnow is W(query) ; extend it to W(query) | W(ref) and mark elements in W(query) & W(ref)
-		int ref_winnow_end = ref_winnow_start;
-		for (; ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second < ref_end; ref_winnow_end++) 
-			winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end].first);
-		// winnow.rewind();
-
-		// eprn(">> extend needed_jaccard:{} jaccard:{} init_start:{} init_jaccard={}", 
-		//     tau * winnow_query.size(),
-		//     jaccard, 
-		//     seed_ref_start, seed_jaccard);
-		// Roll until we find best inital match
-		auto best_winnow = winnow;
-		int best_jaccard = winnow.jaccard();
-		int best_ref_start = ref_start, best_ref_end = ref_end;
-		int best_ref_winnow_start = ref_winnow_start, best_ref_winnow_end = ref_winnow_end;
-		while (ref_start < t.second && ref_end < ref_hash.seq.size()) {
-			if (ref_winnow_start < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_start].second < ref_start + 1)
-				winnow.remove_from_reference(ref_hash.minimizers[ref_winnow_start++].first);
-			if (ref_winnow_end < ref_hash.minimizers.size() && ref_hash.minimizers[ref_winnow_end].second == ref_end)
-				winnow.add_to_reference(ref_hash.minimizers[ref_winnow_end++].first);
-			int j;
-			if ((j = winnow.jaccard()) > best_jaccard) {
-				best_jaccard = j;
-				best_ref_start = ref_start;
-				best_ref_end = ref_end;
-				best_ref_winnow_start = ref_winnow_start;
-				best_ref_winnow_end = ref_winnow_end;
-				best_winnow = winnow;
-			}
-			ref_start++;
-			ref_end++;
-			if (ref_end == ref_hash.seq.size()) 
-				break;
-		}
-
-		if (best_jaccard < 0) {
-			if (report_fails) hits.push_back({
-				query_start, query_start + init_len, 
-				best_ref_start, best_ref_end, 
-				best_jaccard, 
-				fmt::format("jaccard: {} < {}", best_winnow.limit + best_jaccard, best_winnow.limit)
-			});
-			JACCARD_FAILED++;
-		} else if (allow_extend) {
-			if (!check_overlap(tree, pf, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
-				INTERVAL_FAILED++;
-			} else {
-				// eprn("init jacc === {}", best_jaccard);
-				extend(best_winnow,
-					query_hash, query_start, query_start + init_len, st, mi,
-					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
-					hits, allow_overlaps, tree, report_fails
-				);
-				// pf = tree.find(query_start);
-			}
-		} else {
-			auto f = filter(query_hash.seq, query_start, init_len, ref_hash.seq, best_ref_start, best_ref_end - best_ref_start);
-			if (f.first || report_fails) hits.push_back({
-				query_start, query_start + init_len, 
-				best_ref_start, best_ref_end, 
-				best_jaccard, 
-				f.second == "" ? "OK_INIT" : f.second
-			});
-		}
+		auto h = search_in_reference_interval(
+			query_start, query_winnow_start, query_winnow_end,
+			ref_hash, query_hash, tree, same_genome, init_len,
+			allow_extend, report_fails, init_winnow, t.first, t.second);
+		hits.insert(hits.end(), h.begin(), h.end());
 	}
    
-	tree -= INTERVAL(0, query_start - MIN_READ_SIZE);
+	tree -= Interval(0, query_start - MIN_READ_SIZE);
 	return parse_hits(hits);
 }
