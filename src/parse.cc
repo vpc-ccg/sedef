@@ -10,596 +10,235 @@
 
 using namespace std;
 
-static char qrev_dna[128] = {
-    'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-    'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-    'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'T', 'N', 'G', 'N', 'N', 'N', 'C', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-    'A', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 't', 'N', 'g', 'N', 'N', 'N', 'c', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 
-    'N', 'N', 'N', 'N', 'a', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N'
+// (hash, loci), sorted by loci
+// vector<Minimizer> minimizers;
+// hash --> list of locations 
+// unordered_map<Hash, list<int>> index;
+
+struct Anchor {
+	list<int> query;
+	list<int> ref;
+	// list<int> hash;
 };
 
+// void chain_align(const string &sa, const string &sb, vector<Anchor> &chain)
+// {
+// 	int pa = chain[0].a, pb = chain[0].b;
 
-// ints are - if rev compl
-typedef tuple<string, int, int> loc_t;
+// 	vector<pair<char, int>> cigar;
+// 	for (int i = 1; i < chain.size(); i++) {
+// 		Alignment tmp = align(sa.substr(pa, chain[0].a - pa), sb.substr(pb, chain[0].b - pb));
+// 		cigar.insert(cigar.end(), tmp.cigar.begin(), tmp.cigar.end());
+// 		cigar.push_back({'M', KMER_SIZE});
+// 	}
 
-string seq(FastaReference &fr, loc_t l) 
+// 	print >> cigar;
+// }
+
+auto chain(vector<Anchor> &v)
 {
-	int a = get<1>(l);
-	int b = get<2>(l);
-	bool rc = 0;
-	if (a<0) {
-		a=-a; b=-b;
-		swap(a,b);
-		a--;
-		b--;
-		rc=1;
-	} else {
-		a--;
-		// a-=1;
-		// b-=1;
+	auto similarity = [](int i, int j) {
+		return 1;
+	};
+
+	vector<int> count(v.size(), 0);
+	vector<int> prev(v.size(), 0);
+
+	int argmax = 0;
+	for (int i = 1; i < v.size(); i++) {
+		for (int j = 0; j < i; j++) {
+			int sim = similarity(i, j);
+			if (count[j] + sim > count[i]) {
+				count[i] = count[j] + sim;
+				prev[i] = j;
+			}
+		}
+		if (count[i] > count[argmax]) {
+			argmax = i;
+		}
 	}
-    string s = fr.get_sequence(get<0>(l), a, b);
-    if (rc) {
-        reverse(s.begin(), s.end());
-        for (auto &c: s) c = qrev_dna[c];
-    }
-    return s;
+
+	vector<Anchor> result;
+	do {
+		result.push_back(v[argmax]);
+		argmax = prev[argmax];
+	} while (argmax != 0);
+
+	return result;
 }
 
-void prna(loc_t A1, loc_t B1) 
+auto cluster(const Index &hquery, const Index &href) 
 {
-	int ll = 0;
-	if (get<1>(A1) <= get<1>(B1)) prnn(" A {:10}..<{:^10}> .. {:<10} B ", get<1>(A1), get<1>(B1) - get<1>(A1), get<1>(B1)), ll=get<1>(B1);
-	if (get<1>(A1) >  get<1>(B1)) prnn(" B {:10}..<{:^10}> .. {:<10} A ", get<1>(B1), get<1>(A1) - get<1>(B1), get<1>(A1)), ll=get<1>(A1);
-	if (get<2>(A1) <= get<2>(B1)) prn(" || <{:^10}> || A {:10} .. <{:^10}> .. {:<10} B ", get<2>(A1) - ll, get<2>(A1), get<2>(B1) - get<2>(A1), get<2>(B1));
-	if (get<2>(A1) >  get<2>(B1)) prn(" || <{:^10}> || B {:10} .. <{:^10}> .. {:<10} A ", get<2>(B1) - ll, get<2>(B1), get<2>(A1) - get<2>(B1), get<2>(A1));
-}
+	// MAP hb TO ha (hb=query; ha=ref)
 
-bool ceq(char a, char b) {
-	return toupper(a)==toupper(b);
-}
+	auto T = cur_time();
 
-string xalign(string fa, string fb, int MA=5, int MIMA=-4, int GO=40, int GE=-1) ;
+	vector<pair<int, int>> pairs; // sorted by query, then ref
+	for (auto &query: hquery.minimizers) {
+		auto ptr = href.index.find(query.hash);
+		if (ptr == href.index.end()) 
+			continue;
 
-bool check_overlap(loc_t x, loc_t y) 
-{
-	if (get<0>(x) != get<0>(y)) return false;
-	if (get<2>(x) < get<1>(y) || get<1>(x) >= get<2>(y)) return false;
+		for (auto ref_loc: ptr->second) { // TODO should be sorted --- check!
+			pairs.push_back({query.loc, ref_loc});
+		}
+	}
+	eprn("## pairs = {:n}", pairs.size());
+
+	eprn(":: elapsed/pairs = {}s", elapsed(T)), T=cur_time();
+
+
+	const int MAXGAP = 250;
+	auto pless = [](const pair<int, int> &prev, const pair<int, int> &now) { // da li je [prev] < [now] ?
+		if (prev.first + KMER_SIZE > now.first) 
+			return false;
+		if (prev.second + KMER_SIZE > now.second) 
+			return false;
+		if (now.first - prev.first > MAXGAP) 
+			return false;
+		if (now.second - prev.second > MAXGAP) 
+			return false;
+		return true;
+	};
+
+	for (int i = 1; i < pairs.size(); i++)
+		assert(pairs[i - 1] < pairs[i]);
+
+	int argmax = 0;
+	vector<int> count(pairs.size(), 0), 
+	            prev(pairs.size(), 0);
+	
+	for (int i = 1; i < pairs.size(); i++) {
+		// for (int j = 0; j < i; j++) {
+		for (int j = i - 1; j >= 0; j--) {
+			if (pairs[i].first - pairs[j].first > MAXGAP) 
+				break;
+			bool ex = pless(pairs[j], pairs[i]);
+			if (count[j] + 1 > count[i] && ex) {
+				count[i] = count[j] + 1;
+				prev[i] = j;
+			}
+		}
+		if (count[i] > count[argmax]) {
+			argmax = i;
+		}
+	}
+
+	vector<list<int>> chains;
+	vector<pair<int, int>> cntx(count.size());
+	vector<char> used(count.size(), 0);
+	for (int i = 0; i < count.size(); i++) 
+		cntx[i] = {count[i], i};
+	sort(cntx.begin(), cntx.end(), greater<pair<int,int>>());
+	for (int i = 0; i < cntx.size(); i++) {
+		if (cntx[i].first < 50)  // calculate this better!
+			break;
+
+		// Recover the path
+		int start = cntx[i].second;
+		if (used[start]) continue;
+		list<int> chain;
+		while (1) {
+			// assert(!used[start]);
+			used[start] = 1;
+			chain.push_back(start);
+			if (!start || !pless(pairs[prev[start]], pairs[start]) || used[prev[start]])
+				break;
+			start = prev[start];
+		}
+		if (chain.size() >= 50) {
+			eprn("chain: len = {} / {}", chain.size(), cntx[i].first);
+			eprn("   q: {}..{} <~> r: {}..{}", 
+				pairs[chain.back()].first, pairs[chain.front()].first, 
+				pairs[chain.back()].second, pairs[chain.front()].second
+			);
+			chains.push_back(chain);
+		}
+	}
+	eprn(":: elapsed/chain = {}s [maxlen={}]", elapsed(T), count[argmax]), T=cur_time();
+
+	for (auto &chain: chains) {
+		int qs = pairs[chain.back()].first,  qe = pairs[chain.front()].first  + KMER_SIZE;
+		int rs = pairs[chain.back()].second, re = pairs[chain.front()].second + KMER_SIZE;
+		auto aln = align(hquery.seq->seq.substr(qs, qe - qs), href.seq->seq.substr(rs, re - rs),
+			5,-4,40,1,max(qe-qs,re-rs)/4
+		);
+		auto err = aln.calculate_error();
+		eprn("Aln: len={:n}, err={} (g={}, m={}), cigar={}", max(qe-qs,re-rs), 
+			err.error(), err.gap_error(), err.mis_error(),
+			aln.cigar_string());
+	}
+	eprn(":: elapsed/alignment = {}s", elapsed(T)), T=cur_time();
+
+	// 3749 woo'hoo''
+
+	// auto locate = [&](int i) {
+	// 	// find all 
+	// 	int lo = 0, hi = S.size() - 1;
+	// 	while (lo <= hi) {
+	// 		int mid = lo + (hi - lo) / 2;
+	// 		if ()
+	// 	}
+	// };
+
+	// vector<pair<int, int>> S { pairs[0] }; // Also sorted (query, ref)
+	// count[0] = 1;
+	// for (int i = 1; i < pairs.size(); i++) { 
+	// 	if (pless(S.back(), pairs[i])) {
+	// 		S.push_back(pairs[i]);
+	// 	} else {
+	// 		// returns first i s.t. X[i] >= y
+	// 		auto pos = lower_bound(S.begin(), S.end(), pairs[i], pless);
+	// 		*pos = pairs[i];
+	// 	}
+
+	// 	count[i] = S.size();
+	// 	if (count[i] > count[argmax]) {
+	// 		argmax = i;
+	// 	}
+	// }
+
+
+	
+	// clustering
 	return true;
 }
 
-/************************************************************************************************************/
-/************************************************************************************************************/
-/************************************************************************************************************/
-/************************************************************************************************************/
-/************************************************************************************************************/
 
-// format: [((i, j) span in edit string, (a, b) start pos in strings)]
-vector<pair<pair<int, int>, pair<int, int>>> max_sum(tuple<string, string, string> al, int THRESHOLD)
+void test_align(const string &sa, const string &sb)
 {
-	const string &aln = get<2>(al);
-	const string &a   = get<0>(al);
-	const string &b   = get<1>(al);
+	Index ha(make_shared<Sequence>("A", sa)), 
+	      hb(make_shared<Sequence>("B", sb));
+	eprn("size = {} / {}", sa.size(), sb.size());
 
-	vector<pair<pair<int, int>, pair<int, int>>> hits; // start, end
+	auto T = cur_time();
 
-	double score = (aln[0] == '|' ? 1 : -1);
-	int max_so_far = score, Mi = 0, Mj = 1;
-	int mm = score, mi = 0, mj = 1;
+	auto clusters = cluster(ha, hb);
+	
+	// for (auto &cluster: clusters) {
+	// 	auto chain = chain(cluster);
+	// 	auto aln = chain_align(chain);
+	// }      
 
-	int AI = 0, BI = 0;
-	pair<int, int> mI, MI;
-
-	for (int i = 1; i < aln.size(); i++) {
-		score = (aln[i] == '|' ? 1 : -1);
-		if (score > mm) {
-			if (Mj - Mi >= THRESHOLD && (!hits.size() || hits.back().first != make_pair(Mi, Mj))) {
-				hits.push_back({{Mi, Mj}, MI});
-			}
-			mm = score;
-			mi = i, mj = i + 1;
-			mI = {AI, BI};
-			max_so_far = mm;
-			Mi = mi, Mj = mj, MI = mI;
-		} else {
-			mm += score;
-			mj++;
-		}
-		if (mm > max_so_far) {
-			max_so_far = mm;
-			Mi = mi, Mj = mj, MI = mI; 
-		}
-		if (a[i] != '-') AI++;
-		if (b[i] != '-') BI++;
-	}
-	if (Mj - Mi >= THRESHOLD && (!hits.size() || hits.back().first != make_pair(Mi, Mj))) {
-		hits.push_back({{Mi, Mj}, MI});
-	}
-	return hits;
+	eprn("elapsed={}s", elapsed(T));
 }
 
-void prn_aln (tuple<string, string, string> result, int qa, int qb, int WD=2000)
+void test(int, char** argv)
 {
-	for (int i = 0; i < get<2>(result).size(); i += WD) {
-		prn("   {:10}: {} {}\n   {:10}  {}\n   {:10}: {}", 
-			qa, get<0>(result).substr(i, WD), i+get<0>(result).substr(i, WD).size(),
-			"", get<2>(result).substr(i, WD), 
-			qb, get<1>(result).substr(i, WD));
-		for (auto c: get<0>(result).substr(i, WD)) if (c != '-') qa++;
-		for (auto c: get<1>(result).substr(i, WD)) if (c != '-') qb++;
-		prnn("\n");
-	}
-}
+	FastaReference fr("data/hg19/chr2.fa");
+	string s = "chr2 96307076 97264249 chr2 114040907 115040911";
+	// ifstream fin(argv[0]);
+	while (1) {
+		auto ss = split(s, ' ');
 
-pair<pair<int,int>,pair<double,double>> get_err(tuple<string, string, string> result)
-{
-	int len = get<2>(result).size();
-	int gaps = 0, mismatches = 0;
-	for (int i = 0; i < len; i++) {
-		if (get<0>(result)[i] == '-' || get<1>(result)[i] == '-')
-			gaps++;
-		else mismatches += !ceq(get<0>(result)[i], get<1>(result)[i]);
-	}
-	double gap_err = 100*gaps/double(len);
-	double mis_err = 100*mismatches/double(len);
-	// return {mis_err, gap_err};
-	return make_pair(make_pair(gaps, mismatches), make_pair(mis_err, gap_err));
-}
+		for (auto sss: ss) eprnn("{}_", sss); eprn("");
 
-pair<pair<int, int>, pair<int, int>> trim(string &a, string &b, deque<pair<char, int>> &cigar) 
-{
-	int fa = 0, fb = 0;
-	int ga = 0, gb = 0;
-	while (cigar.size()) {
-		if (cigar[0].first == 'D') {
-			a = a.substr(cigar[0].second);
-			// prn("  Trim: removing {} at beginning of A1", cigar[0].second);
-			fa += cigar[0].second;
-			cigar.pop_front();
-			continue;
-		}
-		if (cigar[0].first == 'I') {
-			b = b.substr(cigar[0].second);
-			// prn("  Trim: removing {} at beginning of A2", cigar[0].second);
-			fb += cigar[0].second;
-			cigar.pop_front();
-			continue;
-		}
+		const int OX = 500000;
+		auto xa = fr.get_sequence(ss[0], atoi(ss[1].c_str())-OX, atoi(ss[2].c_str())+OX);
+		auto xb = fr.get_sequence(ss[3], atoi(ss[4].c_str())-OX, atoi(ss[5].c_str())+OX);
 
-		if (cigar.back().first == 'D') {
-			// prn("  Trim: removing {} at the back of A1", cigar.back().second);
-			ga -= cigar.back().second;
-			a = a.substr(0, a.size() - cigar.back().second);
-			cigar.pop_back();
-			continue;
-		}
-		if (cigar.back().first == 'I') {
-			// prn("  Trim: removing {} at the back of A2", cigar.back().second);
-			gb -= cigar.back().second;
-			b = b.substr(0, b.size() - cigar.back().second);
-			cigar.pop_back();
-			continue;
-		}
+		test_align(xa, xb);
 		break;
-	}
-	return {{fa, fb}, {ga, gb}};
-}
-
-auto cigar_to_deq(string cigarstr)
-{
-	deque<pair<char, int>> cigar;
-	for (int ci = 0, num = 0; ci < cigarstr.size(); ci++) {
-		if (isdigit(cigarstr[ci])) {
-			num = 10 * num + (cigarstr[ci] - '0');
-		} else if (cigarstr[ci] == ';') {
-			continue;
-		} else {
-			cigar.push_back({cigarstr[ci], num});
-			num = 0;
-		}
-	}
-	return cigar;
-}
-
-auto check_err(string a, string b, const deque<pair<char, int>> &cigar)
-{
-	int len = 0;
-	int ia = 0, ib = 0;
-	tuple<string, string, string> result;
-	for (auto &c: cigar) {
-		len += c.second;
-		for (int i = 0; i < c.second; i++) {
-			assert(c.first != 'M' || ia < a.size());
-			assert(c.first != 'M' || ib < b.size());
-			if (c.first == 'M' && ceq(a[ia], b[ib])) {
-				get<2>(result) += "|";
-			} else {
-				get<2>(result) += " ";
-			}
-			if (c.first != 'D') get<1>(result) += b[ib++];
-			else                get<1>(result) += "-";
-			if (c.first != 'I') get<0>(result) += a[ia++];
-			else                get<0>(result) += "-";
-		}
-	}
-	auto err = get_err(result);
-	return make_pair(err, result);
-}
-
-// B1 maps to B2 in B
-// In A1, B1 should map to which pos in A2...
-// In A2, B2 should map to which pos in A1...
-pair<pair<int, int>,pair<int, int>> find_match_in_alignment(tuple<string, string, string> result, loc_t A1, loc_t A2, loc_t B1, loc_t B2) 
-{
-	int qa1 = get<1>(A1);
-	int qa2 = get<1>(A2); 
-
-	// prn("STA {} ~ {} {}, {} ~ {} {}", qa1, get<1>(B1), get<2>(B1), qa2, get<1>(B2), get<2>(B2));
-
-	pair<int, int> mloc1 = {0, 0};
-	pair<int, int> mloc2 = {0, 0};
-	for (int i = 0; i < get<2>(result).size(); i++) {
-		if (get<0>(result)[i] != '-') qa1++;
-		if (get<1>(result)[i] != '-') qa2++;
-		
-		if (qa1 == get<1>(B1)) mloc1.first  = qa2;
-		if (qa1 == get<2>(B1)) mloc1.second  = qa2;
-
-		if (qa2 == get<1>(B2)) mloc2.first  = qa1;
-		if (qa2 == get<2>(B2)) mloc2.second  = qa1;
-	}
-	return make_pair(mloc1, mloc2);
-}
-
-string regenerate_cigar(tuple<string, string, string> r)
-{
-	// prn("CIGAR:{}\n{}\n{}", get<0>(r), get<1>(r), get<2>(r));
-	string cigar = "";
-	int sz = 0;
-	char op = 0, top;
-	for (int i = 0; i < get<2>(r).size(); i++) {
-		if (get<0>(r)[i] == '-') {
-			top = 'I';
-		} else if (get<1>(r)[i] == '-') {
-			top = 'D';
-		// } else if (!ceq(get<0>(r)[i], get<1>(r)[i])) {
-		// 	top = 'X';
-		} else {
-			// top = '=';
-			top = 'M';
-		}
-
-		if (op != top) {
-			if (op) cigar += fmt::format("{}{}", sz, op);
-			op = top, sz = 0;
-		}
-		sz++;
-	}
-	cigar += fmt::format("{}{}", sz, op);
-	return cigar;
-}
-
-void print_pair(loc_t A, loc_t B, string cigar, pair<pair<int,int>,pair<double,double>> err)
-{
-	char rc = '+';
-	prnn("{}\t{}\t{}\t", get<0>(A), get<1>(A), get<2>(A));
-	if (get<1>(B) < 0) {
-		swap(get<1>(B), get<2>(B));
-		get<1>(B) *= -1;
-		get<2>(B) *= -1;
-		rc = '-';
-	}
-	prnn("{}\t{}\t{}\t", get<0>(B), get<1>(B), get<2>(B));
-	prn("NA\t0\t+\t{}\t{}\t{}\t{:.2f}\t{}\t{}", rc, err.first.first, err.first.second, 
-		err.second.first, err.second.second, cigar);
-}
-
-bool check (FastaReference &fr, loc_t A1, loc_t A2, const string &cigarstr) 
-{
-	auto a = seq(fr, A1);
-	auto b = seq(fr, A2);
-		
-	auto cigar = cigar_to_deq(cigarstr);
-	auto tr = trim(a, b, cigar);
-	get<1>(A1) += tr.first.first;  
-	get<1>(A2) += tr.first.second; 
-	get<2>(A1) -= tr.second.first;
-	get<2>(A2) -= tr.second.second;
-
-	if (get<1>(A2)<0) {
-		// if (min (abs(get<1>(A1)- get<2>(A1)), abs(get<1>(A2)- get<2>(A2)))>=1000){
-		// eprn("{}..{} to {}..{}", get<1>(A1), get<2>(A1), get<1>(A2), get<2>(A2));
-		// eprn("   len {} {},  ", get<1>(A1)- get<2>(A1), get<1>(A2)- get<2>(A2));
-	}
-
-	// prnn("  * 1: "); prna(A1, B1);
-	// prnn("  * 2: "); prna(A2, B2);		
-	
-	auto err_aln = check_err(a, b, cigar);
-
-	if (min (abs(get<1>(A1)- get<2>(A1)), abs(get<1>(A2)- get<2>(A2)))>=1000) {
-		if (  err_aln.first.second.first + err_aln.first.second.second <= 25) {
-			print_pair(A1, A2, regenerate_cigar(err_aln.second), err_aln.first);
-			return true;
-		}
-	}
-
-	// prn("  * len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-	// 	get<0>(err_aln.second).size(), 
-	// 	err_aln.first.first, err_aln.first.second, 
-	// 	err_aln.first.first + err_aln.first.second);
-
-	// auto match = find_match_in_alignment(err_aln.second, A1, A2, B1, B2);
-	// prn("  * >> B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
-	// 	"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
-	// 	get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
-	// 	match.first.first, match.first.second,
-	// 	match.second.first, match.second.second);
-
-	// prn_aln(err_aln.second, get<1>(A1), get<1>(A2), 100);
-
-	// find maximal matches
-	auto ncos = max_sum(err_aln.second, 1000); 
-	// if (ncos.size() == 0) return false; // prnn("  !! NO MATCHES !!\n");
-	// returns list of max matchings of span at least 750
-	// format: [((i, j) span in edit string, (a, b) start pos in strings)]
-	// TODO check this for error!!! 	
-	for (auto ncop: ncos) {
-		auto ea = err_aln;
-		auto &nco = ncop.first;
-		get<0>(ea.second) = get<0>(ea.second).substr(nco.first, nco.second - nco.first);
-		get<1>(ea.second) = get<1>(ea.second).substr(nco.first, nco.second - nco.first);
-		get<2>(ea.second) = get<2>(ea.second).substr(nco.first, nco.second - nco.first);
-		ea.first = get_err(ea.second);
-
-		if (ea.first.second.first + ea.first.second.second > 25) continue;
-		if (get<1>(A2)<0) eprnn("---\n");
-
-		auto n_A1 = A1;
-		get<1>(n_A1) += ncop.second.first;  // shift A1
-		get<2>(n_A1) = get<1>(n_A1);
-		for (auto c: get<0>(ea.second)) if (c != '-') get<2>(n_A1)++;
-
-		auto n_A2 = A2;
-		get<1>(n_A2) += ncop.second.second; // shift A2
-		get<2>(n_A2) = get<1>(n_A2);
-		for (auto c: get<1>(ea.second)) if (c != '-') get<2>(n_A2)++;
-
-		int nlow0 = 0, nlow1 = 0;
-		for (auto c: get<0>(ea.second)) if (isupper(c)) nlow0++;
-		for (auto c: get<1>(ea.second)) if (isupper(c)) nlow1++;
-
-		// if (nlow0 < 500) continue;
-		// if (nlow1 < 500) continue;
-
-		// if (min(nlow1, nlow0) < 50) continue; 
-
-		print_pair(n_A1, n_A2, regenerate_cigar(ea.second), ea.first);
-
-		// prnn("  + 1: "); prna(n_A1, B1);
-		// prnn("  + 2: "); prna(n_A2, B2);		
-
-		// prn("  + len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-		// 	get<0>(ea.second).size(), 
-		// 	ea.first.first, ea.first.second, 
-		// 	ea.first.first + ea.first.second);
-
-		// match = find_match_in_alignment(ea.second, n_A1, n_A2, B1, B2);
-		// prn("  + !! B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
-		// 	"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
-		// 	get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
-		// 	match.first.first, match.first.second,
-		// 	match.second.first, match.second.second);
-		// prn_aln(ea.second, get<1>(n_A1), get<1>(n_A2));
-	}
-
-	return false; // (err.first.first+err.first.second <= 25);
-}
-
-loc_t make_loc(string chr, int a, int b, bool rc) 
-{
-	if (rc) {
-		return loc_t(chr, -b, -a);
-	} else {
-		return loc_t(chr, a, b);
-	}
-}
-
-void parse(int argc, char **argv)
-{
-	FastaReference fr(argv[1]);
-
-	ifstream fin(argv[2]);
-	string s;
-	eprnn("Starting...\n");
-	while (getline(fin, s)) {
-		auto sp = split(s, '\t');
-
-		// Reverse...
-		int q = sp[9][0] == '-';
-		loc_t A1 = make_loc(sp[0], atoi(sp[1].c_str()), atoi(sp[2].c_str()), false);
-		loc_t A2 = make_loc(sp[3], atoi(sp[4].c_str()), atoi(sp[5].c_str()), q);
-
-		// eprn("{} {} {} {}", sp[3], sp[4], sp[5], q);
-
-		// int q = sp[19][0] == '-';
-		// loc_t A1 = make_loc(sp[10], atoi(sp[11].c_str()), atoi(sp[12].c_str()), false);
-		// loc_t A2 = make_loc(sp[13], atoi(sp[14].c_str()), atoi(sp[15].c_str()), q);
-
-
-		check(fr, A1, A2, sp[16]);
-	}
-}
-
-
-
-
-
-
-// void parse(int argc, char **argv)
-// {
-// 	AHOAutomata ah;
-	
-// 	// for (int IT = 0; IT < 1000000; IT++) {
-// 	ifstream fin("data/hg19/chr1.fa");
-// 	string ref, s;
-// 	getline(fin, s);
-// 	while (getline(fin, s)) {
-// 		for (auto c: s) ref += toupper(c);
-// 	}
-// 	for (int IT = 0; IT < ref.size() - 750; IT +=1000) {
-// 		// randomize string
-
-// 		string a = ref.substr(IT, 750);
-// 		int q=0; for (auto c: a) if (c == 'N') q++;
-// 		if (q>50) continue;
-
-// 		// string a;
-// 		// for (int i = 0; i < 750; i++) {
-// 		// 	a += "ACGT"[rand() % 4];
-// 		// }
-
-// 		string b = a;
-// 		for (int i = 0; i < 750; i++) {
-// 			int chance = rand() % 10;
-// 			if (chance < 1) {
-// 				char n = "ACGT"[rand() % 4];
-// 				while (b[i] == n) n = "ACGT"[rand() % 4];
-// 				b[i] = n;
-// 			}
-// 		}
-
-// 		map<int, int> hits;
-// 	    int common = 0;
-// 	    ah.search(a.c_str(), a.size(), hits, 1);
-// 	    ah.search(b.c_str(), a.size(), hits, 2);
-// 	    for (auto it = hits.begin(); it != hits.end(); it++)
-// 	        if (it->second == 3) common++;
-
-// 	    //double boundary = (3.0/4) * (q_len / 50.0);
-// 	    prn("{}", common);
-// 	}
-// }
-
-
-
-
-
-bool check (FastaReference &fr, loc_t A1, loc_t A2, loc_t B1, loc_t B2, const string &cigarstr) 
-{
-	auto a = seq(fr, A1);
-	auto b = seq(fr, A2);
-		
-	auto cigar = cigar_to_deq(cigarstr);
-	auto tr = trim(a, b, cigar);
-	get<1>(A1) += tr.first.first;  
-	get<1>(A2) += tr.first.second; 
-	get<2>(A1) -= tr.second.first;
-	get<2>(A2) -= tr.second.second;
-
-	prnn("  * 1: "); prna(A1, B1);
-	prnn("  * 2: "); prna(A2, B2);		
-	
-	auto err_aln = check_err(a, b, cigar);
-
-	if (err_aln.first.second.first + err_aln.first.second.second <= 25) {
-		return true;
-	}
-
-	prn("  * len={}; mis={:.1f}; gap={}; total={}", 
-		get<0>(err_aln.second).size(), 
-		err_aln.first.second.first, err_aln.first.second.second, 
-		err_aln.first.second.first + err_aln.first.second.second);
-
-	auto match = find_match_in_alignment(err_aln.second, A1, A2, B1, B2);
-	prn("  * >> B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
-		"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
-		get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
-		match.first.first, match.first.second,
-		match.second.first, match.second.second);
-
-	prn_aln(err_aln.second, get<1>(A1), get<1>(A2), 100);
-
-	// find maximal matches
-	auto ncos = max_sum(err_aln.second, 1000); 
-	// if (ncos.size() == 0) return false; // prnn("  !! NO MATCHES !!\n");
-	// returns list of max matchings of span at least 750
-	// format: [((i, j) span in edit string, (a, b) start pos in strings)]
-	// TODO check this for error!!! 	
-	for (auto ncop: ncos) {
-		auto ea = err_aln;
-		auto &nco = ncop.first;
-		get<0>(ea.second) = get<0>(ea.second).substr(nco.first, nco.second - nco.first);
-		get<1>(ea.second) = get<1>(ea.second).substr(nco.first, nco.second - nco.first);
-		get<2>(ea.second) = get<2>(ea.second).substr(nco.first, nco.second - nco.first);
-		ea.first = get_err(ea.second);
-
-		if (ea.first.second.first + ea.first.second.second > 25) continue;
-
-		auto n_A1 = A1;
-		get<1>(n_A1) += ncop.second.first;  // shift A1
-		get<2>(n_A1) = get<1>(n_A1);
-		for (auto c: get<0>(ea.second)) if (c != '-') get<2>(n_A1)++;
-
-		auto n_A2 = A2;
-		get<1>(n_A2) += ncop.second.second; // shift A2
-		get<2>(n_A2) = get<1>(n_A2);
-		for (auto c: get<1>(ea.second)) if (c != '-') get<2>(n_A2)++;
-
-		// print_pair(n_A1, n_A2, regenerate_cigar(ea.second), ea.first);
-
-		prnn("  + 1: "); prna(n_A1, B1);
-		prnn("  + 2: "); prna(n_A2, B2);		
-
-		prn("  + len={}; mis={:.1f}; gap={:.1f}; total={:.1f}", 
-			get<0>(ea.second).size(), 
-			ea.first.second.first, ea.first.second.second, 
-			ea.first.second.first + ea.first.second.second);
-
-		match = find_match_in_alignment(ea.second, n_A1, n_A2, B1, B2);
-		prn("  + !! B1 ({:10} .. {:<10}) and B2 ({:10} .. {:<10}) in A:\n"
-			"       B1  {:10} .. {:<10},     B2  {:10} .. {:<10}",
-			get<1>(B1), get<2>(B1), get<1>(B2), get<2>(B2),
-			match.first.first, match.first.second,
-			match.second.first, match.second.second);
-		prn_aln(ea.second, get<1>(n_A1), get<1>(n_A2));
-	}
-
-	return false; // (err.first.first+err.first.second <= 25);
-}
-
-
-void parsex(int argc, char **argv)
-{
-	eprnn("parsiiiing!\n");
-
-	FastaReference fr(argv[1]);
-
-	ifstream fin(argv[2]);
-	string s;
-	int _q = 0, i = 0;
-	while (getline(fin, s)) {
-		prn("{}: {}", ++i, s);
-		auto sp = split(s, '\t');
-
-		// Reverse...
-
-		int q = sp[9][0] == '-';
-		loc_t B1 = make_loc(sp[0], atoi(sp[1].c_str()), atoi(sp[2].c_str()), false);
-		loc_t B2 = make_loc(sp[3], atoi(sp[4].c_str()), atoi(sp[5].c_str()), q);
-
-		q = sp[19][0] == '-';
-		loc_t A1 = make_loc(sp[10], atoi(sp[11].c_str()), atoi(sp[12].c_str()), false);
-		loc_t A2 = make_loc(sp[13], atoi(sp[14].c_str()), atoi(sp[15].c_str()), q);
-
-		if (!check_overlap(A1, B1)) 
-			swap(B1, B2);
-		assert(check_overlap(A1, B1));
-		assert(check_overlap(A2, B2));
-
-		if (!check(fr, A1, A2, B1, B2, sp[sp.size()-1]))
-			_q++;
-		if (_q > 10) break;
 	}
 }
 

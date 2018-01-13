@@ -16,21 +16,13 @@
 #include <boost/icl/interval_set.hpp>
 
 #include "hash.h"
+#include "align.h"
 
 /******************************************************************************/
 
 typedef boost::icl::discrete_interval<int> Interval;
 typedef boost::icl::interval_map<int, set<pair<Interval, Interval>>> Subtree;
 typedef boost::icl::interval_map<int, Subtree> Tree;
-
-/******************************************************************************/
-
-struct Hit {
-	int query_start, query_end; // query range
-	int ref_start, ref_end; // reference range
-	int jaccard; // coordinates of seed matches
-	string reason;
-};
 
 /******************************************************************************/
 

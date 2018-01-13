@@ -39,14 +39,20 @@ namespace std {
 
 /******************************************************************************/
 
+struct Sequence {
+	string name;
+	string seq;
+	const bool is_rc;
+
+	Sequence(const string &name, const string &seq, bool is_rc = false);
+};
+
 struct Index {
 	const int kmer_size;
 	const int window_size;
-
 	unsigned int threshold;
 
-	string name;
-	string seq;
+	shared_ptr<Sequence> seq;
 
 	// (hash, loci), sorted by loci
 	vector<Minimizer> minimizers;
@@ -54,7 +60,7 @@ struct Index {
 	unordered_map<Hash, list<int>> index;
 
 public:
-	Index(const string &name, const string &s, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE);
+	Index(shared_ptr<Sequence> seq, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE);
 
 	// Find first minimizer at loci p
 	int find_minimizers(int p) const;

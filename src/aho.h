@@ -26,9 +26,9 @@ class AHOAutomata {
 		Trie *fail, *next_to_output;
 		int output;
 
-		Trie (): output(-1), fail(0), next_to_output(0) {}
+		Trie(): output(-1), fail(0), next_to_output(0) {}
 
-		void insert_pattern (const string &s, int level, int id);
+		void insert_pattern(const string &s, int level, int id);
 	};
 
 	vector<string> patterns;

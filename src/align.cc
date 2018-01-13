@@ -19,9 +19,9 @@ using namespace std;
 
 /******************************************************************************/
 
-alignment_t alignment_t::from_cigar(const string &a, const string &b, const string &cigar_str)
+Alignment Alignment::from_cigar(const string &a, const string &b, const string &cigar_str)
 {
-	auto aln = alignment_t{ "A", 0, (int)a.size(), "B", 0, (int)b.size(), a, b, "", "", "", {} };
+	auto aln = Alignment{ "A", 0, (int)a.size(), "B", 0, (int)b.size(), a, b, "", "", "", {}, {} };
 	for (int ci = 0, num = 0; ci < cigar_str.size(); ci++) {
 		if (isdigit(cigar_str[ci])) {
 			num = 10 * num + (cigar_str[ci] - '0');
@@ -36,7 +36,7 @@ alignment_t alignment_t::from_cigar(const string &a, const string &b, const stri
 	return aln;
 }
 
-string alignment_t::cigar_string()
+string Alignment::cigar_string()
 {
 	string res;
 	for (auto &p: cigar) {
@@ -45,7 +45,7 @@ string alignment_t::cigar_string()
 	return res;
 }
 
-alignment_t alignment_t::trim() 
+Alignment Alignment::trim() 
 {
 	auto result = *this;
 	while (result.cigar.size()) {
@@ -74,7 +74,7 @@ alignment_t alignment_t::trim()
 	return result;
 }
 
-void alignment_t::populate_nice_alignment()
+void Alignment::populate_nice_alignment()
 {
 	align_a = "";
 	align_b = "";
@@ -97,7 +97,7 @@ void alignment_t::populate_nice_alignment()
 	}
 }
 
-alignment_t::aln_error_t alignment_t::calculate_error()
+Alignment::AlignmentError Alignment::calculate_error()
 {
 	if (!alignment.size()) populate_nice_alignment();
 
@@ -114,10 +114,10 @@ alignment_t::aln_error_t alignment_t::calculate_error()
 			}
 		}
 	}
-	return aln_error_t{gaps, gap_bases, mismatches, matches};
+	return AlignmentError{gaps, gap_bases, mismatches, matches};
 }
 
-string alignment_t::print(int width)
+string Alignment::print(int width)
 {
 	if (!alignment.size()) {
 		populate_nice_alignment();
@@ -150,7 +150,7 @@ string alignment_t::print(int width)
 	return res;
 }
 
-string alignment_t::print_only_alignment(int width)
+string Alignment::print_only_alignment(int width)
 {
 	if (!alignment.size()) {
 		populate_nice_alignment();
@@ -171,8 +171,7 @@ string alignment_t::print_only_alignment(int width)
 	return res;
 }
 
-
-void alignment_t::cigar_from_alignment() 
+void Alignment::cigar_from_alignment() 
 {
 	cigar.clear();
 	int sz = 0;
@@ -195,7 +194,7 @@ void alignment_t::cigar_from_alignment()
 	cigar.push_back(make_pair(op, sz));
 }
 
-vector<alignment_t> alignment_t::max_sum(int min_span)
+vector<Alignment> Alignment::max_sum(int min_span)
 {
 	assert(alignment.size());
 
@@ -245,7 +244,7 @@ vector<alignment_t> alignment_t::max_sum(int min_span)
 		hits.push_back({best_start, best_end});
 	}
 
-	vector<alignment_t> results;
+	vector<Alignment> results;
 	for (auto &h: hits) {
 		// translate: a --> b
 		results.push_back({
@@ -266,7 +265,69 @@ vector<alignment_t> alignment_t::max_sum(int min_span)
 
 /******************************************************************************/
 
-alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int sc_mis, int gapo, int gape)
+Hit Hit::from_bed(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref)
+{
+	Hit h{query, 0, 0, ref, 0, 0, 0, "", "", {}};
+
+	auto ss = split(bed, '\t');
+	assert(ss.size() >= 10);
+
+	h.query_start = atoi(ss[1].c_str());
+	h.query_end = atoi(ss[2].c_str());
+	h.ref_start = atoi(ss[4].c_str());
+	h.ref_end = atoi(ss[5].c_str());
+
+	assert(h.query->is_rc == (ss[8][0] != '+'));
+	assert(h.ref->is_rc == (ss[9][0] != '+'));
+
+	h.name = ss[6];
+	if (ss.size() >= 15) {
+		h.comment = ss[14];
+	}
+	if (ss.size() >= 14) {
+		h.jaccard = atoi(ss[13].c_str());
+	}
+	if (ss.size() >= 13) {
+		h.aln = Alignment::from_cigar(query->seq, ref->seq, ss[12]);
+	}
+
+	return h;
+}
+
+string Hit::to_bed()
+{
+	assert(!query->is_rc);
+	return fmt::format(
+		"{}\t{}\t{}\t" // QUERY 0 1 3
+		"{}\t{}\t{}\t" // REF   3 4 5
+		"{}\t{}\t"     // NAME 6 SCORE 7
+		"\t+\t{}\t"    // 8 STRAND 9
+		"{}\t{}\t"     // MAXLEN 10 ALNLEN 11 
+		"{}\t{}\t{}",  // CIGAR 12 JACCARD 13 COMMENT 14
+		query->name, query_start, query_end, 
+		ref->name, 
+		ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
+		ref->is_rc ?  ref->seq.size() - ref_end + 1 : ref_end,
+		name,
+		aln.a.size() ? aln.error.error() : -1,
+		ref->is_rc ? "-" : "+",
+		// Optional fields
+		// - Max. length
+		// - Aln. length
+		// - CIGAR
+		// - Jaccard similarity
+		// - Reason
+		max(query_end - query_start, ref_end - ref_start),
+		aln.alignment.size(),
+		aln.cigar_string(),
+		jaccard,
+		comment
+	);
+}
+
+/******************************************************************************/
+
+Alignment align_helper(const string &tseq, const string &qseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
 	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
 
@@ -286,28 +347,28 @@ alignment_t align_helper(const string &tseq, const string &qseq, int sc_mch, int
 			min(STEP, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
 			5, mat, // M; MxM matrix
 			gapo, gape, 
-			-1, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
+			bandwidth, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
 			0, &ez);
 		for (int i = 0; i < ez.n_cigar; i++) {
 			cigar.push_back({"MID"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
 		}
 		free(ez.cigar);
 	}
-	return alignment_t{ 
+	return Alignment{ 
 		"A", 0, (int)qseq.size(), 
 		"B", 0, (int)tseq.size(), 
 		qseq, tseq, "", "", "", cigar 
 	};
 }
 
-alignment_t align(const string &fa, const string &fb, int match, int mismatch, int gap_open, int gap_extend)
+Alignment align(const string &fa, const string &fb, int match, int mismatch, int gap_open, int gap_extend, int bandwidth)
 {
 	string xa = fa, xb = fb;
 
 	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
 	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
 
-	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend);
+	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend, bandwidth);
 	a.a = fa, a.b = fb;
 	a.populate_nice_alignment();
 	return a;
