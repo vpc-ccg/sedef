@@ -66,9 +66,10 @@ struct Hit {
 
 	int jaccard; // coordinates of seed matches
 	string name, comment;
-	
+
 	Alignment aln;
 
+	static Hit from_bed(const std::string &bed);
 	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
 	std::string to_bed();
 };

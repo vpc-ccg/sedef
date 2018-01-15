@@ -9,6 +9,8 @@
 #include <string>
 #include <algorithm>
 #include <chrono>
+#include <glob.h>
+#include <experimental/filesystem>
 
 #include "align.h"
 #include "common.h"
@@ -265,12 +267,43 @@ vector<Alignment> Alignment::max_sum(int min_span)
 
 /******************************************************************************/
 
-Hit Hit::from_bed(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref)
+Hit Hit::from_bed(const string &bed)
 {
-	Hit h{query, 0, 0, ref, 0, 0, 0, "", "", {}};
-
 	auto ss = split(bed, '\t');
 	assert(ss.size() >= 10);
+	
+	Hit h {
+		make_shared<Sequence>(ss[0], "", ss[8][0] != '+'), 0, 0, 
+		make_shared<Sequence>(ss[3], "", ss[9][0] != '+'), 0, 0, 
+		0, "", "", {}
+	};
+
+	h.query_start = atoi(ss[1].c_str());
+	h.query_end = atoi(ss[2].c_str());
+	h.ref_start = atoi(ss[4].c_str());
+	h.ref_end = atoi(ss[5].c_str());
+
+	h.name = ss[6];
+	if (ss.size() >= 15) {
+		h.comment = ss[14];
+	}
+	if (ss.size() >= 14) {
+		h.jaccard = atoi(ss[13].c_str());
+	}
+
+	return h;
+}
+
+Hit Hit::from_bed(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref)
+{
+	auto ss = split(bed, '\t');
+	assert(ss.size() >= 10);
+
+	Hit h {
+		query, 0, 0, 
+		ref, 0, 0, 
+		0, "", "", {}
+	};
 
 	h.query_start = atoi(ss[1].c_str());
 	h.query_end = atoi(ss[2].c_str());
@@ -301,7 +334,7 @@ string Hit::to_bed()
 		"{}\t{}\t{}\t" // QUERY 0 1 3
 		"{}\t{}\t{}\t" // REF   3 4 5
 		"{}\t{}\t"     // NAME 6 SCORE 7
-		"\t+\t{}\t"    // 8 STRAND 9
+		"+\t{}\t"    // 8 STRAND 9
 		"{}\t{}\t"     // MAXLEN 10 ALNLEN 11 
 		"{}\t{}\t{}",  // CIGAR 12 JACCARD 13 COMMENT 14
 		query->name, query_start, query_end, 
@@ -376,50 +409,124 @@ Alignment align(const string &fa, const string &fb, int match, int mismatch, int
 
 /******************************************************************************/
 
-void generate_alignments(const string &ref_path, const string &bed_path, int resume_after) 
+auto schedule_alignments(const string &bed_path, int nbins, string output_dir = "")
 {
-	auto start = cur_time();
-	
+	namespace fs = std::experimental::filesystem;
+
+	vector<string> files;
+	if (fs::is_regular_file(bed_path)) {
+		files.push_back(bed_path);
+	} else if (fs::is_directory(bed_path)) {
+		glob_t glob_result;
+		glob((bed_path + "/*.bed").c_str(), GLOB_TILDE, NULL, &glob_result);
+		for (int i = 0; i < glob_result.gl_pathc; i++) {
+			string f = glob_result.gl_pathv[i];
+			if (fs::is_regular_file(f)) {
+				files.push_back(f);
+			}
+		}
+	} else {
+		throw fmt::format("Path {} is neither file nor directory", bed_path);
+	}
+
+	vector<vector<Hit>> bins(2000);
+	for (auto &file: files) {
+		ifstream fin(file.c_str());
+		if (!fin.is_open()) {
+			throw fmt::format("BED file {} does not exist", bed_path);
+		}
+
+		int nhits = 0;
+		string s;
+		while (getline(fin, s)) {
+			Hit h = Hit::from_bed(s);
+			int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
+			assert(complexity / 1000 < bins.size());
+			bins[complexity / 1000].push_back(h);
+			nhits++;
+		}
+		eprn("Read {} alignments in {}", nhits, file);
+	}
+
+	vector<vector<Hit>> results(nbins);
+	int bc = 0;	
+	for (auto &bin: bins) {
+		for (auto &hit: bin) {
+			results[bc].push_back(hit);
+			bc = (bc + 1) % nbins;
+		}
+	}
+
+	if (output_dir != "") {
+		int count = 0;
+		for (auto &bin: results) {
+			string of = output_dir + fmt::format("/bucket_{:04d}", count++);
+			ofstream fout(of.c_str());
+			if (!fout.is_open()) {
+				throw fmt::format("Cannot open file {} for writing", of);
+			}
+			for (auto &h: bin) {
+				fout << h.to_bed() << endl;
+			}
+			fout.close();
+			eprn("Wrote {} alignments in {}", bin.size(), of);
+		}
+	}
+
+	return results;
+}
+
+vector<Hit> test_align(const string &sa, const string &sb);
+void generate_alignments(const string &ref_path, const string &bed_path) 
+{
+	auto T = cur_time();
+
+	auto schedule = schedule_alignments(bed_path, 4);
 	FastaReference fr(ref_path);
-	ifstream fin(bed_path.c_str());
-	if (!fin.is_open()) {
-		throw fmt::format("BED file {} does not exist", bed_path);
+
+	int lines = 0, total = 0;
+	for (auto &s: schedule) 
+		total += s.size();
+
+	#pragma omp parallel
+	for (int i = 0; i < schedule.size(); i++) {
+		for (auto &h: schedule[i]) {
+			string fa, fb;
+			#pragma omp critical 
+			{
+				fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
+				fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
+			}
+			if (h.ref->is_rc) fb = rc(fb);
+
+			#if 0
+				h.aln = align(fa, fb);
+				#pragma omp critical
+				{
+					prn("{}", h.to_bed());
+					lines++;
+					// fflush(stdout);
+					eprnn("\r {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
+						fa.size(), fb.size());
+				}
+			#else
+				#pragma omp critical
+				eprn("{}", h.to_bed());
+				auto alns = test_align(fa, fb);
+				#pragma omp critical
+				{
+					lines++;
+					for (auto &h: alns) {
+						prn("{}", h.to_bed());
+					}
+					eprnn("\n {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
+						fa.size(), fb.size());
+				}
+			#endif
+		}
 	}
 
-	int nl = 0;
-	string s;
-	while (getline(fin, s)) {
-		if (nl <= resume_after) 
-			continue;
-
-		vector<string> ss = split(s, '\t');
-
-		string ca = ss[0];
-		int sa = atoi(ss[1].c_str()), ea = atoi(ss[2].c_str());
-		string cb = ss[3];
-		int sb = atoi(ss[4].c_str()), eb = atoi(ss[5].c_str());
-		char sta = ss[7][0], stb = ss[8][0];
-
-		assert(sta == '+');
-		bool is_rc = (stb != '+');
-
-		string fa = fr.get_sequence(ca, sa, ea);
-		string fb = fr.get_sequence(cb, sb, eb);
-		if (is_rc) fb = rc(fb);
-
-		auto aln = align(fa, fb);
-		aln.chr_a = ca; aln.start_a = sa; aln.start_b = sb;
-		aln.chr_a = ca; aln.start_a = sa; aln.start_b = sb;
-
-		eprn("\t{}s\t{}", elapsed(start), nl);
-		prn("{}\t{}\t{}\t{}", s, aln.cigar_string(), fa, fb);
-		fflush(stdout);
-
-		nl++;
-	}
-
-	eprn("Finished BED {}: read {} lines", string(bed_path), nl);
-	eprnn("Done!\n");
+	eprn("Finished BED {} in {}s ({} lines)", bed_path, elapsed(T), lines);
 }
 
 void postprocess(const string &ref_path, const string &bed_path)
@@ -434,9 +541,13 @@ void align_main(int argc, char **argv)
 	}
 
 	string command = argv[0];
-	if (command == "generate") {
-		int resume_after = argc < 4 ? -1 : atoi(argv[3]);
-		generate_alignments(argv[1], argv[2], resume_after);
+	if (command == "schedule") {
+		if (argc < 4) {
+			throw fmt::format("Not enough arguments to align-schedule");
+		}
+		schedule_alignments(argv[1], atoi(argv[3]), argv[2]);
+	} else if (command == "generate") {
+		generate_alignments(argv[1], argv[2]);
 	} else if (command == "process") {
 		postprocess(argv[1], argv[2]);
 	} else {
