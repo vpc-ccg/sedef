@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 
+#include "aho.h"
 #include "common.h"
 #include "search.h"
 #include "search_main.h"
@@ -23,6 +24,8 @@ extern int64_t QGRAM_NORMAL_FAILED;
 extern int64_t OTHER_FAILED;
 extern int64_t CORE_FAILED;
 extern int64_t INTERVAL_FAILED;
+
+extern shared_ptr<AHOAutomata> aho;
 
 /******************************************************************************/
 
@@ -43,6 +46,8 @@ void search_main(string ref_path, string query_chr, string ref_chr, bool is_ref_
 	eprn("Same genome:        {}", is_same_genome);
 	eprn("Reverse complement: {}", is_ref_complement);
 
+	aho = make_shared<AHOAutomata>();
+
 	Tree tree;
 	int total = 0, track = 0;
 	for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
@@ -51,14 +56,14 @@ void search_main(string ref_path, string query_chr, string ref_chr, bool is_ref_
 			continue; // ignore N or lowercase hashes
 
 		if (qm.loc / 10000 != track) {
-			eprnn("\r   {} {:.1f}% (loci={:n} hits={:n})", 
+			eprnn("\r |>{}<| {:.1f}% (loci={:n} hits={:n})", 
 				string(int(pct(qm.loc, query_hash->seq->seq.size()) / 2) + 1, '-'), 
 				pct(qm.loc, query_hash->seq->seq.size()), qm.loc, total
 			);
 			track = qm.loc / 10000;
 		}
 
-		auto hits = search(qi, *ref_hash, *query_hash, tree, is_same_genome);
+		auto hits = search(qi, query_hash, ref_hash, tree, is_same_genome);
 		for (auto &pp: hits) {
 			prn("{}", pp.to_bed());
 		}
@@ -80,8 +85,4 @@ void search_main(string ref_path, string query_chr, string ref_chr, bool is_ref_
 	     QGRAM_NORMAL_FAILED, 
 	     CORE_FAILED
 	);
-
-	// if (query_hash != &ref_hash) {
-	// 	delete query_hash;
-	// }
 }

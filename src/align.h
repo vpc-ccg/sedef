@@ -57,26 +57,7 @@ struct Alignment {
 	AlignmentError calculate_error();
 };
 
-struct Hit {
-	const shared_ptr<Sequence> query;
-	int query_start, query_end; // query range
-
-	const shared_ptr<Sequence> ref;
-	int ref_start, ref_end; // reference range
-
-	int jaccard; // coordinates of seed matches
-	string name, comment;
-
-	Alignment aln;
-
-	static Hit from_bed(const std::string &bed);
-	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
-	std::string to_bed();
-};
-
 /******************************************************************************/
-
-void align_main(int argc, char **argv);
 
 Alignment align(const std::string &fa, const std::string &fb, 
 	int match = 5, 

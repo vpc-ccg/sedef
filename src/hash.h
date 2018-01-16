@@ -60,7 +60,7 @@ struct Index {
 	unordered_map<Hash, list<int>> index;
 
 public:
-	Index(shared_ptr<Sequence> seq, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE);
+	Index(shared_ptr<Sequence> seq, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE, bool separate_lowercase = true);
 
 	// Find first minimizer at loci p
 	int find_minimizers(int p) const;

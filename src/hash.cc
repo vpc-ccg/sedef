@@ -48,7 +48,7 @@ bool operator==(const Minimizer &x, const Minimizer &y)
 
 /******************************************************************************/
 
-vector<Minimizer> get_minimizers(const string &s, const int kmer_size, const int window_size)
+vector<Minimizer> get_minimizers(const string &s, const int kmer_size, const int window_size, bool separate_lowercase)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
@@ -71,8 +71,11 @@ vector<Minimizer> get_minimizers(const string &s, const int kmer_size, const int
 
 		Hash hh { h, last_n >= (i - kmer_size + 1) 
 			? Hash::Status::HAS_N 
-			: (last_u >= (i - kmer_size + 1) ? Hash::Status::HAS_UPPERCASE : Hash::Status::ALL_LOWERCASE) 
+			: (last_u >= (i - kmer_size + 1)) ? Hash::Status::HAS_UPPERCASE : Hash::Status::ALL_LOWERCASE
 		};   
+		if (!separate_lowercase && hh.status == Hash::Status::ALL_LOWERCASE) {
+			hh.status = Hash::Status::HAS_UPPERCASE;
+		}
 		while (!window.empty() && !(window.back().hash < hh)) {
 			window.pop_back();
 		}
@@ -102,13 +105,13 @@ Sequence::Sequence(const string &name, const string &seq, bool is_rc):
 
 /******************************************************************************/
 
-Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size): 
+Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size, bool separate_lowercase): 
 	seq(seq), kmer_size(kmer_size), window_size(window_size) 
 {
 	// eprn("Hashing {} bps", s.size());
 
 	assert(kmer_size <= 16);
-	minimizers = get_minimizers(seq->seq, kmer_size, window_size);
+	minimizers = get_minimizers(seq->seq, kmer_size, window_size, separate_lowercase);
 	
 	for (auto &i: minimizers) {
 		index[i.hash].push_back(i.loc);

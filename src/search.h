@@ -15,6 +15,7 @@
 #include <boost/icl/interval_map.hpp>
 #include <boost/icl/interval_set.hpp>
 
+#include "hit.h"
 #include "hash.h"
 #include "align.h"
 
@@ -27,11 +28,11 @@ typedef boost::icl::interval_map<int, Subtree> Tree;
 /******************************************************************************/
 
 vector<Hit> search (int query_winnow_start, 
-	const Index &ref_hash, 
-	const Index &query_hash, 
+	shared_ptr<Index> query_hash, 
+	shared_ptr<Index> ref_hash, 
 	Tree &tree,
-	bool same_genome = true,
-	int init_len = MIN_READ_SIZE,
-	bool allow_extend = true,
-	bool report_fails = false);
+	const bool same_genome = true,
+	const int init_len = MIN_READ_SIZE,
+	const bool allow_extend = true,
+	const bool report_fails = false);
 

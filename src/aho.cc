@@ -13,6 +13,7 @@
 
 #include "common.h"
 #include "aho.h"
+#include "hit.h"
 
 using namespace std;
 
