@@ -36,7 +36,7 @@ double overlap(int sa, int ea, int sb, int eb)
 
 /******************************************************************************/
 
-vector<Hit> read_wgac(string ref_path, string tab_path)
+vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac)
 {
 	eprnn("Loading reference... ");
 	FastaReference fr(ref_path);
@@ -47,26 +47,43 @@ vector<Hit> read_wgac(string ref_path, string tab_path)
 	if (!fin.is_open()) {
 		throw fmt::format("WGAC TAB file {} does not exist", tab_path);
 	}
-	getline(fin, s); // header
+	if (is_wgac) {
+		getline(fin, s); // header
+	}
 
 	unordered_set<string> seen;
 	vector<Hit> hits;
 	while (getline(fin, s)) {
-		auto ss = split(s, '\t');
-		string chrq = ss[0], chrr = ss[6];
-		bool rc = ss[5][0] != '+';
-		if (chrq != "chr22" || chrr != "chr22")
-			continue;
+		Hit hit;
+		if (is_wgac) {
+			hit = Hit::from_wgac(s);		
+		} else {
+			hit = Hit::from_bed(s);		
+		}
+
+		string chrq = hit.query->name, 
+		       chrr = hit.ref->name;
+		assert(!hit.query->is_rc);
+		bool rc = hit.ref->is_rc;
+
 		if (chrq.size() > 5 || chrr.size() > 5)
+			continue;
+		if (chrq != "chr22" || chrr != "chr22")
 			continue;
 
 		if (ref.find({chrq, false}) == ref.end()) 
 			ref[{chrq, false}] = make_shared<Sequence>(chrq, fr.get_sequence(chrq));
 		if (ref.find({chrr, rc}) == ref.end()) 
 			ref[{chrr, rc}] = make_shared<Sequence>(chrr, fr.get_sequence(chrr), rc);
+		hit.query = ref[{chrq, false}];
+		hit.ref = ref[{chrr, rc}];
 
-		auto hit = Hit::from_wgac(s, ref[{chrq, false}], ref[{chrr, rc}]);
-		if (seen.find(hit.name) == seen.end()) {
+		if (hit.ref->is_rc) {
+			swap(hit.ref_start, hit.ref_end);
+			hit.ref_start = hit.ref->seq.size() - hit.ref_start;
+			hit.ref_end = hit.ref->seq.size() - hit.ref_end;
+		}
+		if (!is_wgac || seen.find(hit.name) == seen.end()) {
 			seen.insert(hit.name);
 			hits.push_back(hit);
 		}
@@ -78,14 +95,16 @@ vector<Hit> read_wgac(string ref_path, string tab_path)
 
 /******************************************************************************/
 
+//  932    5 |> A	932	1958	B	792	1924		17.9844	+	+	1132	1151	219M14I201M14I23M8D17M27I65M12I22M58I20M7D60M4D380M	17.984361	mis=5.5;gap=12.5
 void align_wgac(string ref_path, string tab_path)
 {
-	auto hits = read_wgac(ref_path, tab_path);
+	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true);
 	vector<Hit> fast_align(const string &sa, const string &sb);
 		
 	// #pragma omp parallel for
 	for (int si = 0; si < hits.size(); si++) {
 		auto &hit = hits[si];
+		if (hit.name != "align_both/0015/both076775") continue;
 		
 		auto refq = hit.query->seq.substr(hit.query_start, hit.query_end - hit.query_start);
 		auto refr = hit.ref->seq.substr(hit.ref_start, hit.ref_end - hit.ref_start);
@@ -93,13 +112,18 @@ void align_wgac(string ref_path, string tab_path)
 		
 		// #pragma omp critical 
 		prn("{}", hit.to_bed());
-		prn("{}", hits.front().to_bed());
-		prn("");
+		auto best = hits.front();
+		best.comment += "--> http://humanparalogy.gs.washington.edu/build37/" + hit.name + " ";
 
-		if (hit.ref->is_rc && si > 10) {
-			prn("{}", hit.aln.print(80));
-			break;
-		}
+		int off1 = max(best.query_start, best.ref_start);
+		int off2 = max((int)best.query->seq.size() - best.query_end, 
+			(int)best.ref->seq.size() - best.ref_end);
+		prn("{:4} {:4} |> {}", off1, off2, best.to_bed());
+
+		// if (best.ref->is_rc && si > 10) {
+		// 	// prn("{}", best.aln.print(80));
+		// 	// break;
+		// }
 	}
 }
 
@@ -130,7 +154,7 @@ void check_wgac(string ref_path, string bed_path)
 		return out;
 	};
 
-	auto hits = read_wgac(ref_path, bed_path);
+	auto hits = read_wgac(ref_path, bed_path, false);
 	int total = 0, pass = 0, total_fails = 0;
 
 	// #pragma omp parallel for

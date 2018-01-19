@@ -58,7 +58,8 @@ vector<Minimizer> get_minimizers(const string &s, const int kmer_size, const int
 	int last_n = - kmer_size - window_size;
 	int last_u = last_n;
 	// window contains k-mer *starting positions* (i.e. the last k-mer's end might go outside of the window)
-	for (uint32_t i = 0, h = 0; i < s.size(); i++) {
+	uint32_t h = 0;
+	for (int i = 0; i < s.size(); i++) {
 		if (s[i] == 'N') {
 			last_n = i;
 		} else if (isupper(s[i])) {

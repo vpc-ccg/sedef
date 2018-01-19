@@ -90,34 +90,26 @@ Hit Hit::from_bed(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequ
 	return h;
 }
 
-Hit Hit::from_wgac(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref)
+Hit Hit::from_wgac(const string &bed)
 {
 	auto ss = split(bed, '\t');
-	assert(ss.size() >= 10);
+	assert(ss.size() >= 27);
 	
 	Hit h {
-		query, 0, 0, 
-		ref, 0, 0, 
-		0, "", "", {}
+		make_shared<Sequence>(ss[0], "", false), 
+		atoi(ss[1].c_str()), 
+		atoi(ss[2].c_str()),
+		make_shared<Sequence>(ss[6], "", ss[5][0] != '+'), 
+		atoi(ss[7].c_str()), 
+		atoi(ss[8].c_str()),
+		0, 
+		ss[16], 
+		fmt::format("err={:.1f}", 100 - 100 * atof(ss[26].c_str())), 
+		{}
 	};
-
-	h.query_start = atoi(ss[1].c_str());
-	h.query_end = atoi(ss[2].c_str());
-	h.ref_start = atoi(ss[7].c_str());
-	h.ref_end = atoi(ss[8].c_str());
 
 	assert(h.ref->is_rc == (ss[5][0] != '+'));
 	assert(!h.query->is_rc);
-	if (h.ref->is_rc) {
-		swap(h.ref_start, h.ref_end);
-		h.ref_start = h.ref->seq.size() - h.ref_start;
-		h.ref_end = h.ref->seq.size() - h.ref_end;
-	}
-
-	h.name = ss[16];
-	if (ss.size() >= 15) {
-		h.comment = fmt::format("match={};matchindel={}", ss[25], ss[26]);
-	}
 
 	return h;
 }
@@ -130,10 +122,10 @@ string Hit::to_bed()
 	return fmt::format(
 		"{}\t{}\t{}\t" // QUERY 0 1 3
 		"{}\t{}\t{}\t" // REF   3 4 5
-		"{}\t{}\t"     // NAME 6 SCORE 7
+		"{}\t{:.1f}\t"     // NAME 6 SCORE 7
 		"+\t{}\t"    // 8 STRAND 9
 		"{}\t{}\t"     // MAXLEN 10 ALNLEN 11 
-		"{}\t{}\t{}{}",  // CIGAR 12 JACCARD 13 COMMENT 14
+		"{}\t{:1f}\t{}",  // CIGAR 12 JACCARD 13 COMMENT 14
 		query->name, query_start, query_end, 
 		ref->name, 
 		ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
@@ -150,8 +142,9 @@ string Hit::to_bed()
 		max(query_end - query_start, ref_end - ref_start),
 		aln.alignment.size(),
 		aln.cigar_string(),
-		jaccard,
-		comment,
-		fmt::format(";;|>miserr={};gaperr={}", aln.error.mis_error(), aln.error.gap_error())
+		aln.error.error(),
+		fmt::format("{}mis={:.1f};gap={:.1f}", 
+			comment.size() ? comment + ";" : "",
+			aln.error.mis_error(), aln.error.gap_error())
 	);
 }

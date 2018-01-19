@@ -30,7 +30,7 @@ struct Hit {
 
 	static Hit from_bed(const std::string &bed);
 	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
-	static Hit from_wgac(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
+	static Hit from_wgac(const string &bed);
 
 	std::string to_bed();
 };
