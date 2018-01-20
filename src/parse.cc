@@ -95,81 +95,87 @@ Alignment Anchor::anchor_align(const string &qstr, const string &rstr)
 
 /******************************************************************************/
 
-#include <seqan/seeds.h>
+// #include <seqan/seeds.h>
 
-template<typename TAlign>
-string seqan_cigar(const TAlign &align) 
-{ 
-    auto & row0 = row(align, 0);
-    auto & row1 = row(align, 1);
+// 1..281532 --> 1..281660
+// 281532M1I127M
 
-    string cigar;
+// template<typename TAlign>
+// string seqan_cigar(const TAlign &align) 
+// { 
+//     auto & row0 = row(align, 0);
+//     auto & row1 = row(align, 1);
 
-    int pos = 0;
-    SEQAN_ASSERT_EQ(length(row0), length(row1));
-    int dbEndPos = length(row0);
-    int queryEndPos = length(row1);
+//     string cigar;
 
-    int readBasePos = pos + clippedBeginPosition(row1);
-    int readPos = 0;
-	while (pos < dbEndPos || pos < queryEndPos) {
-		int matched = 0;
-		int inserted = 0;
-		int deleted = 0;
-		while (pos != dbEndPos && pos != queryEndPos && !isGap(row0, pos) && !isGap(row1, pos)) {
-            ++readPos;
-			++readBasePos;
-			++pos;
-			++matched;
-		}
-		if (matched > 0) 
-			cigar += fmt::format("{}M", matched);
-		while (pos < dbEndPos && isGap(row1, pos)) {
-			++pos;
-			++deleted;
-		}
-		if (deleted > 0) 
-			cigar += fmt::format("{}D", deleted);
-		while (pos < queryEndPos && isGap(row0, pos)) {
-			++pos;
-			++readPos;
-			++readBasePos;
-			++inserted;
-		}
-		if (inserted > 0) 
-			cigar += fmt::format("{}I", inserted);
-	}
+//     int pos = 0;
+//     SEQAN_ASSERT_EQ(length(row0), length(row1));
+//     int dbEndPos = length(row0);
+//     int queryEndPos = length(row1);
 
-	return cigar;
-}
+//     int readBasePos = pos + clippedBeginPosition(row1);
+//     int readPos = 0;
+// 	while (pos < dbEndPos || pos < queryEndPos) {
+// 		int matched = 0;
+// 		int inserted = 0;
+// 		int deleted = 0;
+// 		while (pos != dbEndPos && pos != queryEndPos && !isGap(row0, pos) && !isGap(row1, pos)) {
+//             ++readPos;
+// 			++readBasePos;
+// 			++pos;
+// 			++matched;
+// 		}
+// 		if (matched > 0) 
+// 			cigar += fmt::format("{}M", matched);
+// 		while (pos < dbEndPos && isGap(row1, pos)) {
+// 			++pos;
+// 			++deleted;
+// 		}
+// 		if (deleted > 0) 
+// 			cigar += fmt::format("{}D", deleted);
+// 		while (pos < queryEndPos && isGap(row0, pos)) {
+// 			++pos;
+// 			++readPos;
+// 			++readBasePos;
+// 			++inserted;
+// 		}
+// 		if (inserted > 0) 
+// 			cigar += fmt::format("{}I", inserted);
+// 	}
+
+// 	return cigar;
+// }
 
 
-auto seqan_align(const Anchor &a, const string &q, const string &r)
-{
-	using namespace seqan;
+// auto seqan_align(const Anchor &a, const string &q, const string &r)
+// {
+// 	using namespace seqan;
 
-	SeedSet<Seed<Simple>> anchors; 
-	for (auto qi = a.query_kmers.begin(), ri = a.ref_kmers.begin(); qi != a.query_kmers.end(); qi++, ri++) {
-		addSeed(anchors, Seed<Simple>(
-			qi->first, ri->first,
-			qi->second, ri->second
-		), Single());
-	}
+// 	String<Seed<Simple>> anchors; 
+// 	for (auto qi = a.query_kmers.begin(), ri = a.ref_kmers.begin(); qi != a.query_kmers.end(); qi++, ri++) {
+// 		appendValue(anchors, Seed<Simple>(
+// 			qi->first, ri->first,
+// 			qi->second - qi->first
+// 		));
+// 	}
 
-	Align<Dna5String, ArrayGaps> alignment;
-	resize(rows(alignment), 2);
-	assignSource(row(alignment, 0), q);
-	assignSource(row(alignment, 1), r);
+// 	Align<Dna5String, ArrayGaps> alignment;
+// 	resize(rows(alignment), 2);
+// 	assignSource(row(alignment, 0), q);
+// 	assignSource(row(alignment, 1), r);
 
-	Score<int, Simple> scoring(5, -4, -1, -40);
-	String<Seed<Simple>> result;
-	int rc = bandedChainAlignment(alignment, result, scoring);
+// 	Score<int, Simple> scoring(5, -4, -1, -40);
+// 	String<Seed<Simple>> result;
+// 	int rc = bandedChainAlignment(alignment, result, scoring);
 
-	string cigar = seqan_cigar(alignment);
+// 	eprn("{}", alignment);
 
-	auto aln = ::Alignment::from_cigar(q, r, cigar);
-	return aln;
-}
+// 	string cigar = seqan_cigar(alignment);
+// 	// eprn("{}", cigar);
+
+// 	auto aln = ::Alignment::from_cigar(q, r, cigar);
+// 	return aln;
+// }
 
 auto find_chains(vector<pair<Anchor, bool>> &anchors)
 {
@@ -238,7 +244,6 @@ auto find_chains(vector<pair<Anchor, bool>> &anchors)
 		}
 	}
 
-	assert(maxi != -1);
 	deque<int> path;
 	while (maxi != -1) {
 		path.push_front(maxi);
@@ -330,7 +335,7 @@ auto cluster(const Index &query_hash, const Index &ref_hash)
 		int rlo = anchors[chain.front()].first.ref_start,   
 			rhi = anchors[chain.back()].first.ref_end;
 
-		if (min(rhi - rlo, qhi - qlo) < MIN_READ_SIZE)
+		if (min(rhi - rlo, qhi - qlo) < MIN_READ_SIZE / 2)
 			break;
 
 		assert(qhi <= query_hash.seq->seq.size());
@@ -361,32 +366,39 @@ auto cluster(const Index &query_hash, const Index &ref_hash)
 
 	eprn("-- initial chains {}", long_chains.size());
 	eprn(":: elapsed/long = {}s", elapsed(T)), T=cur_time();
-	for (auto &hit: long_chains) {
-		auto aln = hit.anchor_align(query_hash.seq->seq, ref_hash.seq->seq);
+	vector<Hit> hits;
+	for (auto &ch: long_chains) {
+		auto hit = Hit {
+			query_hash.seq, ch.query_start, ch.query_end,
+			ref_hash.seq, ch.ref_start, ch.ref_end,
+			0, "", "", {}
+		};
+		hit.aln = ch.anchor_align(query_hash.seq->seq, ref_hash.seq->seq);
 		eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
 			hit.query_start, hit.query_end,
 			hit.ref_start, hit.ref_end,
 			hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-			aln.error.error(), aln.error.gap_error(), aln.error.mis_error()
+			hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
 		);
+		hits.push_back(hit);
 	}
 	eprn(":: elapsed/alignment = {}s", elapsed(T)), T=cur_time();
 
-	for (auto &hit: long_chains) {
-		auto aln = seqan_align(hit, query_hash.seq->seq, ref_hash.seq->seq);
-		eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
-			hit.query_start, hit.query_end,
-			hit.ref_start, hit.ref_end,
-			hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-			aln.error.error(), aln.error.gap_error(), aln.error.mis_error()
-		);
-	}
-	eprn(":: elapsed/seqan = {}s", elapsed(T)), T=cur_time();
+	// for (auto &hit: long_chains) {
+	// 	auto aln = seqan_align(hit, query_hash.seq->seq, ref_hash.seq->seq);
+	// 	eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
+	// 		hit.query_start, hit.query_end,
+	// 		hit.ref_start, hit.ref_end,
+	// 		hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
+	// 		aln.error.error(), aln.error.gap_error(), aln.error.mis_error()
+	// 	);
+	// }
+	// eprn(":: elapsed/seqan = {}s", elapsed(T)), T=cur_time();
 	
-	// sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
-	// 	return max(a.query_end - a.query_start, a.ref_end - a.ref_start) > max(b.query_end - b.query_start, b.ref_end - b.ref_start);
-	// });
-	return long_chains;
+	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
+		return max(a.query_end - a.query_start, a.ref_end - a.ref_start) > max(b.query_end - b.query_start, b.ref_end - b.ref_start);
+	});
+	return hits;
 }
 
 /******************************************************************************/
@@ -395,8 +407,8 @@ vector<Hit> fast_align(const string &sa, const string &sb)
 {
 	Index a(make_shared<Sequence>("A", sa), KMER_SIZE, WINDOW_SIZE, false);
 	Index b(make_shared<Sequence>("B", sb), KMER_SIZE, WINDOW_SIZE, false);
-	 cluster(a, b);
-	 return vector<Hit>();
+	auto h = cluster(a, b);
+	return h;
 }
 
 void test(int, char** argv)

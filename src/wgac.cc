@@ -36,7 +36,7 @@ double overlap(int sa, int ea, int sb, int eb)
 
 /******************************************************************************/
 
-vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac)
+vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac, string chr = "")
 {
 	eprnn("Loading reference... ");
 	FastaReference fr(ref_path);
@@ -68,7 +68,7 @@ vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac)
 
 		if (chrq.size() > 5 || chrr.size() > 5)
 			continue;
-		if (chrq != "chr22" || chrr != "chr22")
+		if (chr != "" && (chrq != chr || chrr != chr))
 			continue;
 
 		if (ref.find({chrq, false}) == ref.end()) 
@@ -95,30 +95,39 @@ vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac)
 
 /******************************************************************************/
 
-//  932    5 |> A	932	1958	B	792	1924		17.9844	+	+	1132	1151	219M14I201M14I23M8D17M27I65M12I22M58I20M7D60M4D380M	17.984361	mis=5.5;gap=12.5
+//38781571	38786875
+// 12517691
 void align_wgac(string ref_path, string tab_path)
 {
-	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true);
+	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true, "chr22");
 	vector<Hit> fast_align(const string &sa, const string &sb);
 		
 	// #pragma omp parallel for
 	for (int si = 0; si < hits.size(); si++) {
 		auto &hit = hits[si];
-		if (hit.name != "align_both/0015/both076775") continue;
+		// if (hit.name != "align_both/0015/both076775") continue;
 		
+		eprn("{}\n{}", string(100, '*'), hit.to_bed());
+
 		auto refq = hit.query->seq.substr(hit.query_start, hit.query_end - hit.query_start);
 		auto refr = hit.ref->seq.substr(hit.ref_start, hit.ref_end - hit.ref_start);
 		auto hits = fast_align(refq, refr);
+		assert(hits.size() != 0);
+		eprn("woohoo, size={}", hits.size());
+		// eprn("{}", refq);
+		// eprn("{}", refr);
 		
 		// #pragma omp critical 
-		prn("{}", hit.to_bed());
 		auto best = hits.front();
-		best.comment += "--> http://humanparalogy.gs.washington.edu/build37/" + hit.name + " ";
+		best.comment = "http://humanparalogy.gs.washington.edu/build37/" + hit.name + " ";
 
-		int off1 = max(best.query_start, best.ref_start);
-		int off2 = max((int)best.query->seq.size() - best.query_end, 
-			(int)best.ref->seq.size() - best.ref_end);
-		prn("{:4} {:4} |> {}", off1, off2, best.to_bed());
+		double offq = best.query_start;
+		offq += refq.size() - best.query_end;
+		
+		double offr = best.ref_start;
+		offr += refr.size() - best.ref_end;
+		
+		eprn("{:3.0f} {:3.0f} ~> {:3.0f} {:3.0f} |> {} |> {}", offq*100/refq.size(), offr*100/refr.size(), offq, offr, best.to_bed(), hit.comment);
 
 		// if (best.ref->is_rc && si > 10) {
 		// 	// prn("{}", best.aln.print(80));
