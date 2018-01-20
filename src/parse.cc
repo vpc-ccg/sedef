@@ -6,6 +6,7 @@
 #include "fasta.h"
 #include "align.h"
 #include "search.h"
+#include "segment.h"
 
 using namespace std;
 
@@ -22,123 +23,6 @@ struct Anchor {
 		return tie(query_start, ref_start) < tie(a.query_start, a.ref_start);
 	}
 	Alignment anchor_align(const string &qs, const string &rs) ;
-};
-
-template<typename T>
-struct SegmentTree {
-	struct Point {
-		int p, h, a; /* h is inclusive; a is index in the original array; -1 otherwise */
-	};
-	vector<Point> tree;
-	vector<T> anchors;
-
-	int rmq(int q, int i, int s, int e) // RMQ for [0, q) in [s, e): returns index i in tree
-	{
-		if (i >= tree.size()) {
-			return -1;
-		} else if (s + 1 == e) { // leaf
-			if (anchors[tree[i].a].x < q)
-				return i;
-		} else {
-			assert(tree[i].p != -1);
-			int &pv = tree[i].p;
-			assert(tree[pv].a != -1);
-			if (anchors[tree[pv].a].x < q) {
-				return pv;
-			} else {
-				assert(2 * i + 1 < tree.size());
-				if (q - 1 <= tree[2 * i + 1].h) { // h is inclusive
-					return rmq(q, 2 * i + 1, s, (s + e) / 2);
-				} else {
-					int m1 = rmq(q, 2 * i + 1, s, (s + e) / 2);
-					int m2 = rmq(q, 2 * i + 2, (s + e) / 2, e); 
-					if (m1 == -1) return m2;
-					if (m2 == -1) return m1;
-					return anchors[tree[m1].a].score >= anchors[tree[m2].a].score ? m1 : m2;
-				}
-			}
-		}
-		return -1;
-	}
-	T& rmq(int q)
-	{
-		int i = rmq(q, 0, 0, tree.size());
-		assert(i != -1);
-		return anchors[tree[i].a];
-	}
-
-	void activate(int leaf, int i, int s, int e)
-	{
-		if (tree[i].p == -1 || anchors[tree[tree[i].p].a].score <= anchors[tree[leaf].a].score)
-			swap(tree[i].p, leaf);
-		if (leaf == -1) 
-			return;
-
-		assert(2 * i + 1 < tree.size());
-		if (anchors[tree[leaf].a].x <= tree[2 * i + 1].h) {
-			activate(leaf, 2 * i + 1, s, (s + e) / 2);
-		} else {
-			assert(2 * i + 2 < tree.size());
-			activate(leaf, 2 * i + 2, (s + e) / 2, e);
-		}
-	}
-
-	void activate(int q)
-	{
-		// eprn("looking for {}", q);
-		int i;
-		for (i = 0; i < tree.size() && q != anchors[tree[i].a].x; ) {
-			i = 2 * i + 1 + (q > tree[2 * i + 1].h);
-		}
-		assert(i < tree.size());
-		eprn("found {} at {}", q, i);
-		activate(i, 0, 0, tree.size());
-	}
-
-	int tree_i;
-	int initialize(int i, int s, int e)
-	{
-		assert(i < tree.size());
-		if (s + 1 == e) {
-			assert(tree_i < anchors.size());
-			tree[i] = Point {-1, anchors[tree_i].x, tree_i};
-			tree_i++;
-			return i;
-		} else {
-			int a = initialize(2 * i + 1, s, (s + e) / 2);
-			int b = initialize(2 * i + 2, (s + e) / 2, e);
-			tree[i] = {-1, 2 * i + 2 < tree.size() ? tree[2 * i + 2].h : tree[2 * i + 1].h, -1};
-			return max(a, b);
-		}
-	}
-
-	SegmentTree(const vector<T> &a): anchors(a)
-	{
-		sort(anchors.begin(), anchors.end());
-		tree.resize(3 * anchors.size());
-
-		tree_i = 0;
-		int m = initialize(0, 0, anchors.size());
-		while (tree.size() > m + 1) tree.pop_back();
-		assert(tree.back().a == anchors.size() - 1);
-	}
-
-
-	void plot(int l, int i, int s, int e, vector<string> &PLOT)
-	{
-		if (i>=tree.size()) return;
-		plot(l+1,2*i+1,s,(s+e)/2,PLOT);
-		PLOT[l]+=fmt::format("{}::{} ",
-			tree[i].a==-1?-1:anchors[tree[i].a].x, 
-			tree[i].p != -1 ? &anchors[tree[tree[i].p].a]-&anchors[0]+1 : -1);
-		plot(l+1,2*i+2,(s+e)/2,e,PLOT);
-	}
-	void plot()  
-	{
-		vector<string> PLOT(50);
-		plot(0, 0, 0, tree.size(),PLOT);
-		for (auto &s: PLOT) if (s=="") break; else eprn("{}: {}", &s-&PLOT[0], s);
-	}
 };
 
 void append_cigar(Alignment &src, const deque<pair<char, int>> &app)
@@ -202,209 +86,105 @@ Alignment Anchor::anchor_align(const string &qstr, const string &rstr)
 
 /******************************************************************************/
 
-auto merge_long_chains(vector<Anchor> &anchors, const Index &query_hash, const Index &ref_hash) 
+template<typename T>
+void iter(SegmentTree<T> &x, int i=0)
 {
-	assert(anchors.size());
-	sort(anchors.begin(), anchors.end());
-
-	vector<Alignment> alignments;
-	for (auto &anchor: anchors) {
-
-		alignments.push_back(anchor.anchor_align(query_hash.seq->seq, ref_hash.seq->seq));
-		auto &aln = alignments.back();
-		// eprn("{}..{} -> {}..{}", aln.start_a, aln.end_a, aln.start_b, aln.end_b);
-		// eprn("{}", aln.print());
+	if(i>=x.tree.size()) return;
+	if (x.tree[i].a!=-1) {
+		eprn("tree: {}::{}", x.anchors[x.tree[i].a].x.first, x.anchors[x.tree[i].a].x.second);
+		// if(2*i+1<x.tree.size()) {
+		// 	eprn("--> tree: {}::{}", x.anchors[x.tree[2*i+1].a].x.first, x.anchors[x.tree[2*i+1].a].x.second);
+		// 	assert(0);
+		// 	// ...
+		// }
+		return;
 	}
-	exit(0);
-
-	vector<int> score, dp; // fill the scores!!
-	for (int i = 0; i < anchors.size(); i++) {
-		auto &err = alignments[i].error;
-		score.push_back(err.matches * 5 - err.mismatches * 4 - 40 * err.gaps - err.gap_bases);
-		dp.push_back(score[i]);
-	}
-	vector<int> prev(anchors.size(), -1);
-	// maximize span while keeping the properties
-	// for (int i = 0; i < anchors.size(); i++) {
-	// 	for (int j = 0; j < i; j++) {
-	// 		if (anchors[j].query_end >= anchors[i].query_start) 
-	// 			continue;
-	// 		if (anchors[j].ref_end >= anchors[i].ref_start) 
-	// 			continue;
-
-	// 		int h = anchors[i].query_start - anchors[j].query_end;
-	// 		int v = anchors[i].ref_start - anchors[j].ref_end;
-	// 		int dist = score[i] - (4 * min(h, v) + 40 + abs(h - v));
-
-	// 		if (dp[j] + dist > dp[i]) {
-	// 			dp[i] = dp[j] + dist;
-	// 			prev[i] = j;
-	// 		}
-	// 	}
-	// }
-
-	vector<int> dpidx(dp.size());
-	for (int i = 0; i < dp.size(); i++) 
-		dpidx[i] = i;
-	sort(dpidx.begin(), dpidx.end(), [&](int i, int j) { return dp[i] > dp[j]; });
-	
-	vector<Hit> hits;
-	for (int cur: dpidx) {
-		if (dp[cur] < 0) 
-			continue;
-
-		// reconstruct
-		deque<int> dq;
-		while (cur != -1 && dp[cur] != -1) {
-			dq.push_front(cur);
-			dp[cur] = -1;
-			cur = prev[cur];
-		}
-		assert(dq.size());
-		
-		Alignment aln = alignments[dq[0]];
-		auto prev = dq.begin();
-		for (auto cur = next(prev); cur != dq.end(); cur++) {
-			aln.end_a = anchors[*cur].query_end;
-			aln.end_b = anchors[*cur].ref_end;
-			aln.a += query_hash.seq->seq.substr(anchors[*prev].query_end, anchors[*cur].query_end - anchors[*prev].query_end);
-			aln.b += ref_hash.seq->seq.substr(anchors[*prev].ref_end, anchors[*cur].ref_end - anchors[*prev].ref_end);
-
-			if (anchors[*cur].query_start - anchors[*prev].query_end && anchors[*cur].ref_start - anchors[*prev].ref_end) {
-				auto gap = align(
-					query_hash.seq->seq.substr(anchors[*prev].query_end, anchors[*cur].query_start - anchors[*prev].query_end),
-					ref_hash.seq->seq.substr(anchors[*prev].ref_end, anchors[*cur].ref_start - anchors[*prev].ref_end),
-					5, -4, 40, 1
-				);
-				append_cigar(aln, gap.cigar);
-			} else if (anchors[*cur].query_start - anchors[*prev].query_end) {
-				append_cigar(aln, {{'D', anchors[*cur].query_start - anchors[*prev].query_end}});	
-			} else {
-				assert(anchors[*cur].ref_start - anchors[*prev].ref_end);
-				append_cigar(aln, {{'I', anchors[*cur].ref_start - anchors[*prev].ref_end}});	
-			}
-			append_cigar(aln, alignments[*cur].cigar);
-
-			prev = cur;
-		}
-		aln.calculate_error();
-		hits.push_back({
-			query_hash.seq, anchors[dq.front()].query_start, anchors[dq.back()].query_end,
-			ref_hash.seq, anchors[dq.front()].ref_start, anchors[dq.back()].ref_end,
-			9999, "", "",
-			aln
-		});
-	}
-
-	return hits;
+	iter(x,2*i+1);
+	iter(x,2*i+2);
 }
-
-/******************************************************************************/
 
 auto find_chains(vector<pair<Anchor, bool>> &anchors)
 {
-	auto pless = [&](int i, int j) { // is anchors[i] < anchors[j] ?
-		auto &pp = anchors[i].first;
-		auto &p  = anchors[j].first;
-		return pp.query_end <= p.query_start && pp.ref_end <= p.ref_start;
-	};
+	// QUERY is coordinate 1; REF is coordinate 2 for RMQ 
+	vector<pair<int, int>> xs; // QUERY; pos in ANCHORS
 
-	assert(anchors.size());
+	struct Coor {
+		pair<int, int> x; 
+		int score, pos;
+		bool operator<(const Coor &a) const { return x < a.x; }
+	};
+	vector<Coor> ys;
+	int max_q = 0, max_r = 0;
+	for (int i = 0; i < anchors.size(); i++) {
+		anchors[i].second = 0;
+		xs.push_back({anchors[i].first.query_start, i});
+		xs.push_back({anchors[i].first.query_end, i});
+		ys.push_back({{anchors[i].first.ref_end - 1, i}, -1, i}); 
+		max_q = max(max_q, anchors[i].first.query_end);
+		max_r = max(max_r, anchors[i].first.ref_end);
+	}
+	sort(xs.begin(), xs.end());
+
+	SegmentTree<Coor> tree(ys); // TODO: ys is copied; maybe change!
+	// iter(tree);
+
+
 
 	vector<int> prev(anchors.size(), -1);
-	vector<int> S { 0 };
-	for (int i = 1; i < anchors.size(); i++) {
-		if (pless(S.back(), i)) {
-			prev[i] = S.back();
-			S.push_back(i);
-		} else {
-			// returns first i s.t. X[i] >= y
-			auto pos = distance(S.begin(), lower_bound(S.begin(), S.end(), i, [&](int i, int j) {
-				return anchors[i].first < anchors[j].first;
-			}));
-			assert(pos >= 0 && pos < S.size());
-			prev[i] = pos ? S[pos - 1] : -1; 
-			S[pos] = i;
-		}
-	}
-
-	deque<int> path;
-	vector<int> splits{0};
-
-	int cur = S.back();
-	for (int i = 0; i < S.size(); i++) {
-		assert(cur != -1);
-		path.push_front(cur);
-		cur = prev[cur];
-	}
-
-	eprn("size: {}", S.size());
-	for (auto &p: path) {
-		auto &a = anchors[p].first;
-		eprn("aa: {}: {} --> {}", abs(a.query_start-a.query_end), a.query_start, a.ref_start);
-	}
-
-	auto pgap = [&](int i, int j) {
-		auto &pp = anchors[i].first;
-		auto &p  = anchors[j].first;
-
-		const int MAXGAP = 250;
-
-		int gap = p.query_start - pp.query_end;
-		if (gap > MAXGAP && double(gap) / (p.query_end - pp.query_start) > MAX_ERROR) 
-			return 2;
-		gap = p.ref_start - pp.ref_end;
-		if (gap > MAXGAP && double(gap) / (p.ref_end - pp.ref_start) > MAX_ERROR) 
-			return 1;
-		
-		return 0;
-	};
-	for (int i = 1; i < path.size(); i++) {
-		if (pgap(path[i - 1], path[i])) {
-			// splits.push_back(i);
-		}
-	}
-	splits.push_back(path.size());
-
-	vector<vector<int>> paths;
-	for (int i = 1; i < splits.size(); i++) {
-		if (anchors[path[splits[i] - 1]].first.query_start - anchors[path[splits[i - 1]]].first.query_end > 1000 && 
-			anchors[path[splits[i] - 1]].first.ref_start   - anchors[path[splits[i - 1]]].first.query_end > 1000) 
-		{
-			paths.push_back(vector<int>());
-			for (int j = splits[i - 1]; j < splits[i]; j++) {
-				paths.back().push_back(path[j]);
-				anchors[path[j]].second = false;
-			}
-		}
-	}
-
-	return paths;
-}
-
-
-auto chain_full(vector<Anchor> &anchors) 
-{
-	vector<pair<int, int>> xes; // query_s, q_e
-
-	for (int i = 0; i < anchors.size(); i++) {
-		xes.push_back({an.query_start, i});
-		xes.push_back({an.query_end, i});	
-	}
-	sort(xes.begin(), xes.end());
-
-	auto tree = segment_tree(anchors);
-	for (auto &x: xes) { // querys
+	vector<int> dp(anchors.size(), 0);
+	int max = 0, maxi = -1;
+	for (auto &x: xs) {
 		int i = x.second;
-		if (x.first == anchors[i].query_start) {
-			int q = tree.rmq(anchors[i].ref_start, 0, 0, tree.size());
-			int j = tree.tree[q].anchor;
-			prev[i] = j;
-			dp[i] = weight(anchors[i]) + dp[j];
+		if (x.first == anchors[i].first.query_start) {
+			anchors[i].second = 1;
+			int w = anchors[i].first.query_end - anchors[i].first.query_start;
+			int j = tree.rmq({anchors[i].first.ref_start - 1, anchors.size()});
+
+			if (j != -1) {
+				j = ys[j].pos;
+				prev[i] = j;
+				int gap = anchors[i].first.query_start - anchors[j].first.query_end +
+				          anchors[i].first.ref_start - anchors[j].first.ref_end;
+				dp[i] = w + dp[j] - gap;
+			} else {
+				dp[i] = w;
+			}
+			if (dp[i] > max) {
+				max = dp[i], maxi = i;
+			}
 		} else {
-			activate("ANCHOOOORRRRRR", 0, 0, ) ;
+			assert(anchors[i].second);
+			// eprn("activating {}/{}", anchors[i].first.ref_end - 1, i);
+			// bool OK=0;
+			// for (int W = 0; W < ys.size(); W++)
+			// 	if(ys[W].x==make_pair(anchors[i].first.ref_end - 1, i)) {
+			// 		OK=1; break;
+			// 	}
+			// assert(OK);
+			int gap = max_q + 1 - anchors[i].first.query_end +
+				      max_r + 1 - anchors[i].first.ref_end;
+			tree.activate({anchors[i].first.ref_end - 1, i}, dp[i] - gap);
 		}
 	}
+
+	assert(maxi != -1);
+	deque<int> path;
+	while (maxi != -1) {
+		path.push_front(maxi);
+		maxi = prev[maxi];
+	}
+
+	// eprn("size: {}", path.size());
+	// for (int pi = 0; pi < path.size(); pi++) {
+	// 	auto &a = anchors[path[pi]].first;
+	// 	if (pi) {
+	// 		auto &p = anchors[path[pi-1]].first;
+	// 		eprn("    {} {}", a.query_start-p.query_end, a.ref_start - p.ref_end);
+	// 	}
+	// 	eprn("aa: {}: {} --> {}", abs(a.query_start-a.query_end), a.query_start, a.ref_start);
+	// }
+
+	return vector<vector<int>>();
 }
 
 auto cluster(const Index &query_hash, const Index &ref_hash) 
@@ -469,10 +249,10 @@ auto cluster(const Index &query_hash, const Index &ref_hash)
 	sort(anchors.begin(), anchors.end());
 
 	eprn("size: {}", anchors.size());
-	for (auto &af: anchors) {
-		auto &a = af.first;
-		eprn("{}: {} --> {}", abs(a.query_start-a.query_end), a.query_start, a.ref_start);
-	}
+	// for (auto &af: anchors) {
+	// 	auto &a = af.first;
+	// 	eprn("{}: {} --> {}", abs(a.query_start-a.query_end), a.query_start, a.ref_start);
+	// }
 
 	// 2. Run DP on the anchors and collect all different anchors
 	vector<Anchor> long_chains;
@@ -511,23 +291,24 @@ auto cluster(const Index &query_hash, const Index &ref_hash)
 	}
 
 	eprn("-- initial chains {}", long_chains.size());
-	auto hits = merge_long_chains(long_chains, query_hash, ref_hash);
-	eprn("-- final chains {}", hits.size());
-	eprn(":: elapsed/long = {}s", elapsed(T)), T=cur_time();
-	for (auto &hit: hits) {
-		eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
-			hit.query_start, hit.query_end,
-			hit.ref_start, hit.ref_end,
-			hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-			hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
-		);
-	}
-	eprn(":: elapsed/alignment = {}s", elapsed(T)), T=cur_time();
+	return vector<Hit>();
+	// auto hits = merge_long_chains(long_chains, query_hash, ref_hash);
+	// eprn("-- final chains {}", hits.size());
+	// eprn(":: elapsed/long = {}s", elapsed(T)), T=cur_time();
+	// for (auto &hit: hits) {
+	// 	eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
+	// 		hit.query_start, hit.query_end,
+	// 		hit.ref_start, hit.ref_end,
+	// 		hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
+	// 		hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
+	// 	);
+	// }
+	// eprn(":: elapsed/alignment = {}s", elapsed(T)), T=cur_time();
 	
-	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
-		return max(a.query_end - a.query_start, a.ref_end - a.ref_start) > max(b.query_end - b.query_start, b.ref_end - b.ref_start);
-	});
-	return hits;
+	// sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
+	// 	return max(a.query_end - a.query_start, a.ref_end - a.ref_start) > max(b.query_end - b.query_start, b.ref_end - b.ref_start);
+	// });
+	// return hits;
 }
 
 // #include <seqan/seeds.h>

@@ -1,47 +1,54 @@
 CXX=icpc
-CFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp
+CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp
 LDFLAGS=-lrt -lz -fopenmp -lstdc++fs
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
 SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 
 OBJECTS=$(SOURCES:.cc=.o) patterns.o
+DEP := $(OBJECTS:.o=.d)
+
+CPPFLAGS += -MMD -MP -I.
+
+.PHONY: all clean
+
 EXECUTABLE=sedef
 
-all: CFLAGS+=-g -O2
+all: CPPFLAGS+=-g -O2
 all: $(SOURCES) $(EXECUTABLE)
 
 sanitize: CXX=g++
-sanitize: CFLAGS+= -g -O1 -fno-omit-frame-pointer -fsanitize=address
+sanitize: CPPFLAGS+= -g -O1 -fno-omit-frame-pointer -fsanitize=address
 sanitize: LDFLAGS+=-fno-omit-frame-pointer -fsanitize=address
 sanitize: $(SOURCES) $(EXECUTABLE)
 
-release: CFLAGS+=-g -O3 -DNDEBUG 
+release: CPPFLAGS+=-g -O3 -DNDEBUG 
 release: $(SOURCES) $(EXECUTABLE)
 
-debug: CFLAGS+=-g
+debug: CPPFLAGS+=-g
 debug: $(SOURCES) $(EXECUTABLE)
 
-superdebug: CFLAGS+=-g -O0 -fno-inline
+superdebug: CPPFLAGS+=-g -O0 -fno-inline
 superdebug: $(SOURCES) $(EXECUTABLE)
 
-profile: CFLAGS+=-g -pg -O2
+profile: CPPFLAGS+=-g -pg -O2
 profile: LDFLAGS+=-pg
 profile: $(SOURCES) $(EXECUTABLE)
 
 gprofile: CXX=g++
 gprofile: LDFLAGS=-Wl,--no-as-needed,-lprofiler,--as-needed -ltcmalloc -lrt -lz -fopenmp
-gprofile: CFLAGS+=-g -O1
+gprofile: CPPFLAGS+=-g -O1
 gprofile: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS) 
 	$(CXX) $(OBJECTS) $(LDFLAGS) -o $@
 
 .cc.o:	
-	$(CXX) $(CFLAGS) -DGITVER=\"$(GIT_VERSION)\" $< -o $@
+	$(CXX) $(CPPFLAGS) -DGITVER=\"$(GIT_VERSION)\" $< -o $@
+
+-include $(DEP)
 
 clean:
-	find . -name '*.o' -delete
-	rm -rf $(EXECUTABLE) $(TESTEXE) gmon.out* 
+	rm -rf $(EXECUTABLE) $(TESTEXE) $(OBJECTS) $(DEP)
 
 patterns.o:
 	ld -r -b binary -o patterns.o patterns.bin
