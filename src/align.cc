@@ -265,6 +265,74 @@ vector<Alignment> Alignment::max_sum(int min_span)
 	return results;
 }
 
+void Alignment::append_cigar(const deque<pair<char, int>> &app)
+{
+	assert(app.size());
+	if (cigar.size() && cigar.back().first == app.front().first) {
+		cigar.back().second += app.front().second;
+		cigar.insert(cigar.end(), next(app.begin()), app.end());
+	} else {
+		cigar.insert(cigar.end(), app.begin(), app.end());
+	}
+}
+
+Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
+	const list<pair<int, int>> &query_kmers, const list<pair<int, int>> &ref_kmers) 
+{
+	auto qk_p = query_kmers.begin();
+	auto rk_p = ref_kmers.begin();
+	Alignment aln {
+		"A", qk_p->first, qk_p->second, 
+		"B", rk_p->first, rk_p->second,
+		qstr.substr(qk_p->first, qk_p->second - qk_p->first),
+		rstr.substr(rk_p->first, rk_p->second - rk_p->first),
+		"", "", "",
+		{{'M', qk_p->second - qk_p->first}}, {}
+	};
+	assert(query_kmers.size() == ref_kmers.size());
+
+	for (auto qk = next(qk_p), rk = next(rk_p); qk != query_kmers.end(); qk++, rk++) {
+		// eprnn("--- {:6}..{:6} vs {:6}..{:6}", qk_p->first, qk_p->second,
+		// 	rk_p->first, rk_p->second);
+		assert(qk->first >= qk_p->second);
+		assert(rk->first >= rk_p->second);
+		aln.end_a = qk->second;
+		aln.end_b = rk->second;
+		aln.a += qstr.substr(qk_p->second, qk->second - qk_p->second);
+		aln.b += rstr.substr(rk_p->second, rk->second - rk_p->second);
+		if (qk->first - qk_p->second && rk->first - rk_p->second) {
+			auto gap = align(
+				qstr.substr(qk_p->second, qk->first - qk_p->second), 
+				rstr.substr(rk_p->second, rk->first - rk_p->second), 
+				5, -4, 40, 1
+			);
+			// eprnn(" {}", gap.cigar_string());
+			aln.append_cigar(gap.cigar);
+		} else if (qk->first - qk_p->second) {
+			aln.append_cigar({{'D', qk->first - qk_p->second}});	
+		} else if (rk->first - rk_p->second) {
+			aln.append_cigar({{'I', rk->first - rk_p->second}});	
+		} 
+		// eprn("");
+		assert(qk->second - qk->first == rk->second - rk->first);
+		aln.append_cigar({{'M', qk->second - qk->first}});
+		qk_p = qk, rk_p = rk;
+	}
+
+	int qlo = query_kmers.front().first, 
+		qhi = query_kmers.back().second;
+	int rlo = ref_kmers.front().first,   
+		rhi = ref_kmers.back().second;
+	assert(qhi <= qstr.size());
+	assert(rhi <= rstr.size());
+	assert(aln.a == qstr.substr(qlo, qhi - qlo));
+	assert(aln.b == rstr.substr(rlo, rhi - rlo));
+
+	aln.populate_nice_alignment();
+	aln.error = aln.calculate_error();
+	return aln;
+}
+
 /******************************************************************************/
 
 Alignment align_helper(const string &tseq, const string &qseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)

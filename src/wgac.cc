@@ -105,7 +105,7 @@ void align_wgac(string ref_path, string tab_path)
 	// #pragma omp parallel for
 	for (int si = 0; si < hits.size(); si++) {
 		auto &hit = hits[si];
-		// if (hit.name != "align_both/0015/both076775") continue;
+		if (hit.name != "align_both/0015/both077002") continue;
 		
 		eprn("{}\n{}", string(100, '*'), hit.to_bed());
 
