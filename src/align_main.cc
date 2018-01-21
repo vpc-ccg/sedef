@@ -104,6 +104,8 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 	for (auto &s: schedule) 
 		total += s.size();
 
+	extern int DEBUG;
+	// DEBUG = 0;
 	#pragma omp parallel for
 	for (int i = 0; i < schedule.size(); i++) {
 		for (auto &h: schedule[i]) {

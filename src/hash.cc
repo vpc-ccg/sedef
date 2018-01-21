@@ -126,7 +126,8 @@ Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size, bool sepa
 	}
 	int sum = 0;
 	threshold = 1 << 31;
-	for (auto i = hist.rbegin(); i != hist.rend(); i++) {
+	int j = 0;
+	for (auto i = hist.rbegin(); i != hist.rend(); i++, j++) {
 		sum += i->second;
 		if (sum <= ignore) { 
 			threshold = i->first;
@@ -134,6 +135,7 @@ Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size, bool sepa
 			break;
 		}
 	}
+	// eprn("Ignoring top {} hits", j);
 }
 
 int Index::find_minimizers(int p) const

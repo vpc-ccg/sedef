@@ -233,6 +233,7 @@ vector<Hit> search_in_reference_interval (
 	assert(t_start >= 0);
 	assert(winnow.query_size > 0);
 
+	#pragma omp atomic
 	TOTAL_ATTEMPTED++; 
  
 	int ref_start = t_start, 
@@ -274,6 +275,7 @@ vector<Hit> search_in_reference_interval (
 
 	vector<Hit> hits;
 	if (best_winnow.jaccard() < 0) {
+		#pragma omp atomic
 		JACCARD_FAILED++;
 		if (report_fails) hits.push_back({
 			query_hash->seq, query_start, query_start + init_len, 
@@ -305,6 +307,7 @@ vector<Hit> search_in_reference_interval (
 				}
 			}
 		} else {
+			#pragma omp atomic
 			INTERVAL_FAILED++;
 		}
 	} else {

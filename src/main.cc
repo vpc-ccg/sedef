@@ -83,9 +83,7 @@ int main(int argc, char **argv)
 			print_help();
 			exit(0);
 		} else if (command == "search") {
-			bool is_complement = (argc > 5 && 
-				(tolower(argv[5][0]) == 'y' || tolower(argv[5][0]) == '1'));
-			search_main(argv[2], argv[3], argv[4], is_complement);
+			search_main(argc - 2, argv + 2);
 		} else if (command == "align") {
 			align_main(argc - 2, argv + 2);
 		} else if (command == "wgac") {

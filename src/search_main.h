@@ -14,4 +14,6 @@
 
 /******************************************************************************/
 
-void search_main(std::string ref_path, std::string query_chr, std::string ref_chr, bool is_complement);
+void search_main(int argc, char **argv);
+
+

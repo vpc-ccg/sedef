@@ -48,6 +48,7 @@ df['chromSize'] = df.chromEnd - df.chromStart
 print ':: Loaded {} hits from WGAC'.format(df.shape[0])
 
 hits = {}
+name_to_coor = {}
 with open('temp.bed', 'w') as f:
     for _, r in df.iterrows():
         print >>f, '\t'.join(map(str, [
@@ -55,28 +56,32 @@ with open('temp.bed', 'w') as f:
             r.otherChrom, r.otherStart, r.otherEnd,
             r.alignfile, 0, '+', '-' if strand == '_' else '+'
         ]))
-        hits[(r.chromStart, r.chromEnd, r.otherStart, r.otherEnd)] = list()
+        hits[r.alignfile] = list()
+        name_to_coor[r.alignfile] = (r.chromStart, r.chromEnd, r.otherStart, r.otherEnd)
 
-def diff(X, Y):
-    sA, eA = X[:2]
-    sB, eB = Y[:2]
+
+def diff(wgac, sedef): # how much wgac is off sedef
+    def overlap(sa, ea, sb, eb):
+        return max(0, min(ea, eb) - max(sa, sb))
+
+    # left match
+    sW, eW = wgac[:2]
+    sS, eS = sedef[:2]
+
+    oo = overlap(sW, eW, sS, eS)
+    wW = oo
+    dW = 100.0 * wW / float(eW - sW)
+
+    result = (dW, wW, eW - sW)
+
+    sW, eW = wgac[2:4]
+    sS, eS = sedef[2:4]
     
-    x = max(sA, sB)
-    y = min(eA, eB)
-    d = max(y - x, 0) 
-    wA = d
-    dA = 100.0 * d / float(eA - sA)
+    oo = overlap(sW, eW, sS, eS)
+    wW = oo
+    dW = 100.0 * wW / float(eW - sW)
 
-    sA, eA = X[2:4]
-    sB, eB = Y[2:4]
-    
-    x = max(sA, sB)
-    y = min(eA, eB)
-    d = max(y - x, 0)
-    wB = d
-    dB = 100.0 * d / float(eA - sA)
-
-    return (dA, wA, dB, wB)
+    return result + (dW, wW, eW - sW)
 
 system("bedtools pairtopair -a temp.bed -b <(cat {} | tr -d ,) -is -type both > temp_diff.bed".format(path))
 print ':: After bedtools we have {} hits to process'.format(system("wc -l temp_diff.bed"))
@@ -88,27 +93,35 @@ with open('temp_diff.bed') as f:
         A = (int(l[q+1]), int(l[q+2]), int(l[q+4]), int(l[q+5])) # WGAC
         q = 10
         B = (int(l[q+1]), int(l[q+2]), int(l[q+4]), int(l[q+5])) # SEDEF
-        hits[A].append((diff(A, B), A, B))
-        if (A[2],A[3],A[0],A[1]) in hits:
-            hits[(A[2],A[3],A[0],A[1])].append((diff(A, B), A, B, l[6]))
+        name = l[6]
+        hits[name].append((diff(A, B), A, B))
 
-tm = sum(1 for k, vs in hits.items() if len(vs) == 0)
-print ':: Missed {} hits ({:.1f}%)'.format(tm, 100.0*tm/df.shape[0])
-for k, vs in sorted(hits.items()):
-    if len(vs) == 0:
-        print '   -- missed {}: {}'.format(vs[3], k)
-haha = []
-for k, vs in hits.items():
-    if len(vs) == 0: continue
-    ok = any(v[0][0] == 100 and v[0][2] == 100 for v in vs)
-    if not ok: 
-        haha += [max(vs, key=lambda x: x[0][0] + x[0][2])]
+try:
+    tm = sum(1 for k, vs in hits.items() if len(vs) == 0)
+    print ':: Missed {} hits ({:.1f}%)'.format(tm, 100.0*tm/df.shape[0])
+    for name, vs in sorted(hits.items()):
+        if len(vs) == 0:
+            print '   -- missed http://humanparalogy.gs.washington.edu/build37/{0}'.format(name)
+            p = name_to_coor[name]
+            p += (p[1] - p[0], p[3] - p[2])
+            print '      wgac: {:11,}..{:11,} -> {:11,}..{:11,} ... len {:9,} -> {:9,} '.format(*p)
 
-tm = len(haha)
-print ':: Partial {} hits ({:.1f}%)'.format(tm, 100.0*tm/df.shape[0])
-for ((p1, n1, p2, n2), A, B) in sorted(haha):
-    print '   -- partial: {:.1f}% and {:.1f}% ({} and {}) -- {} to {}'.format(p1, p2, n1, n2, A, B)
-    # print_nicely(chrom1, chrom2, A[0:2], A[2:], B[0:2], B[2:])
-    # print
-    #exit(0)
+    haha = defaultdict(list)
+    for k, vs in hits.items():
+        if len(vs) == 0: continue
+        ok = any(round(v[0][0], 2) >= 99.99 and round(v[0][3], 2) >= 99.99 for v in vs)
+        if not ok: 
+            haha[k] += vs # [max(vs, key=lambda x: x[0][0] + x[0][3])]
 
+    tm = sum(len(u) for u in haha.items())
+    print ':: Partial {} hits ({:.1f}%)'.format(tm, 100.0*tm/df.shape[0])
+    for k in sorted(haha.keys(), key=lambda y: sum(yy[0][0] + yy[0][3] for yy in haha[y])):
+        print '   -- partial http://humanparalogy.gs.washington.edu/build37/{0}'.format(k)
+        for ((p1, n1, t1, p2, n2, t2), A, B) in sorted(haha[k]):
+            print '      === {:.1f}% ({} of {}) and {:.1f}% ({} of {})'.format(p1, n1, t1, p2, n2, t2)
+            A += (A[1] - A[0], A[3] - A[2])
+            B += (B[1] - B[0], B[3] - B[2])
+            print '          wgac:  {:11,}..{:11,} -> {:11,}..{:11,} ... len {:9,} -> {:9,} '.format(*A)
+            print '          sedef: {:11,}..{:11,} -> {:11,}..{:11,} ... len {:9,} -> {:9,} '.format(*B)
+except IOError:
+    pass

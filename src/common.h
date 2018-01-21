@@ -27,11 +27,11 @@
 
 /******************************************************************************/
 
-const int    KMER_SIZE      = 14;
+const int    KMER_SIZE      = 12;
 const int    WINDOW_SIZE    = 16; // <-- Needs to be changed
 static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
 
-const int    MIN_READ_SIZE  = 1000;
+const int    MIN_READ_SIZE  = 750;
 const double MAX_ERROR      = 0.30;
 const double MAX_EDIT_ERROR = 0.15;
 const double ERROR_RATIO    = (MAX_ERROR - MAX_EDIT_ERROR) / MAX_EDIT_ERROR;
