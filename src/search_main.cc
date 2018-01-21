@@ -46,12 +46,15 @@ void search_main(string ref_path, string query_chr, string ref_chr, bool is_ref_
 	eprn("Same genome:        {}", is_same_genome);
 	eprn("Reverse complement: {}", is_ref_complement);
 
-	aho = make_shared<AHOAutomata>();
+	// aho = make_shared<AHOAutomata>();
 
 	Tree tree;
 	int total = 0, track = 0;
+	int next_to_attain = 0;
 	for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
 		auto &qm = query_hash->minimizers[qi];
+		if (qm.loc < next_to_attain)
+			continue;
 		if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
 			continue; // ignore N or lowercase hashes
 
@@ -64,10 +67,14 @@ void search_main(string ref_path, string query_chr, string ref_chr, bool is_ref_
 		}
 
 		auto hits = search(qi, query_hash, ref_hash, tree, is_same_genome);
+		int min_len = query_hash->seq->seq.size();
 		for (auto &pp: hits) {
+			min_len = min(min_len, pp.query_end - pp.query_start);
 			prn("{}", pp.to_bed());
 		}
 		total += hits.size();
+
+		next_to_attain = (min_len > 1000 ? qm.loc + 200 : qm.loc);
 	}
 
 	eprn("");

@@ -71,14 +71,9 @@ int main(int argc, char **argv)
 	// const double MAX_GAP_ERROR  = MAX_EDIT_ERROR * ERROR_RATIO;
 	// const double GAP_FREQUENCY  = 0.005;
 
-	eprn("        Parameters: KMER_SIZE      = {}\n"
-	     "                    WINDOW_SIZE    = {}\n"
-	     "                    MIN_READ_SIZE  = {:n}\n"
-	     "                    MAX_ERROR      = {:.2f}\n"
-	     "                    MAX_EDIT_ERROR = {:.2f}\n"
-	     "                    MAX_GAP_ERROR  = {:.2f}\n"
-	     "                    GAP_FREQUENCY  = {:.3f}",
-		KMER_SIZE, WINDOW_SIZE, MIN_READ_SIZE, 
+	eprn("        Parameters: READ_SIZE      = {} (KMER={}; WINDOW={})\n"
+	     "                    MAX_ERROR      = {:.2f} ({:.2f} EDIT + {:.2f} GAP; GAPFREQ={:.3f})",
+		MIN_READ_SIZE, KMER_SIZE, WINDOW_SIZE, 
 		MAX_ERROR, MAX_EDIT_ERROR, MAX_GAP_ERROR, GAP_FREQUENCY);
 
 	string command = argv[1];

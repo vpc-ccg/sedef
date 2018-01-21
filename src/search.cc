@@ -192,6 +192,12 @@ Hit extend(SlidingMap &winnow,
 			break;
 		}
 
+		if (same_genome) {
+			int overlap = query_end - ref_start;
+			if (overlap > 0 && pct(overlap, ref_end - ref_start) > 100 * MAX_ERROR)
+				break;
+		}
+
 		bool extended = false;
 		for (auto &fn: extensions) {
 			if (!fn.first())
@@ -208,7 +214,7 @@ Hit extend(SlidingMap &winnow,
 	}
 	
 	return Hit {
-		query_hash->seq,	query_start, query_end, 
+		query_hash->seq, query_start, query_end, 
 		ref_hash->seq, ref_start, ref_end, 
 		winnow.jaccard(), "", "OK", {}
 	};

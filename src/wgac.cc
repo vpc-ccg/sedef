@@ -19,12 +19,15 @@
 #include "align.h"
 #include "aho.h"
 #include "sliding.h"
+#include "chain.h"
 
 using namespace std;
 
 /******************************************************************************/
 
 const double MIN_ID = .95; // Minimum overlap percentage to call successful WGAC hit
+
+extern int DEBUG;
 
 /******************************************************************************/
 
@@ -99,40 +102,38 @@ vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac, string chr
 // 12517691
 void align_wgac(string ref_path, string tab_path)
 {
-	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true, "chr22");
-	vector<Hit> fast_align(const string &sa, const string &sb);
+	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true, "chr1");
+
+	DEBUG = 0;
 		
-	// #pragma omp parallel for
+	#pragma omp parallel for
 	for (int si = 0; si < hits.size(); si++) {
 		auto &hit = hits[si];
-		if (hit.name != "align_both/0015/both077002") continue;
-		
-		eprn("{}\n{}", string(100, '*'), hit.to_bed());
+		// if (hit.name != "align_both/0015/both077002") continue;
+		// eprn("{}\n{}", string(100, '*'), hit.to_bed());
 
 		auto refq = hit.query->seq.substr(hit.query_start, hit.query_end - hit.query_start);
 		auto refr = hit.ref->seq.substr(hit.ref_start, hit.ref_end - hit.ref_start);
 		auto hits = fast_align(refq, refr);
-		assert(hits.size() != 0);
-		eprn("woohoo, size={}", hits.size());
-		// eprn("{}", refq);
-		// eprn("{}", refr);
-		
-		// #pragma omp critical 
-		auto best = hits.front();
-		best.comment = "http://humanparalogy.gs.washington.edu/build37/" + hit.name + " ";
 
-		double offq = best.query_start;
-		offq += refq.size() - best.query_end;
-		
-		double offr = best.ref_start;
-		offr += refr.size() - best.ref_end;
-		
-		eprn("{:3.0f} {:3.0f} ~> {:3.0f} {:3.0f} |> {} |> {}", offq*100/refq.size(), offr*100/refr.size(), offq, offr, best.to_bed(), hit.comment);
+		#pragma omp critical
+		{
+			if (hits.size() == 0) {	
+				prn("{:5} :: 0 0 ~> NA NA |> {}", si, hit.to_bed());
+			} else for (auto &best: hits) {
+				best.comment = "http://humanparalogy.gs.washington.edu/build37/" + hit.name + " ";
 
-		// if (best.ref->is_rc && si > 10) {
-		// 	// prn("{}", best.aln.print(80));
-		// 	// break;
-		// }
+				double offq = best.query_start;
+				offq += refq.size() - best.query_end;
+				
+				double offr = best.ref_start;
+				offr += refr.size() - best.ref_end;
+				
+				prn("{:5} :: {:3.0f} {:3.0f} ~> {:3.0f} {:3.0f} |> {} |> {}", si, 
+					100*(1-offq/refq.size()), 100*(1-offr/refr.size()), 
+					offq, offr, best.to_bed(), hit.to_bed());
+			}
+		}
 	}
 }
 
