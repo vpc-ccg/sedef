@@ -92,7 +92,7 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 		int score, pos;
 		bool operator<(const Coor &a) const { return x < a.x; }
 	};
-	vector<Coor> xs, ys[2]; // QUERY; pos in ANCHORS
+	vector<Coor> xs, ys; // QUERY; pos in ANCHORS
 	
 	int max_q = 0, max_r = 0;
 	for (int i = 0; i < anchors.size(); i++) {
@@ -101,8 +101,7 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 		auto &a = anchors[i].first;
 		xs.push_back({{a.query_start, i}, -1, i});
 		xs.push_back({{a.query_end, i}, -1, i});
-		ys[0].push_back({{a.ref_end - 1, i}, -1, i}); 
-		ys[1].push_back({{a.ref_end - a.query_end - 1, i}, -1, i}); 
+		ys.push_back({{a.ref_end - 1, i}, -1, i}); 
 		
 		assert(a.query_start < a.query_end);
 		max_q = max(max_q, a.query_end);
@@ -110,9 +109,7 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 	}
 
 	sort(xs.begin(), xs.end());
-
-	SegmentTree<Coor> tree1(ys[0]);  // T1 : (x,y) → (x−y, y) --- negative?!
-	SegmentTree<Coor> tree2(ys[1]);  // T2 : (x,y) → (x, y−x) --- negative?!
+	SegmentTree<Coor> tree(ys); 
 
 	vector<int> prev(anchors.size(), -1);
 	vector<int> dp(anchors.size(), 0);
@@ -123,44 +120,28 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 		auto &a = anchors[i].first;
 		if (x.x.first == a.query_start) {
 			int w = a.query_end - a.query_start;
-			
-			int j[2]; 
-			j[0] = tree1.rmq({a.ref_start - 1, anchors.size()});
-			j[1] = tree2.rmq({a.ref_start - a.query_start - 1, anchors.size()});
-
-			int v[2] = {-9999999, -9999999};
-			for (int k = 0; k < 2; k++) {
-				if (j[k] != -1 && ys[k][j[k]].score != -1) {
-					j[k] = ys[k][j[k]].pos;
-					auto &p = anchors[j[k]].first;
-					assert(a.query_start >= p.query_end);
-					assert(a.ref_start >= p.ref_end);
-
-					int gap = ::max(abs(a.query_start - p.query_end), abs(a.ref_start - p.ref_end));
-					v[k] = dp[j[k]] - gap;
+			int j = tree.rmq({a.ref_start - 1, anchors.size()});
+			if (j != -1 && ys[j].score != -1) {
+				j = ys[j].pos;
+				auto &p = anchors[j].first;
+				assert(a.query_start >= p.query_end);
+				assert(a.ref_start >= p.ref_end);
+				int gap = a.query_start - p.query_end + a.ref_start - p.ref_end;
+				if (w + dp[j] - gap > 0) {
+					dp[i] = w + dp[j] - gap;
+					prev[i] = j;
+				} else {
+					dp[i] = w;
 				}
-			}
-
-			int vi = v[0] >= v[1] ? 0 : 1;
-			if (w + v[vi] > 0) {
-				dp[i] = w + v[vi];
-				prev[i] = j[vi];
 			} else {
 				dp[i] = w;
 			}
-		
 			if (dp[i] > max) {
 				max = dp[i], maxi = i;
 			}
 		} else {
-			// then we activate point T1(end(f′)) in D1 with priority f′.score − gc1(f′) 
-			// and point T2(end(f′)) in D2 with pri- ority f′.score − gc2(f′). 
-
-			int gap1 = max_q + 1 - a.query_end;
-			tree1.activate({a.ref_end - 1, i}, dp[i] - gap1);
-
-			int gap2 = max_r + 1 - a.ref_end;
-			tree2.activate({a.ref_end - a.query_end - 1, i}, dp[i] - gap2);
+			int gap = max_q + 1 - a.query_end + max_r + 1 - a.ref_end;
+			tree.activate({a.ref_end - 1, i}, dp[i] - gap);
 		}
 	}
 
@@ -170,10 +151,10 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 		anchors[maxi].second = false;
 		maxi = prev[maxi];
 	}
-	for (auto i: path) {
-		eprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6}", i, anchors[i].first.query_start, anchors[i].first.query_end,
-			anchors[i].first.ref_start, anchors[i].first.ref_end);
-	}
+	// for (auto i: path) {
+	// 	eprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6}", i, anchors[i].first.query_start, anchors[i].first.query_end,
+	// 		anchors[i].first.ref_start, anchors[i].first.ref_end);
+	// }
 	return path;
 }
 
