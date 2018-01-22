@@ -57,10 +57,41 @@ for j in `seq 1 22` X Y; do
 done; done | parallel
 
 # Merge logs and remove progress bars and headers
-for i in sedefrun_*.e*; do grep -v '%' $i | tail -n+4 ; done > logs/search.log
 
-mkdir -p output/search
-zmv '(sedefrun_*).o*' 'output/search/$1.bed'
+for S in G S X Y ; do
+	for i in ${S}_*.e*; do grep -v '%' $i | tail -n+4 ; done > ${S}.log
+	cat ${S}_*.o* > ${S}.bed
+	rm -rf ${S}*.[eo]*
+done
+
+for i in G X Y S ; do 
+	mkdir -p bins/${i}
+	sedef/sedef align bucket ${i}.bed bins/${i} 2000 
+done
+
+for i in G X Y S ; do 
+	for j in bins/${i}/* ; do
+		k=$(basename $j);
+		echo "qsub -cwd -V -b y -N \"${i}_${k}\" -l h_vmem=10G -l h_rt=24:00:00 -l h_stack=8M " \
+			"python2.7 mesa sedef/sedef align generate fasta/hg19.fa $j"
+	done
+done
+
+for S in G X Y S ; do 
+	for i in ${S}_*.e*; do grep -v '\.\.' $i | tail -n+4 ; done > ${S}.align.log
+	cat ${S}_*.o* > ${S}.align.bed
+	rm -rf ${S}_*.[eo]*
+done
+
+# Count stuff
+for S in G S X Y ; do 
+	SEA=`cat ${S}.log | grep 'Wall' | awk '{print $4}' | tr -d '[()]' | awk '{s+=$1} END{print s}'`
+	ALN=`cat ${S}.align.log | grep 'Wall' | awk '{print $4}' | tr -d '[()]' | awk '{s+=$1} END{print s}'`
+	printf "%s: %5.1f %5.1f %5.1f\n" $S $((SEA/3600)) $((ALN/3600)) $(((SEA+ALN)/3600))
+done
+
+#mkdir -p output/search
+#zmv '(sedefrun_*).o*' 'output/search/$1.bed'
 ```
 
 

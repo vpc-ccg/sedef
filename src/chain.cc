@@ -225,7 +225,7 @@ vector<Hit> fast_align(const string &query, const string &ref)
 			ref_ptr, ch.ref_start, ch.ref_end,
 			0, "", "", {}
 		};
-		if (false) {
+		//if (false) {
 			hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers);
 			eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
 				hit.query_start, hit.query_end,
@@ -234,7 +234,7 @@ vector<Hit> fast_align(const string &query, const string &ref)
 				hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
 			);
 			hits.push_back(hit);
-		}
+		//}
 	}
 	eprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
 
