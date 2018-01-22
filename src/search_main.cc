@@ -81,7 +81,7 @@ void search_parallel(const string &ref_path)
 	for (auto &fi: fr.index) for (int i = 0; i < 2; i++) {
 		if (fi.first != "chr22" && fi.first != "chr10") 
 			continue;
-		chromosomes.push_back({fi.first, bool(i), fr.get_sequence(fi.first)});
+		chromosomes.push_back(make_tuple(fi.first, bool(i), fr.get_sequence(fi.first)));
 	}
 	eprn("Loading reference took {:.1f}s", elapsed(T)), T = cur_time();
 
@@ -109,7 +109,7 @@ void search_parallel(const string &ref_path)
 	for (auto &chrA: chromosomes) if (get<1>(chrA)) {
 		for (auto &chrB: chromosomes) {
 			if (get<2>(chrA).size() >= get<2>(chrB).size()) {
-				instances.push_back({get<0>(chrA), get<0>(chrB), get<1>(chrB)});
+				instances.push_back(make_tuple(get<0>(chrA), get<0>(chrB), get<1>(chrB)));
 			}
 		}
 	}
