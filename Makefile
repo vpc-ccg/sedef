@@ -1,6 +1,6 @@
 CXX=icpc
 CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp
-LDFLAGS=-lrt -lz -fopenmp -lstdc++fs
+LDFLAGS=-lrt -lz -fopenmp
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
 SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 

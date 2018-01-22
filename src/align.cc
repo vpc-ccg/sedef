@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <chrono>
 #include <glob.h>
-#include <experimental/filesystem>
 
 #include "align.h"
 #include "common.h"

@@ -10,9 +10,10 @@
 #include <algorithm>
 #include <chrono>
 
-#include <experimental/filesystem>
-
 #include <glob.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "align.h"
 #include "align_main.h"
@@ -25,19 +26,25 @@ using namespace std;
 
 /******************************************************************************/
 
+auto stat_file(const string &path)
+{
+	struct stat path_stat;
+	int s = stat(path.c_str(), &path_stat);
+	assert(s == 0);
+	return path_stat.st_mode;
+}
+
 auto bucket_alignments(const string &bed_path, int nbins, string output_dir = "")
 {
-	namespace fs = std::experimental::filesystem;
-
 	vector<string> files;
-	if (fs::is_regular_file(bed_path)) {
+	if (S_ISREG(stat_file(bed_path))) {
 		files.push_back(bed_path);
-	} else if (fs::is_directory(bed_path)) {
+	} else if (S_ISDIR(stat_file(bed_path))) {
 		glob_t glob_result;
 		glob((bed_path + "/*.bed").c_str(), GLOB_TILDE, NULL, &glob_result);
 		for (int i = 0; i < glob_result.gl_pathc; i++) {
 			string f = glob_result.gl_pathv[i];
-			if (fs::is_regular_file(f)) {
+			if (S_ISREG(stat_file(f))) {
 				files.push_back(f);
 			}
 		}
