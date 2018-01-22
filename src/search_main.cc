@@ -29,6 +29,12 @@ extern int64_t INTERVAL_FAILED;
 
 extern shared_ptr<AHOAutomata> aho;
 
+#ifdef ATTAINER
+const bool ATTAINER_bool = true;
+#else
+const bool ATTAINER_bool = false;
+#endif
+
 /******************************************************************************/
 
 template<typename T>
@@ -40,7 +46,7 @@ int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, boo
 	int next_to_attain = 0;
 	for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
 		auto &qm = query_hash->minimizers[qi];
-		if (qm.loc < next_to_attain)
+		if (qm.loc < next_to_attain && ATTAINER_bool)
 			continue;
 		if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
 			continue; // ignore N or lowercase hashes

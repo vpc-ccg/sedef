@@ -89,7 +89,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 				throw fmt::format("Cannot open file {} for writing", of);
 			}
 			for (auto &h: bin) {
-				fout << h.to_bed() << endl;
+				fout << h.to_bed(false) << endl;
 			}
 			fout.close();
 			eprn("Wrote {} alignments in {}", bin.size(), of);

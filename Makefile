@@ -12,6 +12,7 @@ CPPFLAGS += -MMD -MP -I.
 .PHONY: all clean
 
 EXECUTABLE=sedef
+EXE=sedef
 
 all: CPPFLAGS+=-g -O2
 all: $(SOURCES) $(EXECUTABLE)
@@ -23,6 +24,10 @@ sanitize: $(SOURCES) $(EXECUTABLE)
 
 release: CPPFLAGS+=-g -O3 -DNDEBUG 
 release: $(SOURCES) $(EXECUTABLE)
+
+release2: CPPFLAGS+=-g -O3 -DNDEBUG -DATTAINER
+release2: EXE=sedef2
+release2: $(SOURCES) $(EXECUTABLE)
 
 debug: CPPFLAGS+=-g
 debug: $(SOURCES) $(EXECUTABLE)
@@ -40,7 +45,7 @@ gprofile: CPPFLAGS+=-g -O1
 gprofile: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS) 
-	$(CXX) $(OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) $(OBJECTS) $(LDFLAGS) -o $(EXE)
 
 .cc.o:	
 	$(CXX) $(CPPFLAGS) -DGITVER=\"$(GIT_VERSION)\" $< -o $@
