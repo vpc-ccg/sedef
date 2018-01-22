@@ -18,6 +18,7 @@
 #include "align_main.h"
 #include "common.h"
 #include "fasta.h"
+#include "chain.h"
 #include "hit.h"
 
 using namespace std;
@@ -93,8 +94,6 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 
 void generate_alignments(const string &ref_path, const string &bed_path) 
 {
-	vector<Hit> fast_align(const string &sa, const string &sb);
-
 	auto T = cur_time();
 
 	auto schedule = bucket_alignments(bed_path, 4);
@@ -105,42 +104,48 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 		total += s.size();
 
 	extern int DEBUG;
-	// DEBUG = 0;
+	DEBUG = 0; int WW=0;
 	#pragma omp parallel for
 	for (int i = 0; i < schedule.size(); i++) {
+		// auto &h = schedule[i].back();
 		for (auto &h: schedule[i]) {
+			// if (fmt::format("{} {} {} {}", h.query_start, h.query_end, h.ref_start, h.ref_end) != "62038352 62039402 192191615 192193123") 
+				// continue;
 			string fa, fb;
 			#pragma omp critical 
 			{
 				fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
 				fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
 			}
-			if (h.ref->is_rc) fb = rc(fb);
+			if (h.ref->is_rc) 
+				fb = rc(fb);
 
-			#if 0
-				h.aln = align(fa, fb);
-				#pragma omp critical
-				{
-					prn("{}", h.to_bed());
-					lines++;
-					// fflush(stdout);
-					eprnn("\r {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
-						fa.size(), fb.size());
-				}
-			#else
-				#pragma omp critical
-				eprn("{}", h.to_bed());
-				auto alns = fast_align(fa, fb);
-				#pragma omp critical
-				{
-					lines++;
-					for (auto &hh: alns) {
-						prn("{}", hh.to_bed());
+			auto alns = fast_align(fa, fb);
+			#pragma omp critical
+			{
+				lines++;
+				for (auto &hh: alns) {
+					hh.query_start += h.query_start;
+					hh.query_end += h.query_start;
+					if (h.ref->is_rc) {
+						swap(hh.ref_start, hh.ref_end);
+						hh.ref_start = h.ref_end - hh.ref_start;
+						hh.ref_end = h.ref_end - hh.ref_end;
+						hh.ref->is_rc = true;
+					} else {
+						hh.ref_start += h.ref_start;
+						hh.ref_end += h.ref_start;
 					}
-					eprnn("\r {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
-						fa.size(), fb.size());
+					hh.query->name = h.query->name;
+					hh.ref->name = h.ref->name;
+					hh.ref->name = h.ref->name;
+					WW++;
+					prn("{}", hh.to_bed(false));
 				}
-			#endif
+				eprnn("\r {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
+					fa.size(), fb.size());
+			}
+			// if (WW>5) break;
 		}
 	}
 

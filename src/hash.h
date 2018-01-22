@@ -42,7 +42,7 @@ namespace std {
 struct Sequence {
 	string name;
 	string seq;
-	const bool is_rc;
+	bool is_rc;
 
 	Sequence(const string &name, const string &seq, bool is_rc = false);
 };

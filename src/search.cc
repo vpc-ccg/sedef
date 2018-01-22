@@ -14,6 +14,7 @@
 #include "common.h"
 #include "filter.h"
 #include "search.h"
+#include "chain.h"
 #include "sliding.h"
 
 using namespace std;
@@ -182,7 +183,11 @@ Hit extend(SlidingMap &winnow,
 	ref_start = ref_winnow_start ? ref_hash->minimizers[ref_winnow_start - 1].loc + 1 : 0;
 	ref_end = ref_winnow_end < ref_hash->minimizers.size() ? ref_hash->minimizers[ref_winnow_end].loc : ref_hash->seq->seq.size();
 	
-	for (int i = 0, j = winnow.jaccard(); ;) {
+
+	vector<int> to_undo;
+	const int max_undo = 300;
+
+	for (int i = 0, j = winnow.jaccard(), cur_undo = 0; ;) {
 		int max_match = min(MAX_MATCH, same_genome 
 			? int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)) 
 			: MAX_MATCH);
@@ -198,15 +203,25 @@ Hit extend(SlidingMap &winnow,
 				break;
 		}
 
-		bool extended = false;
-		for (auto &fn: extensions) {
+		bool extended = true;
+		for (int exi = 0; exi < extensions.size(); exi++) {
+			auto &fn = extensions[exi];
 			if (!fn.first())
 				continue; 
 			if (winnow.jaccard() >= 0) {
-				extended = true;
+				to_undo.clear();
 				break;
 			} else {
-				fn.second(); // undo
+				to_undo.push_back(exi);
+				if (to_undo.size() > max_undo) {
+					while (to_undo.size()) {
+						extensions[to_undo.back()].second(); // undo
+						to_undo.pop_back();
+					}
+				} else {
+					extended = false;
+					break;
+				}
 			}
 		}
 		if (!extended) 
@@ -301,6 +316,15 @@ vector<Hit> search_in_reference_interval (
 					}
 				} else {
 					hits.push_back(h);
+					// auto hh = fast_align(
+					// 	query_hash->seq->seq.substr(h.query_start, h.query_end - h.query_start),
+					// 	ref_hash->seq->seq.substr(h.ref_start, h.ref_end - h.ref_start)
+					// );
+					// for (auto &hhh: hh) {
+					// 	auto a = Interval(h.query_start + hhh.query_start, h.query_start + hhh.query_end);
+					// 	auto b = Interval(h.ref_start + hhh.ref_start, h.ref_start + hhh.ref_end);
+					// 	tree += make_pair(a, Subtree({b, {make_pair(a, b)}}));	
+					// }
 					auto a = Interval(h.query_start, h.query_end);
 					auto b = Interval(h.ref_start, h.ref_end);
 					tree += make_pair(a, Subtree({b, {make_pair(a, b)}}));

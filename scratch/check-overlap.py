@@ -36,7 +36,8 @@ def process(a, b, cigar):
 chrom1 = sys.argv[1]
 chrom2 = sys.argv[2]
 strand = sys.argv[3]
-path = '{}_{}_{}.bed'.format(chrom1, chrom2, strand)
+path = sys.argv[4]
+#path = '{}_{}_{}.bed'.format(chrom1, chrom2, strand)
 strand = '_' if strand == 'y' else '+'
 
 df = pd.read_table("data/GRCh37GenomicSuperDup.tab")
@@ -64,24 +65,23 @@ def diff(wgac, sedef): # how much wgac is off sedef
     def overlap(sa, ea, sb, eb):
         return max(0, min(ea, eb) - max(sa, sb))
 
+    def match(sW, eW, sS, eS):
+        oo = overlap(sW, eW, sS, eS)
+        wW = oo
+        dW = 100.0 * wW / float(eW - sW)
+        return (dW, wW, eW - sW)
+
     # left match
     sW, eW = wgac[:2]
     sS, eS = sedef[:2]
 
-    oo = overlap(sW, eW, sS, eS)
-    wW = oo
-    dW = 100.0 * wW / float(eW - sW)
+    r1  = match(*(wgac[:2] + sedef[:2]))
+    r1 += match(*(wgac[2:4] + sedef[2:4]))
 
-    result = (dW, wW, eW - sW)
+    r2  = match(*(wgac[2:4] + sedef[:2]))
+    r2 += match(*(wgac[:2] + sedef[2:4]))
 
-    sW, eW = wgac[2:4]
-    sS, eS = sedef[2:4]
-    
-    oo = overlap(sW, eW, sS, eS)
-    wW = oo
-    dW = 100.0 * wW / float(eW - sW)
-
-    return result + (dW, wW, eW - sW)
+    return r1 if r1[0]+r1[3] > r2[0]+r2[3] else r2
 
 system("bedtools pairtopair -a temp.bed -b <(cat {} | tr -d ,) -is -type both > temp_diff.bed".format(path))
 print ':: After bedtools we have {} hits to process'.format(system("wc -l temp_diff.bed"))
@@ -113,7 +113,7 @@ try:
         if not ok: 
             haha[k] += vs # [max(vs, key=lambda x: x[0][0] + x[0][3])]
 
-    tm = sum(len(u) for u in haha.items())
+    tm = len(haha)
     print ':: Partial {} hits ({:.1f}%)'.format(tm, 100.0*tm/df.shape[0])
     for k in sorted(haha.keys(), key=lambda y: sum(yy[0][0] + yy[0][3] for yy in haha[y])):
         print '   -- partial http://humanparalogy.gs.washington.edu/build37/{0}'.format(k)

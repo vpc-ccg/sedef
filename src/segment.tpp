@@ -50,10 +50,18 @@ int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &q)
 template<typename T>
 void SegmentTree<T>::activate(const SegmentTree<T>::Tp &q, int score)
 {
-	int leaf;
-	for (leaf = 0; leaf < tree.size() && q != anchors[tree[leaf].a].x; ) {
+	// eprn("activating {}::{}", q.first, q.second);
+	// for (auto &t: tree) {
+	// 	if (t.h == q && t.a != -1) {
+	// 		eprn("found {}", &t-&tree[0]);
+	// 	}
+	// }
+
+	int leaf = 0;
+	for (leaf = 0; leaf < tree.size() && (tree[leaf].a == -1 || q != anchors[tree[leaf].a].x); ) {
 		leaf = 2 * leaf + 1 + (q > tree[2 * leaf + 1].h);
 	}
+	// eprn("{}", leaf);
 	assert(leaf < tree.size());
 	assert(q == tree[leaf].h);
 	assert(tree[leaf].a != -1); // leaf

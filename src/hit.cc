@@ -77,11 +77,8 @@ Hit Hit::from_bed(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequ
 	}
 
 	h.name = ss[6];
-	if (ss.size() >= 15) {
-		h.comment = ss[14];
-	}
 	if (ss.size() >= 14) {
-		h.jaccard = atoi(ss[13].c_str());
+		h.comment = ss[13];
 	}
 	if (ss.size() >= 13) {
 		h.aln = Alignment::from_cigar(query->seq, ref->seq, ss[12]);
@@ -116,25 +113,26 @@ Hit Hit::from_wgac(const string &bed)
 
 /******************************************************************************/
 
-string Hit::to_bed()
+string Hit::to_bed(bool do_rc)
 {
 	assert(!query->is_rc);
 	return fmt::format(
 		"{}\t{}\t{}\t" // QUERY 0 1 3
 		"{}\t{}\t{}\t" // REF   3 4 5
-		"{}\t{:.1f}\t"     // NAME 6 SCORE 7
-		"+\t{}\t"    // 8 STRAND 9
+		"{}\t{}\t"     // NAME 6 SCORE 7
+		"{}\t{}\t"     // STRAND 8 STRAND 9
 		"{}\t{}\t"     // MAXLEN 10 ALNLEN 11 
-		"{}\t{:1f}\t{}",  // CIGAR 12 JACCARD 13 COMMENT 14
+		"{}\t{}",      // CIGAR 12 COMMENT 13
 		query->name, query_start, query_end, 
 		ref->name, 
-		ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
-		ref->is_rc ?  ref->seq.size() - ref_start + 1 : ref_end,
+		do_rc && ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
+		do_rc && ref->is_rc ?  ref->seq.size() - ref_start + 1 : ref_end,
 		name,
-		aln.a.size() ? aln.error.error() : -1,
+		aln.a.size() ? fmt::format("{:.1f}", aln.error.error()) : "",
+		query->is_rc ? "-" : "+",
 		ref->is_rc ? "-" : "+",
 		// Optional fields
-		// - Max. length
+		// - Max. span
 		// - Aln. length
 		// - CIGAR
 		// - Jaccard similarity
@@ -142,9 +140,9 @@ string Hit::to_bed()
 		max(query_end - query_start, ref_end - ref_start),
 		aln.alignment.size(),
 		aln.cigar_string(),
-		aln.error.error(),
-		fmt::format("{}mis={:.1f};gap={:.1f}", 
-			comment.size() ? comment + ";" : "",
-			aln.error.mis_error(), aln.error.gap_error())
+		fmt::format("{}\t{}", 
+			aln.a.size() ? fmt::format("m={:.1f}\tg={:.1f}", aln.error.mis_error(), aln.error.gap_error()) : "",
+			comment.size() ? comment + ";" : ""
+		)
 	);
 }

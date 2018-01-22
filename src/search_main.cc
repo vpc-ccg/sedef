@@ -61,7 +61,7 @@ int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, boo
 		}
 		total += hits.size();
 
-		next_to_attain = (min_len > MIN_READ_SIZE ? qm.loc + MIN_READ_SIZE * MAX_ERROR : qm.loc);
+		next_to_attain = (min_len >= MIN_READ_SIZE ? qm.loc + (MIN_READ_SIZE * MAX_ERROR) / 2 : qm.loc);
 	}
 	return total;
 }
@@ -172,20 +172,25 @@ void search_parallel(const string &ref_path)
 
 void search_single(const string &ref_path, const string &query_chr, const string &ref_chr, bool is_ref_complement)
 {
+	bool is_same_genome = (ref_chr == query_chr) && !is_ref_complement;
+	eprn("Same genome:        {}", is_same_genome);
+	eprn("Reverse complement: {}\n", is_ref_complement);
+
+
+	auto T = cur_time();
+
 	FastaReference fr(ref_path);
 
 	string ref = fr.get_sequence(ref_chr);	
 	auto ref_hash = make_shared<Index>(make_shared<Sequence>(ref_chr, ref, is_ref_complement));
 
 	auto query_hash = ref_hash; 
-	bool is_same_genome = (ref_chr == query_chr) && !is_ref_complement;
 	if (!is_same_genome) {
 		string query = fr.get_sequence(query_chr);
 		query_hash = make_shared<Index>(make_shared<Sequence>(query_chr, query));
 	}
+	eprn("Building index took {:.1f}s", elapsed(T)), T = cur_time();
 
-	eprn("Same genome:        {}", is_same_genome);
-	eprn("Reverse complement: {}", is_ref_complement);
 
 	// aho = make_shared<AHOAutomata>();
 	int total = initial_search(query_hash, ref_hash, is_same_genome, [](Hit &h) {
@@ -207,6 +212,8 @@ void search_single(const string &ref_path, const string &query_chr, const string
 	     QGRAM_NORMAL_FAILED, 
 	     CORE_FAILED
 	);
+
+	exit(0);
 }
 
 /******************************************************************************/

@@ -18,7 +18,7 @@ int DEBUG = 1;
 
 /******************************************************************************/
 
-auto generate_anchors(const string &query, const string &ref, const int kmer_size = 10)
+auto generate_anchors(const string &query, const string &ref, const int kmer_size = 12)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
@@ -86,10 +86,11 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 	};
 	vector<Coor> xs, ys; // QUERY; pos in ANCHORS
 	
-	int max_q = 0, max_r = 0;
+	int max_q = 0, max_r = 0, l = 0;
 	for (int i = 0; i < anchors.size(); i++) {
 		if (!anchors[i].second) 
 			continue;
+		l++;
 		auto &a = anchors[i].first;
 		xs.push_back({{a.query_start, i}, -1, i});
 		xs.push_back({{a.query_end, i}, -1, i});
@@ -100,25 +101,32 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 		max_r = max(max_r, a.ref_end);
 	}
 
+	// for (auto a: anchors) {
+	// 	eprn("!== {:6}..{:6} -> {:6}..{:6}", a.first.query_start, a.first.query_end,
+	// 		a.first.ref_start, a.first.ref_end);
+	// }
+
+	eprn("-- anchors to dp: {}", l);
+
 	sort(xs.begin(), xs.end());
 	SegmentTree<Coor> tree(ys); 
 
 	vector<int> prev(anchors.size(), -1);
 	vector<int> dp(anchors.size(), 0);
-	int max = 0, maxi = -1;
 
+	set<pair<int, int>, greater<pair<int, int>>> maxes;
 	for (auto &x: xs) {
 		int i = x.x.second;
 		auto &a = anchors[i].first;
 		if (x.x.first == a.query_start) {
-			int w = 5 * (a.query_end - a.query_start);
+			int w = 2 * (a.query_end - a.query_start);
 			int j = tree.rmq({a.ref_start - 1, anchors.size()});
 			if (j != -1 && ys[j].score != -1) {
 				j = ys[j].pos;
 				auto &p = anchors[j].first;
 				assert(a.query_start >= p.query_end);
 				assert(a.ref_start >= p.ref_end);
-				int gap = 40 + (a.query_start - p.query_end + a.ref_start - p.ref_end);
+				int gap =  (a.query_start - p.query_end + a.ref_start - p.ref_end);
 				if (w + dp[j] - gap > 0) {
 					dp[i] = w + dp[j] - gap;
 					prev[i] = j;
@@ -128,26 +136,33 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 			} else {
 				dp[i] = w;
 			}
-			if (dp[i] > max) {
-				max = dp[i], maxi = i;
-			}
+			if (dp[i] >= MIN_READ_SIZE * (2 - 3 * MAX_ERROR))
+				maxes.insert({dp[i], i});
 		} else {
-			int gap = 40 + (max_q + 1 - a.query_end + max_r + 1 - a.ref_end);
+			int gap =  (max_q + 1 - a.query_end + max_r + 1 - a.ref_end);
 			tree.activate({a.ref_end - 1, i}, dp[i] - gap);
 		}
 	}
 
-	deque<int> path;
-	while (maxi != -1) {
-		path.push_front(maxi);
-		anchors[maxi].second = false;
-		maxi = prev[maxi];
+
+	vector<deque<int>> paths;
+	for (auto &m: maxes) {
+		int maxi = m.second;
+		if (!anchors[maxi].second)
+			continue;
+		paths.push_back(deque<int>());
+		while (maxi != -1 && anchors[maxi].second) {
+			paths.back().push_front(maxi);
+			anchors[maxi].second = false;
+			maxi = prev[maxi];
+		}
+		// for (auto i: paths.back()) {
+			// eprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6}", i, anchors[i].first.query_start, anchors[i].first.query_end,
+				// anchors[i].first.ref_start, anchors[i].first.ref_end);
+		// }
 	}
-	// for (auto i: path) {
-	// 	eprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6}", i, anchors[i].first.query_start, anchors[i].first.query_end,
-	// 		anchors[i].first.ref_start, anchors[i].first.ref_end);
-	// }
-	return path;
+
+	return paths;
 }
 
 /******************************************************************************/
@@ -162,18 +177,15 @@ vector<Hit> fast_align(const string &query, const string &ref)
 
 	// 2. Run DP on the anchors and collect all different anchors
 	vector<Anchor> chains;
-	for (int iter = 0; iter < 20; iter++) {
-		auto chain = chain_anchors(anchors);
-		if (chain.size() == 0) 
-			break;
-		
+	auto chains_init = chain_anchors(anchors);	
+	for (auto &chain: chains_init) {
 		int qlo = anchors[chain.front()].first.query_start, 
 			qhi = anchors[chain.back()].first.query_end;
 		int rlo = anchors[chain.front()].first.ref_start,   
 			rhi = anchors[chain.back()].first.ref_end;
 
 		if (min(rhi - rlo, qhi - qlo) < (1 - MAX_ERROR) * MIN_READ_SIZE)
-			break;
+			continue;
 
 		assert(qhi <= query.size());
 		assert(rhi <= ref.size());
@@ -196,8 +208,9 @@ vector<Hit> fast_align(const string &query, const string &ref)
 		eprn("-- chain: (len:{}) {}..{} --> {}..{}", abs(a.query_start-a.query_end), 
 			a.query_start, a.query_end, a.ref_start, a.ref_end);
 
-		eprn(":: iter = {}, elapsed/dp = {}s", iter, elapsed(T)); T=cur_time();
 	}
+	eprn(":: elapsed/dp = {}s", elapsed(T)); T=cur_time();
+	// exit(0);
 
 	// 3. Perform the full alignment
 	eprn("-- initial chains {}", chains.size());
@@ -212,19 +225,22 @@ vector<Hit> fast_align(const string &query, const string &ref)
 			ref_ptr, ch.ref_start, ch.ref_end,
 			0, "", "", {}
 		};
-		hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers);
-		eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
-			hit.query_start, hit.query_end,
-			hit.ref_start, hit.ref_end,
-			hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-			hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
-		);
-		hits.push_back(hit);
+		if (false) {
+			hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers);
+			eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
+				hit.query_start, hit.query_end,
+				hit.ref_start, hit.ref_end,
+				hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
+				hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
+			);
+			hits.push_back(hit);
+		}
 	}
 	eprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
 
 	return hits;
 }
+
 
 /******************************************************************************/
 
@@ -234,7 +250,7 @@ void test(int, char** argv)
 	// 200sec
 	string s;
 	// s = "chr22	16239131	16243489	chr22	16244049	16248400	align_both/0015/both076775	-1.0	+	+	4358	0		-nan	err=7.5;mis=-nan;gap=-nan";
-	s = "chr1	145883118	146164650	chr1	147424817	147706477	NA	NA	+	+";
+	s = "chr1	547768	1495799	chr1	243152784	244152796			+	+	1000012	0		OK;mis=-nan;gap=-nan;";
 	// ifstream fin(argv[0]);
 	while (1) {
 		Hit h = Hit::from_bed(s);
