@@ -103,7 +103,7 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 {
 	auto T = cur_time();
 
-	auto schedule = bucket_alignments(bed_path, 4);
+	auto schedule = bucket_alignments(bed_path, 1);
 	FastaReference fr(ref_path);
 
 	int lines = 0, total = 0;
@@ -112,24 +112,32 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 
 	extern int DEBUG;
 	DEBUG = 0; int WW=0;
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (int i = 0; i < schedule.size(); i++) {
 		// auto &h = schedule[i].back();
 		for (auto &h: schedule[i]) {
+			int extend = max(h.ref_end - h.ref_start, h.query_end - h.query_start);
+			// eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
+			h.query_start = max(h.query_start - extend, 0);
+			h.ref_start = max(h.ref_start - extend, 0);
+			h.query_end = min(h.query_end + extend, (int)fr.index.entry(h.query->name).length);
+			h.ref_end = min(h.ref_end + extend, (int)fr.index.entry(h.ref->name).length);
+			// eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
+
 			// if (fmt::format("{} {} {} {}", h.query_start, h.query_end, h.ref_start, h.ref_end) != "62038352 62039402 192191615 192193123") 
 				// continue;
 			string fa, fb;
-			#pragma omp critical 
-			{
+			// #pragma omp critical 
+			// {
 				fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
 				fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
-			}
+			// }
 			if (h.ref->is_rc) 
 				fb = rc(fb);
 
 			auto alns = fast_align(fa, fb);
-			#pragma omp critical
-			{
+			// #pragma omp critical
+			// {
 				lines++;
 				for (auto &hh: alns) {
 					hh.query_start += h.query_start;
@@ -151,7 +159,7 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 				}
 				eprnn("\r {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
 					fa.size(), fb.size());
-			}
+			// }
 			// if (WW>5) break;
 		}
 	}

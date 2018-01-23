@@ -184,9 +184,6 @@ Hit extend(SlidingMap &winnow,
 	ref_end = ref_winnow_end < ref_hash->minimizers.size() ? ref_hash->minimizers[ref_winnow_end].loc : ref_hash->seq->seq.size();
 	
 
-	vector<int> to_undo;
-	const int max_undo = 300;
-
 	for (int i = 0, j = winnow.jaccard(), cur_undo = 0; ;) {
 		int max_match = min(MAX_MATCH, same_genome 
 			? int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)) 
@@ -203,25 +200,15 @@ Hit extend(SlidingMap &winnow,
 				break;
 		}
 
-		bool extended = true;
-		for (int exi = 0; exi < extensions.size(); exi++) {
-			auto &fn = extensions[exi];
+		bool extended = false;
+		for (auto &fn: extensions) {
 			if (!fn.first())
 				continue; 
 			if (winnow.jaccard() >= 0) {
-				to_undo.clear();
+				extended = true;
 				break;
 			} else {
-				to_undo.push_back(exi);
-				if (to_undo.size() > max_undo) {
-					while (to_undo.size()) {
-						extensions[to_undo.back()].second(); // undo
-						to_undo.pop_back();
-					}
-				} else {
-					extended = false;
-					break;
-				}
+				fn.second();
 			}
 		}
 		if (!extended) 
@@ -248,7 +235,7 @@ vector<Hit> search_in_reference_interval (
 	assert(t_start >= 0);
 	assert(winnow.query_size > 0);
 
-	#pragma omp atomic
+	// #pragma omp atomic
 	TOTAL_ATTEMPTED++; 
  
 	int ref_start = t_start, 
@@ -290,7 +277,7 @@ vector<Hit> search_in_reference_interval (
 
 	vector<Hit> hits;
 	if (best_winnow.jaccard() < 0) {
-		#pragma omp atomic
+		// #pragma omp atomic
 		JACCARD_FAILED++;
 		if (report_fails) hits.push_back({
 			query_hash->seq, query_start, query_start + init_len, 
@@ -331,7 +318,7 @@ vector<Hit> search_in_reference_interval (
 				}
 			}
 		} else {
-			#pragma omp atomic
+			// #pragma omp atomic
 			INTERVAL_FAILED++;
 		}
 	} else {

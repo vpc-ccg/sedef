@@ -62,7 +62,7 @@ int relaxed_jaccard_estimate(int s)
 	static unordered_map<int, int> mm;
 
 	double result = -1;
-	#pragma omp critical
+	// #pragma omp critical
 	{
 		auto it = mm.find(s);
 		if (it != mm.end()) result = it->second;
@@ -85,7 +85,7 @@ int relaxed_jaccard_estimate(int s)
 		}
 	}
 	result = max(result, 0.0);
-	#pragma omp critical
+	// #pragma omp critical
 	{
 		mm[s] = result;
 	}

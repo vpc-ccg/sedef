@@ -42,7 +42,7 @@ pair<bool, string> uppercase_filter(const string &q, int q_pos, int q_len, const
 	int r_up = 0; for (int i = 0; i < r_len; i++) r_up += isupper(r[r_pos + i]);
 
 	if (q_up < MIN_UPPERCASE || r_up < MIN_UPPERCASE) {
-		#pragma omp atomic
+		// #pragma omp atomic
 		OTHER_FAILED++;
 		return {false, fmt::format("upper ({}, {}) < {}", q_up, r_up, MIN_UPPERCASE)};
 	}
@@ -79,7 +79,7 @@ pair<bool, string> qgram_filter(const string &q, int q_pos, int q_len, const str
 	}
 
 	if (dist < minqg) {
-		#pragma omp atomic
+		// #pragma omp atomic
 		QGRAM_NORMAL_FAILED++;
 		return {false, fmt::format("q-grams {} < {}", dist, minqg)};
 	}
@@ -97,7 +97,7 @@ pair<bool, string> core_filter(const string &q, int q_pos, int q_len, const stri
 	int maxlen = max(q_len, r_len);
 	double boundary = (1.0/2.5) * (maxlen / 50.0);
 	if (common < int(boundary)) {
-		#pragma omp atomic
+		// #pragma omp atomic
 		CORE_FAILED++;
 		return {false, fmt::format("cores {} < {}", common, boundary)};
 	}

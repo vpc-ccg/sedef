@@ -4,7 +4,7 @@ LDFLAGS=-lrt -lz -fopenmp
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
 SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 
-OBJECTS=$(SOURCES:.cc=.o) patterns.o
+OBJECTS:=$(SOURCES:.cc=.o) patterns.o
 DEP := $(OBJECTS:.o=.d)
 
 CPPFLAGS += -MMD -MP -I.
@@ -43,6 +43,18 @@ gprofile: CXX=g++
 gprofile: LDFLAGS=-Wl,--no-as-needed,-lprofiler,--as-needed -ltcmalloc -lrt -lz -fopenmp
 gprofile: CPPFLAGS+=-g -O1
 gprofile: $(SOURCES) $(EXECUTABLE)
+
+LIB = libsedef
+
+lib: CPPFLAGS += -O2 -g -fPIC
+lib: $(SOURCES) $(LIB)
+
+PYTHON_VERSION = 2.7
+PYTHON_INCLUDE = /usr/include/python$(PYTHON_VERSION)
+
+$(LIB): $(OBJECTS)
+	$(CXX) -I$(PYTHON_INCLUDE) -I. -fPIC -c scratch/sedef.cpp -std=c++14 -o scratch/sedef.po
+	$(CXX) -shared -Wl,--export-dynamic scratch/sedef.po $(OBJECTS) -lboost_python -lrt -lz -L/usr/lib/python$(PYTHON_VERSION)/config -lpython$(PYTHON_VERSION) -fopenmp -o $@.so
 
 $(EXECUTABLE): $(OBJECTS) 
 	$(CXX) $(OBJECTS) $(LDFLAGS) -o $(EXE)
