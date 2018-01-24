@@ -144,14 +144,14 @@ try:
 
     tm = len(partials)
     print ':: Partial {} hits ({:.1f}%)'.format(tm, 100.0*tm/len(hits))
-    # for k in sorted(partials.keys(), key=lambda y: sum(yy[0][0][0] + yy[0][1][0] for yy in partials[y])):
-        # print '   -- partial http://humanparalogy.gs.washington.edu/build37/{0}'.format(k)
-        # for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(partials[k]):
-        #     print '      === {:.1f}% ({} of {}) and {:.1f}% ({} of {})'.format(p1, n1, t1, p2, n2, t2)
-        #     A += (A[2] - A[1], A[5] - A[4])
-        #     B += (B[2] - B[1], B[5] - B[4])
-        #     print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} ... len {:9,} -> {:9,} '.format(*A)
-        #     print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} ... len {:9,} -> {:9,} '.format(*B)
+    for k in sorted(partials.keys(), key=lambda y: sum(yy[0][0][0] + yy[0][1][0] for yy in partials[y])):
+        print '   -- partial http://humanparalogy.gs.washington.edu/build37/{0}'.format(k)
+        for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(partials[k]):
+            print '      === {:.1f}% ({} of {}) and {:.1f}% ({} of {})'.format(p1, n1, t1, p2, n2, t2)
+            A += (A[2] - A[1], A[5] - A[4])
+            B += (B[2] - B[1], B[5] - B[4])
+            print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*A)
+            print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*B)
             # print '>> need: {:.2f} {:.2f}'.format(e1, e2)
 
     tm = sum(1 for k, v in hits.iteritems() if k not in partials and len(v) > 0)

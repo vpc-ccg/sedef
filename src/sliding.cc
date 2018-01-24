@@ -12,8 +12,8 @@ using namespace std;
 
 /******************************************************************************/
 
-SlidingMap::SlidingMap(): 
-	query_size(0), intersection(0), limit(0)
+SlidingMap::SlidingMap(int kmer_size): 
+	query_size(0), intersection(0), limit(0), kmer_size(kmer_size)
 { 
 	boundary = this->end();
 } 
@@ -84,7 +84,7 @@ void SlidingMap::add_to_query(const Hash &h)
 	if (!add(h, 1)) 
 		return;
 
-	limit = relaxed_jaccard_estimate(++query_size);
+	limit = relaxed_jaccard_estimate(++query_size, kmer_size) ;
 	assert(boundary != this->end() || (query_size == 1));
 	if (boundary == this->end()) {
 		boundary = this->begin();
@@ -100,7 +100,7 @@ void SlidingMap::remove_from_query(const Hash &h)
 	if (!remove(h, 1)) 
 		return;
 	
-	limit = relaxed_jaccard_estimate(--query_size);
+	limit = relaxed_jaccard_estimate(--query_size, kmer_size) ;
 	assert(boundary != this->begin() || !query_size);
 	intersection -= (boundary->second == 3);
 	if (boundary == this->begin()) {

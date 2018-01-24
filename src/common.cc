@@ -35,29 +35,29 @@ string rc(const string &s)
 
 /******************************************************************************/
 
-double tau(double edit_error)
+double tau(double edit_error, int kmer_size)
 {
     double gap_error = std::min(1.0, ERROR_RATIO * edit_error);
     double a = (1 - gap_error) / (1 + gap_error);
-    double b = 1 / (2 * std::exp(KMER_SIZE * edit_error) - 1);
+    double b = 1 / (2 * std::exp(kmer_size * edit_error) - 1);
     return a * b;
 }
 
-double solve_inverse_jaccard(int j)
+double solve_inverse_jaccard(int j, int kmer_size)
 {
 	if (j == 0) return 1;
 	if (j == 1) return 0;
-	return boost::math::tools::newton_raphson_iterate([j](double d){
-		double E = exp(d * KMER_SIZE);
+	return boost::math::tools::newton_raphson_iterate([j, kmer_size](double d){
+		double E = exp(d * kmer_size);
 		return make_tuple(
 			((1 - d * ERROR_RATIO) / (1 + d * ERROR_RATIO)) * (1.0 / (2 * E - 1)) - j,
-			2 * (- KMER_SIZE * E + ERROR_RATIO - 2 * ERROR_RATIO * E + E * KMER_SIZE * pow(d * ERROR_RATIO, 2)) /
+			2 * (- kmer_size * E + ERROR_RATIO - 2 * ERROR_RATIO * E + E * kmer_size * pow(d * ERROR_RATIO, 2)) /
 				pow((2 * E - 1) * (1 + d * ERROR_RATIO), 2)
 		);
 	}, 0.10, 0.0, 1.0, numeric_limits<double>::digits);
 }
 
-int relaxed_jaccard_estimate(int s)
+int relaxed_jaccard_estimate(int s, int kmer_size)
 {
 	static unordered_map<int, int> mm;
 
@@ -73,12 +73,12 @@ int relaxed_jaccard_estimate(int s)
 	const double CI = 0.75;
 	const double Q2 = (1.0 - CI) / 2; // one side interval probability
 
-	result = ceil(s * tau());
+	result = ceil(s * tau(MAX_EDIT_ERROR, kmer_size));
 	for (; result >= 0; result--) {        
-		double d = solve_inverse_jaccard(result / s); // returns edit error
+		double d = solve_inverse_jaccard(result / s, kmer_size); // returns edit error
 		// eprn("[in={}] inverse for {} is {} ~ {}", s, result/s, d, tau(d));
-		double x = quantile(complement(binomial(s, tau(d)), Q2)); // inverse binomial 
-		double low_d = solve_inverse_jaccard(x / s);
+		double x = quantile(complement(binomial(s, tau(d, kmer_size)), Q2)); // inverse binomial 
+		double low_d = solve_inverse_jaccard(x / s, kmer_size);
 		if (100 * (1 - low_d) < MAX_EDIT_ERROR) {
 			result++; 
 			break;

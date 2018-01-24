@@ -31,11 +31,6 @@ const int MAX_MATCH = 1 * 1000 * 1000;   /// 1MB at most
 
 /******************************************************************************/
 
-// #define eprn(f, ...)   // fmt::print(stderr, f "\n",  ##__VA_ARGS__)
-// #define eprnn(...)     // fmt::print(stderr, __VA_ARGS__)
-
-/******************************************************************************/
-
 bool is_overlap(Tree &tree, int pf_pos, int pf_end, int pfp_pos, int pfp_end) 
 {
 	const int RIGHT_ALLOWANCE = MIN_READ_SIZE;    /// TODO more mathy formulation
@@ -131,11 +126,13 @@ Hit extend(SlidingMap &winnow,
 	auto do_extend_both_right = [&]() {
 		if (ref_winnow_end >= ref_hash->minimizers.size() || query_winnow_end >= query_hash->minimizers.size())
 			return false;
-		return do_extend_query_right() && do_extend_ref_right();
+		bool r = do_extend_query_right();
+		r &= do_extend_ref_right();
+		return r;
 	};
 	auto undo_extend_both_right = [&]() {
-		undo_extend_query_right();
 		undo_extend_ref_right();
+		undo_extend_query_right();
 	};
 
 	auto do_extend_query_left = [&]() {
@@ -163,17 +160,35 @@ Hit extend(SlidingMap &winnow,
 	auto do_extend_both_left = [&]() {
 		if (!query_winnow_start || !ref_winnow_start) 
 			return false;
-		return do_extend_query_left() && do_extend_ref_left();
+		bool r = do_extend_query_left();
+		r &= do_extend_ref_left();
+		return r;
 	};
 	auto undo_extend_both_left = [&]() {
-		undo_extend_query_left();
 		undo_extend_ref_left();
+		undo_extend_query_left();
+	};
+
+
+	auto do_extend_both_both = [&]() {
+		if (!query_winnow_start || !ref_winnow_start) 
+			return false;
+		if (ref_winnow_end >= ref_hash->minimizers.size() || query_winnow_end >= query_hash->minimizers.size())
+			return false;
+		bool r = do_extend_both_left();
+		r &= do_extend_both_right();
+		return r;
+	};
+	auto undo_extend_both_both = [&]() {
+		undo_extend_both_right();
+		undo_extend_both_left();
 	};
 	
 	#define p(q) make_pair(do_extend_##q, undo_extend_##q)
 	auto extensions = vector<pair<function<bool(void)>, function<void(void)>>>{
-		p(both_right), p(query_right), p(ref_right),
-		p(both_left),  p(query_left),  p(ref_left)
+		p(both_both),
+		p(both_right), // p(query_right), p(ref_right),
+		p(both_left)   // p(query_left),  p(ref_left)
 	};
 	#undef p
 
@@ -182,7 +197,6 @@ Hit extend(SlidingMap &winnow,
 	query_end = query_winnow_end < query_hash->minimizers.size() ? query_hash->minimizers[query_winnow_end].loc : query_hash->seq->seq.size();
 	ref_start = ref_winnow_start ? ref_hash->minimizers[ref_winnow_start - 1].loc + 1 : 0;
 	ref_end = ref_winnow_end < ref_hash->minimizers.size() ? ref_hash->minimizers[ref_winnow_end].loc : ref_hash->seq->seq.size();
-	
 
 	for (int i = 0, j = winnow.jaccard(), cur_undo = 0; ;) {
 		int max_match = min(MAX_MATCH, same_genome 
@@ -214,12 +228,40 @@ Hit extend(SlidingMap &winnow,
 		if (!extended) 
 			break;
 	}
-	
+
 	return Hit {
 		query_hash->seq, query_start, query_end, 
 		ref_hash->seq, ref_start, ref_end, 
 		winnow.jaccard(), "", "OK", {}
 	};
+
+	// Move right
+	// auto best_winnow = winnow;
+	// int best_ref_start = ref_start, 
+	//     best_ref_end = ref_end;
+	// int best_ref_winnow_start = ref_winnow_start, 
+	//     best_ref_winnow_end = ref_winnow_end;
+	// while (query_end < query_hash->seq->seq.size() && ref_end < ref_hash->seq->seq.size()) {
+	// 	if (ref_winnow_start < ref_hash->minimizers.size() && ref_hash->minimizers[ref_winnow_start].loc < ref_start + 1) {
+	// 		winnow.remove_from_reference(ref_hash->minimizers[ref_winnow_start++].hash);
+	// 	}
+	// 	if (ref_winnow_end < ref_hash->minimizers.size() && ref_hash->minimizers[ref_winnow_end].loc == ref_end) {
+	// 		winnow.add_to_reference(ref_hash->minimizers[ref_winnow_end++].hash);
+	// 	}
+	// 	if (winnow.jaccard() > best_winnow.jaccard()) {
+	// 		best_ref_start = ref_start;
+	// 		best_ref_end = ref_end;
+	// 		best_ref_winnow_start = ref_winnow_start;
+	// 		best_ref_winnow_end = ref_winnow_end;
+	// 		best_winnow = winnow;
+	// 	}
+	// 	ref_start++, ref_end++;
+	// 	if (ref_end == ref_hash->seq->seq.size()) 
+	// 		break;
+	// }
+	// for (int i = 0; ; i++) {
+
+	// }
 }
 
 /******************************************************************************/
@@ -231,7 +273,7 @@ vector<Hit> search_in_reference_interval (
 	bool same_genome, int init_len, bool allow_extend, bool report_fails,
 	SlidingMap winnow, int t_start, int t_end)
 {
-	assert(t_start < t_end);
+	if (t_start <= t_end);
 	assert(t_start >= 0);
 	assert(winnow.query_size > 0);
 
@@ -243,8 +285,14 @@ vector<Hit> search_in_reference_interval (
 	int ref_winnow_start = ref_hash->find_minimizers(ref_start);
 	assert(ref_winnow_start < ref_hash->minimizers.size());
 
+	// dprn("looking for: {} ^{} -> [{}..{}]", query_start,
+	// 	query_hash->minimizers[query_winnow_start].hash,
+	//  	ref_start, ref_end);
+
 	int ref_winnow_end = ref_winnow_start; // winnow is W(query) ; extend it to W(query) | W(ref)
-	for (; ref_winnow_end < ref_hash->minimizers.size() && ref_hash->minimizers[ref_winnow_end].loc < ref_end; ref_winnow_end++) {
+	for (; ref_winnow_end < ref_hash->minimizers.size() 
+		&& ref_hash->minimizers[ref_winnow_end].loc < ref_end; ref_winnow_end++) 
+	{
 		winnow.add_to_reference(ref_hash->minimizers[ref_winnow_end].hash);
 	}
 
@@ -269,11 +317,18 @@ vector<Hit> search_in_reference_interval (
 			best_ref_winnow_end = ref_winnow_end;
 			best_winnow = winnow;
 		}
-		ref_start++, ref_end++;
+		ref_start++;
+		ref_end++;
 		if (ref_end == ref_hash->seq->seq.size()) 
 			break;
 	}
 	// END TODO
+
+	// dprn(" - best matches: {} vs {} @ {}--{} ^{}", best_winnow.intersection, best_winnow.limit,
+	// 	best_ref_start, best_ref_end,
+	// 	ref_hash->minimizers[best_ref_winnow_start].hash);
+
+	// if (query_start > 10596454) exit(0);
 
 	vector<Hit> hits;
 	if (best_winnow.jaccard() < 0) {
@@ -348,11 +403,13 @@ vector<Hit> search (int query_winnow_start,
 { 
 	if (query_winnow_start >= query_hash->minimizers.size())
 		return {};
+	
 	int query_start = query_hash->minimizers[query_winnow_start].loc;
 	if (query_start + init_len > query_hash->seq->seq.size())
 		return {};
 
-	SlidingMap init_winnow;
+	assert(query_hash->kmer_size == ref_hash->kmer_size);
+	SlidingMap init_winnow(query_hash->kmer_size);
 	set<int> candidates_prel;
 	int query_winnow_end = query_winnow_start;
 	for (; query_winnow_end < query_hash->minimizers.size() && 
@@ -383,7 +440,7 @@ vector<Hit> search (int query_winnow_start,
 	vector<int> candidates(candidates_prel.begin(), candidates_prel.end());
 	for (int i = 0; i <= (int)candidates.size() - init_winnow.limit; i++) {
 		int j = i + (init_winnow.limit - 1);
-		if (candidates[j] - candidates[i] < init_len) {
+		if (candidates[j] - candidates[i] <= init_len) {
 			int x = max(0, candidates[j] - init_len + 1), 
 			    y = candidates[i] + 1;
 			if (T.size() && x < T.back().second) {
@@ -409,7 +466,7 @@ vector<Hit> search (int query_winnow_start,
 			hits.push_back(hh);
 		// hits.insert(hits.end(), h.begin(), h.end());
 	}
-   
+
 	tree -= Interval(0, query_start - MIN_READ_SIZE);
-	return parse_hits(hits);
+	return parse_hits(hits);	
 }

@@ -176,24 +176,26 @@ void search_parallel(const string &ref_path)
 	);
 }
 
-void search_single(const string &ref_path, const string &query_chr, const string &ref_chr, bool is_ref_complement)
+void search_single(const string &ref_path, const string &query_chr, const string &ref_chr, bool is_ref_complement, int kmer_size, int window_size)
 {
 	bool is_same_genome = (ref_chr == query_chr) && !is_ref_complement;
 	eprn("Same genome:        {}", is_same_genome);
-	eprn("Reverse complement: {}\n", is_ref_complement);
-
+	eprn("Reverse complement: {}", is_ref_complement);
+	eprn("k-mer size:         {}", kmer_size);
+	eprn("Window size:        {}", window_size);
+	eprn("");
 
 	auto T = cur_time();
 
 	FastaReference fr(ref_path);
 
 	string ref = fr.get_sequence(ref_chr);	
-	auto ref_hash = make_shared<Index>(make_shared<Sequence>(ref_chr, ref, is_ref_complement));
+	auto ref_hash = make_shared<Index>(make_shared<Sequence>(ref_chr, ref, is_ref_complement), kmer_size, window_size);
 
 	auto query_hash = ref_hash; 
 	if (!is_same_genome) {
 		string query = fr.get_sequence(query_chr);
-		query_hash = make_shared<Index>(make_shared<Sequence>(query_chr, query));
+		query_hash = make_shared<Index>(make_shared<Sequence>(query_chr, query), kmer_size, window_size);
 	}
 	eprn("Building index took {:.1f}s", elapsed(T)), T = cur_time();
 
@@ -236,7 +238,9 @@ void search_main(int argc, char **argv)
 			throw fmt::format("Not enough arguments to align-bucket");
 		}
 		bool is_complement = (argc > 4 && (tolower(argv[4][0]) == 'y' || tolower(argv[4][0]) == '1'));
-		search_single(argv[1], argv[2], argv[3], is_complement);
+		int kmer_size = (argc > 5 ? atoi(argv[5]) : KMER_SIZE);
+		int window_size = (argc > 6 ? atoi(argv[6]) : WINDOW_SIZE);
+		search_single(argv[1], argv[2], argv[3], is_complement, kmer_size, window_size);
 	} else if (command == "parallel") {
 		search_parallel(argv[1]);
 	} else {

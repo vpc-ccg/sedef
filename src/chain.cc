@@ -11,13 +11,6 @@ using namespace std;
 
 /******************************************************************************/
 
-int DEBUG = 1;
-
-#define eprn(f, ...)   {if(DEBUG){fmt::print(stderr, f "\n",  ##__VA_ARGS__);}}
-#define eprnn(...)     {if(DEBUG){fmt::print(stderr, __VA_ARGS__);}}
-
-/******************************************************************************/
-
 auto generate_anchors(const string &query, const string &ref, const int kmer_size = 12)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
@@ -102,11 +95,11 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 	}
 
 	// for (auto a: anchors) {
-	// 	eprn("!== {:6}..{:6} -> {:6}..{:6}", a.first.query_start, a.first.query_end,
+	// 	dprn("!== {:6}..{:6} -> {:6}..{:6}", a.first.query_start, a.first.query_end,
 	// 		a.first.ref_start, a.first.ref_end);
 	// }
 
-	eprn("-- anchors to dp: {}", l);
+	dprn("-- anchors to dp: {}", l);
 
 	sort(xs.begin(), xs.end());
 	SegmentTree<Coor> tree(ys); 
@@ -157,7 +150,7 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 			maxi = prev[maxi];
 		}
 		// for (auto i: paths.back()) {
-			// eprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6}", i, anchors[i].first.query_start, anchors[i].first.query_end,
+			// dprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6}", i, anchors[i].first.query_start, anchors[i].first.query_end,
 				// anchors[i].first.ref_start, anchors[i].first.ref_end);
 		// }
 	}
@@ -170,7 +163,7 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 vector<Hit> fast_align(const string &query, const string &ref)
 {
 	auto T = cur_time();
-	eprn("-- aligning query {:n} --> ref {:n}", query.size(), ref.size());
+	dprn("-- aligning query {:n} --> ref {:n}", query.size(), ref.size());
 
 	// 1. Generate the list of hits (small anchors) inside the dot graph	
 	auto anchors = generate_anchors(query, ref);
@@ -205,16 +198,16 @@ vector<Hit> fast_align(const string &query, const string &ref)
 			}
 		}
 		chains.push_back(a);
-		eprn("-- chain: (len:{}) {}..{} --> {}..{}", abs(a.query_start-a.query_end), 
+		dprn("-- chain: (len:{}) {}..{} --> {}..{}", abs(a.query_start-a.query_end), 
 			a.query_start, a.query_end, a.ref_start, a.ref_end);
 
 	}
-	eprn(":: elapsed/dp = {}s", elapsed(T)); T=cur_time();
+	dprn(":: elapsed/dp = {}s", elapsed(T)); T=cur_time();
 	// exit(0);
 
 	// 3. Perform the full alignment
-	eprn("-- initial chains {}", chains.size());
-	eprn(":: elapsed/long = {}s", elapsed(T)); T=cur_time();
+	dprn("-- initial chains {}", chains.size());
+	dprn(":: elapsed/long = {}s", elapsed(T)); T=cur_time();
 	vector<Hit> hits;
 
 	auto query_ptr = make_shared<Sequence>("QRY", query);
@@ -227,7 +220,7 @@ vector<Hit> fast_align(const string &query, const string &ref)
 		};
 		//if (false) {
 			hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers);
-			eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
+			dprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
 				hit.query_start, hit.query_end,
 				hit.ref_start, hit.ref_end,
 				hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
@@ -236,7 +229,7 @@ vector<Hit> fast_align(const string &query, const string &ref)
 			hits.push_back(hit);
 		//}
 	}
-	eprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
+	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
 
 	return hits;
 }
@@ -246,7 +239,7 @@ vector<Hit> fast_align(const string &query, const string &ref)
 
 void test(int, char** argv)
 {
-	// FastaReference fr("data/hg19/hg19.fa");
+	FastaReference fr("data/hg19/hg19.fa");
 	// // 200sec
 	// string s;
 	// // s = "chr22	16239131	16243489	chr22	16244049	16248400	align_both/0015/both076775	-1.0	+	+	4358	0		-nan	err=7.5;mis=-nan;gap=-nan";
@@ -264,24 +257,46 @@ void test(int, char** argv)
 	// 	break;
 	// }
 
+	// string q = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATACAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGTGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCAGGGATGCGGGGTGGGGGCAGGTACATCCTCTCTTGAGCTACAGCAGATTAACTCTGTTCTGTTTCATTGTGGTTGTTTAGTTTGCGTTTTTTTTTCTCCAACTTTGTGCTTCATCGGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGACAAAAAAGCTACATCCCTGCCTCTACCTCCATCGCATGCAAAATGTGTATTCAGTGAACGCTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGTCCCCAGACAACCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGAGACTCACCTTGGTTGTGTTCTTTGATTAGTGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAATGTAAGACCACCATCAGCACATAGGAGTTCTGCATTGGTTTGGTCTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGGTTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGGGTTAAGATAAGAGACTGTGGAGACC";
+	// string r = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATTCAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGCGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCGGGGATGCGGGGTGGGGGCAGCTACGTCCTCTCTTGAGCTACAGCAGATTCACTCTGTTCTGTTTCATTGTTGCTTAGTTTGCGTTTTGTTTCTCCAACTTTGTGCCTCATCAGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGATAAAAAAGCTACATCCCTGCCTCTACCTCCCTCGCATGTAAAATGTGTATTCAGTGAACACTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGCCCCCAGACAATCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGACACTCACCTTGGTTGTGTTCTTTGATCAGCGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAACGTAAGACCACCATCAGTACGTAGGAGTTGTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGATTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGAGTTAAGATAAGAGACTGTGGAGACC";
 
-	string q = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATACAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGTGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCAGGGATGCGGGGTGGGGGCAGGTACATCCTCTCTTGAGCTACAGCAGATTAACTCTGTTCTGTTTCATTGTGGTTGTTTAGTTTGCGTTTTTTTTTCTCCAACTTTGTGCTTCATCGGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGACAAAAAAGCTACATCCCTGCCTCTACCTCCATCGCATGCAAAATGTGTATTCAGTGAACGCTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGTCCCCAGACAACCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGAGACTCACCTTGGTTGTGTTCTTTGATTAGTGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAATGTAAGACCACCATCAGCACATAGGAGTTCTGCATTGGTTTGGTCTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGGTTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGGGTTAAGATAAGAGACTGTGGAGACC";
-	string r = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATTCAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGCGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCGGGGATGCGGGGTGGGGGCAGCTACGTCCTCTCTTGAGCTACAGCAGATTCACTCTGTTCTGTTTCATTGTTGCTTAGTTTGCGTTTTGTTTCTCCAACTTTGTGCCTCATCAGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGATAAAAAAGCTACATCCCTGCCTCTACCTCCCTCGCATGTAAAATGTGTATTCAGTGAACACTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGCCCCCAGACAATCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGACACTCACCTTGGTTGTGTTCTTTGATCAGCGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAACGTAAGACCACCATCAGTACGTAGGAGTTGTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGATTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGAGTTAAGATAAGAGACTGTGGAGACC";
+	int qs, qe, rs, re;
+	string q = fr.get_sequence("chr21", qs=10596500-1000, qe=10598323+1000);
+	string r = fr.get_sequence("chr19", rs=37763913-1000, re=37765775+1000);
 
-	shared_ptr<Index> query_hash = make_shared<Index>(make_shared<Sequence>("qry", q));
-	shared_ptr<Index> ref_hash = make_shared<Index>(make_shared<Sequence>("ref", r));
+	// 1836 1862
+
+	// string q = fr.get_sequence("chr21", qs=10596477-1000, qe=10598323+1000);
+	// string r = fr.get_sequence("chr19", rs=37761372-1000, re=37763248+1000);
+	dprn("{}..{} --> {}..{}", qs, qe, rs, re);
+	
+	shared_ptr<Index> query_hash = make_shared<Index>(make_shared<Sequence>("qry", q), 12);
+	shared_ptr<Index> ref_hash = make_shared<Index>(make_shared<Sequence>("ref", r), 12);
 
 	Tree tree;
+	auto hi = search(0, query_hash, ref_hash, tree, false, 1800, false);
+		for (auto &pp: hi) {
+		dprn("{}..{} -> {}..{} // {} ~ {}",
+			pp.query_start, pp.query_end,
+			pp.ref_start, pp.ref_end,
+			abs(pp.query_start-pp.query_end),
+			abs(pp.ref_start-pp.ref_end)
+		);
+	}
+	dprn("************************************************************");
+
+	Tree tree2;
 	for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
 		auto &qm = query_hash->minimizers[qi];
 		if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
 			continue; 
-		eprn("search {} {}", qm.loc, qi);
-		auto hi = search(qi, query_hash, ref_hash, tree, false);
+		auto hi = search(qi, query_hash, ref_hash, tree2, false);
 		for (auto &pp: hi) {
-			eprn("{}..{} -> {}..{}",
+			dprn("{}..{} -> {}..{} // {} ~ {}",
 				pp.query_start, pp.query_end,
-				pp.ref_start, pp.ref_end
+				pp.ref_start, pp.ref_end,
+				abs(pp.query_start-pp.query_end),
+				abs(pp.ref_start-pp.ref_end)
 			);
 		}
 	}

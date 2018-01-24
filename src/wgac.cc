@@ -27,8 +27,6 @@ using namespace std;
 
 const double MIN_ID = .95; // Minimum overlap percentage to call successful WGAC hit
 
-extern int DEBUG;
-
 /******************************************************************************/
 
 double overlap(int sa, int ea, int sb, int eb)
@@ -103,8 +101,6 @@ vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac, string chr
 void align_wgac(string ref_path, string tab_path)
 {
 	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true, "chr1");
-
-	DEBUG = 0;
 		
 	#pragma omp parallel for
 	for (int si = 0; si < hits.size(); si++) {

@@ -21,8 +21,9 @@ struct SlidingMap: public std::map<Hash, char> {
 	int query_size;
 	int intersection;
 	double limit;
+	int kmer_size;
 
-	SlidingMap();
+	SlidingMap(int kmer_size);
 
 	int jaccard();
 
