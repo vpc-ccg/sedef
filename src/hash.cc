@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <algorithm>
 
 #include "common.h"
 #include "hash.h"
@@ -46,74 +47,82 @@ bool operator==(const Minimizer &x, const Minimizer &y)
 	return tie(x.loc, x.hash) == tie(y.loc, y.hash);
 }
 
+bool operator<(const Minimizer &x, const Minimizer &y) 
+{
+	return tie(x.loc, x.hash) < tie(y.loc, y.hash);
+}
+
 /******************************************************************************/
 
 vector<int> spaced;
 
-vector<Minimizer> get_minimizers(const string &s, const int kmer_size, 
+vector<Minimizer> get_minimizers(const string &s, int kmer_size, 
 	const int window_size, bool separate_lowercase)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
-	srand(time(0));
-	const int kmer_span = kmer_size + (kmer_size / 3);
-	if (spaced.size() == 0) {
-		spaced = vector<int>(kmer_size);
-		for (int i = 0; i < spaced.size(); i++)
-			spaced[i] = i + (i / 3);
+	// srand(time(0));
+	// const int kmer_span = kmer_size + (kmer_size / 3);
+	// if (spaced.size() == 0) {
+	// 	spaced = vector<int>(kmer_size);
+	// 	for (int i = 0; i < spaced.size(); i++)
+	// 		spaced[i] = i + (i / 3);
+	// }
 		
-		// spaced = vector<int>(kmer_span);
-		// for (int i = 0; i < spaced.size(); i++)
-		// 	spaced[i] = i;
-		// while (spaced.size() > kmer_size) {
-		// 	int rem = rand() % spaced.size();
-		// 	spaced.erase(spaced.begin() + rem);
-		// }
-		eprnn("Seed: "); for (auto i: spaced) eprnn("{:02} ", i); 
-		eprn(" (until {})", kmer_span);
-	}
+	// 	// spaced = vector<int>(kmer_span);
+	// 	// for (int i = 0; i < spaced.size(); i++)
+	// 	// 	spaced[i] = i;
+	// 	// while (spaced.size() > kmer_size) {
+	// 	// 	int rem = rand() % spaced.size();
+	// 	// 	spaced.erase(spaced.begin() + rem);
+	// 	// }
+	// 	eprnn("Seed: "); for (auto i: spaced) eprnn("{:02} ", i); 
+	// 	eprn(" (until {})", kmer_span);
+	// }
 
 	vector<Minimizer> minimizers;
 	minimizers.reserve((2 * s.size()) / window_size);
 	deque<Minimizer> window;
-	// window contains k-mer *starting positions* (i.e. the last k-mer's end might go outside of the window)
 	uint32_t h = 0;
-	for (int i = 0; i < s.size() - kmer_span; i++) {
-		bool has_n = 0;
-		bool has_u = 0;
-		for (auto k: spaced) {
-			h = ((h << 2) | hash_dna(s[i + k])) & MASK;
-			if (s[i + k] == 'N') has_n = 1;
-			if (isupper(s[i + k])) has_u = 1;
-		}
 
-		Hash hh { h, has_n 
-			? Hash::Status::HAS_N 
-			: has_u ? Hash::Status::HAS_UPPERCASE : Hash::Status::ALL_LOWERCASE
-		};   
-		if (!separate_lowercase && hh.status == Hash::Status::ALL_LOWERCASE) {
-			hh.status = Hash::Status::HAS_UPPERCASE;
-		}
-		while (!window.empty() && !(window.back().hash < hh)) {
-			window.pop_back();
-		}
-		while (!window.empty() && window.back().loc < i - window_size) {
-			window.pop_front();
-		}
-		window.push_back({hh, i});
+	// window contains k-mer *starting positions* (i.e. the last k-mer's end might go outside of the window)
+	// for (int i = 0; i < s.size() - kmer_span; i++) {
+	// 	bool has_n = 0;
+	// 	bool has_u = 0;
+	// 	for (int j = 0; j < kmer_span; j++)
+	// 		if (isupper(s[i+j])) {has_u = 1; break;}
+	// 	for (auto k: spaced) {
+	// 		h = ((h << 2) | hash_dna(s[i + k])) & MASK;
+	// 		if (s[i + k] == 'N') has_n = 1;
+	// 		if (isupper(s[i + k])) has_u = 1;
+	// 	}
 
-		if (i < window_size) 
-			continue;
-		if (!minimizers.size() || !(window.front() == minimizers.back())) {
-			minimizers.push_back(window.front());
-		}
-	}
-	return minimizers;
+	// 	Hash hh { h, has_n 
+	// 		? Hash::Status::HAS_N 
+	// 		: has_u ? Hash::Status::HAS_UPPERCASE : Hash::Status::ALL_LOWERCASE
+	// 	};   
+	// 	if (!separate_lowercase && hh.status == Hash::Status::ALL_LOWERCASE) {
+	// 		hh.status = Hash::Status::HAS_UPPERCASE;
+	// 	}
+	// 	while (!window.empty() && !(window.back().hash < hh)) {
+	// 		window.pop_back();
+	// 	}
+	// 	while (!window.empty() && window.back().loc < i - window_size) {
+	// 		window.pop_front();
+	// 	}
+	// 	window.push_back({hh, i});
 
+	// 	if (i < window_size) 
+	// 		continue;
+	// 	if (!minimizers.size() || !(window.front() == minimizers.back())) {
+	// 		minimizers.push_back(window.front());
+	// 	}
+	// }
+	// return minimizers;
 
-/*	int last_n = - kmer_size - window_size;
+	int last_n = - kmer_size - window_size;
 	int last_u = last_n;
-	for (int i = 0; i < s.size(); i++) {
+	for (int i = 0; i < s.size()-3; i++) {
 		if (s[i] == 'N') {
 			last_n = i;
 		} else if (isupper(s[i])) {
@@ -121,12 +130,17 @@ vector<Minimizer> get_minimizers(const string &s, const int kmer_size,
 		}
 
 		h = ((h << 2) | hash_dna(s[i])) & MASK; 
+
 		if (i < kmer_size) 
 			continue;
 
+		// uint32_t cur_h = ((h << 2) | hash_dna(s[i+2]));
+		// cur_h = ((cur_h << 2) | hash_dna(s[i+3]));
 		Hash hh { h, last_n >= (i - kmer_size + 1) 
 			? Hash::Status::HAS_N 
-			: (last_u >= (i - kmer_size + 1)) ? Hash::Status::HAS_UPPERCASE : Hash::Status::ALL_LOWERCASE
+			: (last_u >= (i - kmer_size + 1)) // || isupper(s[i+2]) || isupper(s[i+3])
+				? Hash::Status::HAS_UPPERCASE 
+				: Hash::Status::ALL_LOWERCASE
 		};   
 		if (!separate_lowercase && hh.status == Hash::Status::ALL_LOWERCASE) {
 			hh.status = Hash::Status::HAS_UPPERCASE;
@@ -145,7 +159,9 @@ vector<Minimizer> get_minimizers(const string &s, const int kmer_size,
 			minimizers.push_back(window.front());
 		}
 	}
-	return minimizers;*/
+
+	// sort(minimizers.begin(), minimizers.end());
+	return minimizers;
 }
 
 /******************************************************************************/
