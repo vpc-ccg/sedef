@@ -186,9 +186,9 @@ Hit extend(SlidingMap &winnow,
 	
 	#define p(q) make_pair(do_extend_##q, undo_extend_##q)
 	auto extensions = vector<pair<function<bool(void)>, function<void(void)>>>{
-		p(both_both),
-		p(both_right), // p(query_right), p(ref_right),
-		p(both_left)   // p(query_left),  p(ref_left)
+		// p(both_both),
+		p(both_right),  p(query_right), p(ref_right),
+		p(both_left),    p(query_left),  p(ref_left)
 	};
 	#undef p
 
