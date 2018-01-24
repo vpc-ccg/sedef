@@ -26,6 +26,69 @@ using namespace std;
 
 /******************************************************************************/
 
+vector<Hit> mergeBedpe(vector<Hit> &hits, const int merge_dist = 100) {
+	vector<Hit> results;
+
+	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
+		return 
+			tie(a.query->name, a.query_start, a.ref->name, a.ref_start) <
+			tie(b.query->name, b.query_start, b.ref->name, b.ref_start);
+	});
+
+	Hit rec, prev;
+	int wcount = 0;
+	size_t len = 0;
+	ssize_t nread;
+	multimap<int, Hit> windows;
+	for (auto &rec: hits) {
+		if (rec.query->name == rec.ref->name && rec.query_start == rec.ref_start && rec.query_end == rec.ref_end)
+			continue;
+		if ((&rec - &hits[0]) == 0) {
+			windows.emplace(rec.ref_end, rec);
+			prev = rec;
+			wcount++;
+		} else if (prev.query_end + merge_dist < rec.query_start || prev.query->name != rec.query->name || 
+				prev.ref->name != rec.ref->name) 
+		{
+			for (auto it: windows)
+				results.push_back(it.second);
+			windows.clear();
+			windows.emplace(rec.ref_end, rec);
+			prev = rec;
+			wcount++;
+		} else {
+			bool needUpdate = 1;
+			while (needUpdate) {
+				auto start_loc = windows.lower_bound(rec.ref_start - merge_dist);
+				needUpdate = 0;
+				while (start_loc != windows.end()) {
+					if (start_loc->second.query_end + merge_dist < rec.query_start ||
+							  start_loc->second.ref_end < rec.ref_start - merge_dist ||
+							  start_loc->second.ref_start > rec.ref_end + merge_dist) 
+					{
+						 start_loc++;
+						 continue;
+					}
+					needUpdate = 1;
+					rec.query_end = max(rec.query_end, start_loc->second.query_end);
+					rec.ref_end = max(rec.ref_end, start_loc->second.ref_end);
+					rec.query_start = min(rec.query_start, start_loc->second.query_start);
+					rec.ref_start = min(rec.ref_start, start_loc->second.ref_start);
+					windows.erase(start_loc++);
+				}
+			}
+			windows.emplace(rec.ref_end, rec);
+		}
+		rec.query_end = max(rec.query_end, prev.query_end);
+		prev = rec;
+	}
+	for (auto it: windows)
+		results.push_back(it.second);
+	return results;
+}
+
+/******************************************************************************/
+
 auto stat_file(const string &path)
 {
 	struct stat path_stat;
@@ -52,7 +115,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		throw fmt::format("Path {} is neither file nor directory", bed_path);
 	}
 
-	vector<vector<Hit>> bins(2000);
+	vector<Hit> hits;
 	for (auto &file: files) {
 		ifstream fin(file.c_str());
 		if (!fin.is_open()) {
@@ -63,12 +126,29 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		string s;
 		while (getline(fin, s)) {
 			Hit h = Hit::from_bed(s);
-			int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
-			assert(complexity / 1000 < bins.size());
-			bins[complexity / 1000].push_back(h);
+
+			int w = max(h.query_end - h.query_start, h.ref_end - h.ref_start);
+			w = min(15000, 4 * w);
+			h.query_start = max(0, h.query_start - w);
+			h.query_end += w;
+			h.ref_start = max(0, h.ref_start - w);
+			h.ref_end += w;
+
+			hits.push_back(h);
 			nhits++;
 		}
 		eprn("Read {} alignments in {}", nhits, file);
+	}
+
+	eprn("Read total {} alignments", hits.size());
+	hits = mergeBedpe(hits);
+	eprn("After merging remaining {} alignments", hits.size());
+
+	vector<vector<Hit>> bins(10000);
+	for (auto &h: hits) {
+		int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
+		assert(complexity / 1000 < bins.size());
+		bins[complexity / 1000].push_back(h);
 	}
 
 	vector<vector<Hit>> results(nbins);
@@ -110,17 +190,20 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 	for (auto &s: schedule) 
 		total += s.size();
 
+	exit(0);
+
 	int WW=0;
 	// #pragma omp parallel for
 	for (int i = 0; i < schedule.size(); i++) {
 		// auto &h = schedule[i].back();
 		for (auto &h: schedule[i]) {
-			int extend = max(h.ref_end - h.ref_start, h.query_end - h.query_start);
-			// eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
-			h.query_start = max(h.query_start - extend, 0);
-			h.ref_start = max(h.ref_start - extend, 0);
-			h.query_end = min(h.query_end + extend, (int)fr.index.entry(h.query->name).length);
-			h.ref_end = min(h.ref_end + extend, (int)fr.index.entry(h.ref->name).length);
+			// int extend = max(h.ref_end - h.ref_start, h.query_end - h.query_start);
+			// // eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
+			// h.query_start = max(h.query_start - extend, 0);
+			// h.ref_start = max(h.ref_start - extend, 0);
+			// h.query_end = min(h.query_end + extend, (int)fr.index.entry(h.query->name).length);
+			// h.ref_end = min(h.ref_end + extend, (int)fr.index.entry(h.ref->name).length);
+
 			// eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
 
 			// if (fmt::format("{} {} {} {}", h.query_start, h.query_end, h.ref_start, h.ref_end) != "62038352 62039402 192191615 192193123") 
