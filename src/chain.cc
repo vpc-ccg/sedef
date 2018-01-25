@@ -178,7 +178,7 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 		int rlo = anchors[chain.front()].first.ref_start,   
 			rhi = anchors[chain.back()].first.ref_end;
 
-		if (min(rhi - rlo, qhi - qlo) < 100) //(1 - MAX_ERROR) * MIN_READ_SIZE)
+		if (min(rhi - rlo, qhi - qlo) < (1 - MAX_ERROR) * MIN_READ_SIZE)
 			continue;
 
 		assert(qhi <= query.size());
