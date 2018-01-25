@@ -160,13 +160,13 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 
 /******************************************************************************/
 
-vector<Hit> fast_align(const string &query, const string &ref)
+vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 {
 	auto T = cur_time();
 	dprn("-- aligning query {:n} --> ref {:n}", query.size(), ref.size());
 
 	// 1. Generate the list of hits (small anchors) inside the dot graph	
-	auto anchors = generate_anchors(query, ref);
+	auto anchors = generate_anchors(query, ref, kmer_size);
 
 	// 2. Run DP on the anchors and collect all different anchors
 	vector<Anchor> chains;

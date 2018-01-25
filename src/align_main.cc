@@ -181,7 +181,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 	return results;
 }
 
-void generate_alignments(const string &ref_path, const string &bed_path) 
+void generate_alignments(const string &ref_path, const string &bed_path, int kmer_size) 
 {
 	auto T = cur_time();
 
@@ -191,6 +191,8 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 	int lines = 0, total = 0;
 	for (auto &s: schedule) 
 		total += s.size();
+
+	eprn("Using k-mer size {}", kmer_size);
 
 	int WW=0;
 	// #pragma omp parallel for
@@ -217,7 +219,7 @@ void generate_alignments(const string &ref_path, const string &bed_path)
 			if (h.ref->is_rc) 
 				fb = rc(fb);
 
-			auto alns = fast_align(fa, fb);
+			auto alns = fast_align(fa, fb, kmer_size);
 			// #pragma omp critical
 			// {
 				lines++;
@@ -264,7 +266,7 @@ void align_main(int argc, char **argv)
 		}
 		bucket_alignments(argv[1], atoi(argv[3]), argv[2]);
 	} else if (command == "generate") {
-		generate_alignments(argv[1], argv[2]);
+		generate_alignments(argv[1], argv[2], atoi(argv[3]));
 	// } else if (command == "process") {
 	// 	postprocess(argv[1], argv[2]);
 	} else {

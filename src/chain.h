@@ -30,4 +30,4 @@ struct Anchor {
 	}
 };
 
-std::vector<Hit> fast_align(const std::string &query, const std::string &ref);
+std::vector<Hit> fast_align(const std::string &query, const std::string &ref, int kmer_size = 12);
