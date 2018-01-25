@@ -107,12 +107,13 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 	vector<int> prev(anchors.size(), -1);
 	vector<int> dp(anchors.size(), 0);
 
+	const int ratio = 4;
 	set<pair<int, int>, greater<pair<int, int>>> maxes;
 	for (auto &x: xs) {
 		int i = x.x.second;
 		auto &a = anchors[i].first;
 		if (x.x.first == a.query_start) {
-			int w = 2 * (a.query_end - a.query_start);
+			int w = ratio * (a.query_end - a.query_start);
 			int j = tree.rmq({a.ref_start - 1, anchors.size()});
 			if (j != -1 && ys[j].score != -1) {
 				j = ys[j].pos;
@@ -177,7 +178,7 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 		int rlo = anchors[chain.front()].first.ref_start,   
 			rhi = anchors[chain.back()].first.ref_end;
 
-		if (min(rhi - rlo, qhi - qlo) < (1 - MAX_ERROR) * MIN_READ_SIZE)
+		if (min(rhi - rlo, qhi - qlo) < 100) //(1 - MAX_ERROR) * MIN_READ_SIZE)
 			continue;
 
 		assert(qhi <= query.size());
@@ -219,14 +220,12 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 			0, "", "", {}
 		};
 		//if (false) {
-			hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers);
-			dprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
-				hit.query_start, hit.query_end,
-				hit.ref_start, hit.ref_end,
-				hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-				hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
-			);
-			hits.push_back(hit);
+		hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers, 250);
+		hit.query_start = hit.aln.start_a;
+		hit.ref_start = hit.aln.start_b;
+		hit.query_end = hit.aln.end_a;
+		hit.ref_end = hit.aln.end_b;
+		hits.push_back(hit);
 		//}
 	}
 	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
@@ -240,64 +239,71 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 void test(int, char** argv)
 {
 	FastaReference fr("data/hg19/hg19.fa");
-	// // 200sec
-	// string s;
-	// // s = "chr22	16239131	16243489	chr22	16244049	16248400	align_both/0015/both076775	-1.0	+	+	4358	0		-nan	err=7.5;mis=-nan;gap=-nan";
-	// s = "chr1	547768	1495799	chr1	243152784	244152796			+	+	1000012	0		OK;mis=-nan;gap=-nan;";
-	// // ifstream fin(argv[0]);
-	// while (1) {
-	// 	Hit h = Hit::from_bed(s);
-		
-	// 	auto T = cur_time();
-	// 	const int OX = 0;
-	// 	auto q = fr.get_sequence(h.query->name, h.query_start, h.query_end);
-	// 	auto r = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
-	// 	fast_align(q, r);
-	// 	eprn("total {}s", elapsed(T));
-	// 	break;
-	// }
+	string s;
+	// s = "chr10	98308557	98331750	chr10	126545044	126567993		+	+	23193	0			OK";
+	s = "chr10	98319847	98321003	chr10	126555985	126557221	align_both/0001/both0060290	+	+	0	0	0";
+	while (1) {
+		Hit h = Hit::from_bed(s);	
+		auto q = fr.get_sequence(h.query->name, h.query_start, h.query_end);
+		auto r = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
+
+		for (int k = 11; k <= 11; k++) {
+			auto T = cur_time();
+			eprn("{} {}", string(60, '*'), k);
+			auto hits = fast_align(q, r, k);
+			for (auto &hit: hits) {
+				eprn("||> Q {:7n}..{:7n} R {:7n}..{:7n} | L {:7n} {:7n} | E {:4.2f} (g={:4.2f}, m={:4.2f})", 
+					h.query_start + hit.query_start, h.query_start + hit.query_end,
+					h.ref_start + hit.ref_start, h.ref_start + hit.ref_end,
+					hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
+					hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error()
+				);
+			}
+			eprn("total {}s\n", elapsed(T));
+		}
+		break;
+	}
 
 	// string q = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATACAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGTGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCAGGGATGCGGGGTGGGGGCAGGTACATCCTCTCTTGAGCTACAGCAGATTAACTCTGTTCTGTTTCATTGTGGTTGTTTAGTTTGCGTTTTTTTTTCTCCAACTTTGTGCTTCATCGGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGACAAAAAAGCTACATCCCTGCCTCTACCTCCATCGCATGCAAAATGTGTATTCAGTGAACGCTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGTCCCCAGACAACCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGAGACTCACCTTGGTTGTGTTCTTTGATTAGTGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAATGTAAGACCACCATCAGCACATAGGAGTTCTGCATTGGTTTGGTCTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGGTTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGGGTTAAGATAAGAGACTGTGGAGACC";
 	// string r = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATTCAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGCGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCGGGGATGCGGGGTGGGGGCAGCTACGTCCTCTCTTGAGCTACAGCAGATTCACTCTGTTCTGTTTCATTGTTGCTTAGTTTGCGTTTTGTTTCTCCAACTTTGTGCCTCATCAGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGATAAAAAAGCTACATCCCTGCCTCTACCTCCCTCGCATGTAAAATGTGTATTCAGTGAACACTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGCCCCCAGACAATCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGACACTCACCTTGGTTGTGTTCTTTGATCAGCGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAACGTAAGACCACCATCAGTACGTAGGAGTTGTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGATTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGAGTTAAGATAAGAGACTGTGGAGACC";
 
-	int qs, qe, rs, re;
-	string q = fr.get_sequence("chr21", qs=10596500-1000, qe=10598323+1000);
-	string r = fr.get_sequence("chr19", rs=37763913-1000, re=37765775+1000);
+	// int qs, qe, rs, re;
+	// string q = fr.get_sequence("chr21", qs=10596500-1000, qe=10598323+1000);
+	// string r = fr.get_sequence("chr19", rs=37763913-1000, re=37765775+1000);
 
-	// 1836 1862
+	// // 1836 1862
 
-	// string q = fr.get_sequence("chr21", qs=10596477-1000, qe=10598323+1000);
-	// string r = fr.get_sequence("chr19", rs=37761372-1000, re=37763248+1000);
-	dprn("{}..{} --> {}..{}", qs, qe, rs, re);
+	// // string q = fr.get_sequence("chr21", qs=10596477-1000, qe=10598323+1000);
+	// // string r = fr.get_sequence("chr19", rs=37761372-1000, re=37763248+1000);
+	// dprn("{}..{} --> {}..{}", qs, qe, rs, re);
 	
-	shared_ptr<Index> query_hash = make_shared<Index>(make_shared<Sequence>("qry", q), 12);
-	shared_ptr<Index> ref_hash = make_shared<Index>(make_shared<Sequence>("ref", r), 12);
+	// shared_ptr<Index> query_hash = make_shared<Index>(make_shared<Sequence>("qry", q), 12);
+	// shared_ptr<Index> ref_hash = make_shared<Index>(make_shared<Sequence>("ref", r), 12);
 
-	Tree tree;
-	auto hi = search(0, query_hash, ref_hash, tree, false, 1800, false);
-		for (auto &pp: hi) {
-		dprn("{}..{} -> {}..{} // {} ~ {}",
-			pp.query_start, pp.query_end,
-			pp.ref_start, pp.ref_end,
-			abs(pp.query_start-pp.query_end),
-			abs(pp.ref_start-pp.ref_end)
-		);
-	}
-	dprn("************************************************************");
+	// Tree tree;
+	// auto hi = search(0, query_hash, ref_hash, tree, false, 1800, false);
+	// 	for (auto &pp: hi) {
+	// 	dprn("{}..{} -> {}..{} // {} ~ {}",
+	// 		pp.query_start, pp.query_end,
+	// 		pp.ref_start, pp.ref_end,
+	// 		abs(pp.query_start-pp.query_end),
+	// 		abs(pp.ref_start-pp.ref_end)
+	// 	);
+	// }
+	// dprn("************************************************************");
 
-	Tree tree2;
-	for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
-		auto &qm = query_hash->minimizers[qi];
-		if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
-			continue; 
-		auto hi = search(qi, query_hash, ref_hash, tree2, false);
-		for (auto &pp: hi) {
-			dprn("{}..{} -> {}..{} // {} ~ {}",
-				pp.query_start, pp.query_end,
-				pp.ref_start, pp.ref_end,
-				abs(pp.query_start-pp.query_end),
-				abs(pp.ref_start-pp.ref_end)
-			);
-		}
-	}
+	// Tree tree2;
+	// for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
+	// 	auto &qm = query_hash->minimizers[qi];
+	// 	if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
+	// 		continue; 
+	// 	auto hi = search(qi, query_hash, ref_hash, tree2, false);
+	// 	for (auto &pp: hi) {
+	// 		dprn("{}..{} -> {}..{} // {} ~ {}",
+	// 			pp.query_start, pp.query_end,
+	// 			pp.ref_start, pp.ref_end,
+	// 			abs(pp.query_start-pp.query_end),
+	// 			abs(pp.ref_start-pp.ref_end)
+	// 		);
+	// 	}
 }

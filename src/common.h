@@ -23,8 +23,8 @@
 #define eprn(f, ...)   fmt::print(stderr, f "\n",  ##__VA_ARGS__)
 #define eprnn(...)     fmt::print(stderr, __VA_ARGS__)
 
-#define dprn(f, ...)   // {if(getenv("SEDEFDBG"))fmt::print(stderr, f "\n",  ##__VA_ARGS__);}
-#define dprnn(...)     // {if(getenv("SEDEFDBG"))fmt::print(stderr, __VA_ARGS__);}
+#define dprn(f, ...)   {if(getenv("SEDEFDBG"))fmt::print(stderr, f "\n",  ##__VA_ARGS__);}
+#define dprnn(...)     {if(getenv("SEDEFDBG"))fmt::print(stderr, __VA_ARGS__);}
 
 #define cur_time()     chrono::high_resolution_clock::now() 
 #define elapsed(t)     (chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - (t)).count() / 1000.00)

@@ -264,6 +264,17 @@ vector<Alignment> Alignment::max_sum(int min_span)
 	return results;
 }
 
+void Alignment::prepend_cigar(const deque<pair<char, int>> &app)
+{
+	assert(app.size());
+	if (cigar.size() && cigar.front().first == app.back().first) {
+		cigar.front().second += app.back().second;
+		cigar.insert(cigar.begin(), app.begin(), app.end() - 1);
+	} else {
+		cigar.insert(cigar.begin(), app.begin(), app.end());
+	}
+}
+
 void Alignment::append_cigar(const deque<pair<char, int>> &app)
 {
 	assert(app.size());
@@ -276,7 +287,8 @@ void Alignment::append_cigar(const deque<pair<char, int>> &app)
 }
 
 Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
-	const list<pair<int, int>> &query_kmers, const list<pair<int, int>> &ref_kmers) 
+	const list<pair<int, int>> &query_kmers, const list<pair<int, int>> &ref_kmers,
+	const int side) 
 {
 	auto qk_p = query_kmers.begin();
 	auto rk_p = ref_kmers.begin();
@@ -317,17 +329,86 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 		aln.append_cigar({{'M', qk->second - qk->first}});
 		qk_p = qk, rk_p = rk;
 	}
+	// Add end
+
 
 	int qlo = query_kmers.front().first, 
-		qhi = query_kmers.back().second;
+		 qhi = query_kmers.back().second;
 	int rlo = ref_kmers.front().first,   
-		rhi = ref_kmers.back().second;
+		 rhi = ref_kmers.back().second;
+	if (side) {
+		int qlo_n = max(0, qlo - side);
+		int rlo_n = max(0, rlo - side);
+		if (qlo - qlo_n && rlo - rlo_n) {
+			auto gap = align(
+				qstr.substr(qlo_n, qlo - qlo_n), 
+				rstr.substr(rlo_n, rlo - rlo_n), 
+				5, -4, 40, 1
+			);
+			//eprn("lside={}, {}->{} / {}->{}, cigar={}", side, qlo_n, qlo, rlo_n, rlo, gap.cigar_string());
+			int i = gap.cigar.size() - 1;
+			int sq = 0, sr = 0;
+			if (gap.cigar[i].first != 'M' && gap.cigar[i].second <= 10) {
+				if (gap.cigar[i].first == 'D') {
+					sq += gap.cigar[i].second;
+				} else {
+					sr += gap.cigar[i].second;
+				}
+				i--;
+			}
+			if (i >= 0 && gap.cigar[i].first == 'M') {
+				//eprn("added!");
+				sq += gap.cigar[i].second;
+				sr += gap.cigar[i].second;
+
+				aln.prepend_cigar(deque<pair<char, int>>(gap.cigar.begin() + i, gap.cigar.end()));
+				aln.a = qstr.substr(qlo - sq, sq) + aln.a;
+				aln.b = rstr.substr(rlo - sr, sr) + aln.b;
+				aln.start_a = qlo = qlo - sq; 
+				aln.start_b = rlo = rlo - sr;	
+			}
+		}
+
+		int qhi_n = min(qhi + side, (int)qstr.size());
+		int rhi_n = min(rhi + side, (int)rstr.size());
+		if (qhi_n - qhi && rhi_n - rhi) {
+			auto gap = align(
+				qstr.substr(qhi, qhi_n - qhi), 
+				rstr.substr(rhi, rhi_n - rhi), 
+				5, -4, 40, 1
+			);
+			int i = 0;
+			int sq = 0, sr = 0;
+			//eprn("rside={}, {}->{} / {}->{}, cigar={}", side, qhi, qhi_n, rhi, rhi_n, gap.cigar_string());
+			if (gap.cigar[i].first != 'M' && gap.cigar[i].second <= 10) {
+				if (gap.cigar[i].first == 'D') {
+					sq += gap.cigar[i].second;
+				} else {
+					sr += gap.cigar[i].second;
+				}
+				i++;
+			}
+			if (i < gap.cigar.size() && gap.cigar[i].first == 'M') {
+				sq += gap.cigar[i].second;
+				sr += gap.cigar[i].second;
+
+				aln.append_cigar(deque<pair<char, int>>(gap.cigar.begin(), gap.cigar.begin() + i + 1));
+				aln.a += qstr.substr(qhi, sq);
+				aln.b += rstr.substr(rhi, sr);
+				aln.end_a = qhi = qhi + sq;
+				aln.end_b = rhi = rhi + sr;	
+			}
+		}
+	}
+
+	assert(qlo >= 0);
+	assert(rlo >= 0);
 	assert(qhi <= qstr.size());
 	assert(rhi <= rstr.size());
 	assert(aln.a == qstr.substr(qlo, qhi - qlo));
 	assert(aln.b == rstr.substr(rlo, rhi - rlo));
 
-	aln.populate_nice_alignment();
+	aln = aln.trim();
 	aln.error = aln.calculate_error();
 	return aln;
 }

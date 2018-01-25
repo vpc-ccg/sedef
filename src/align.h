@@ -45,13 +45,15 @@ struct Alignment {
 
 	static Alignment from_cigar(const std::string &a, const std::string &b, const std::string &cigar);
 	static Alignment from_anchors(const std::string &qstr, const std::string &rstr,
-		const std::list<std::pair<int, int>> &query_kmers, const std::list<std::pair<int, int>> &ref_kmers);
+		const std::list<std::pair<int, int>> &query_kmers, const std::list<std::pair<int, int>> &ref_kmers,
+		const int side);
 
 	std::string cigar_string();
 	void cigar_from_alignment();
 	void populate_nice_alignment();
 	std::string print(int width=100);
 	std::string print_only_alignment(int width=-1);
+	void prepend_cigar(const std::deque<std::pair<char, int>> &app);
 	void append_cigar(const std::deque<std::pair<char, int>> &app);
 
 	Alignment trim();

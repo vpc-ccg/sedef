@@ -26,7 +26,7 @@ using namespace std;
 
 /******************************************************************************/
 
-vector<Hit> mergeBedpe(vector<Hit> &hits, const int merge_dist = 100) {
+vector<Hit> merge(vector<Hit> &hits, const int merge_dist = 100) {
 	vector<Hit> results;
 
 	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
@@ -99,7 +99,7 @@ auto stat_file(const string &path)
 	return path_stat.st_mode;
 }
 
-auto bucket_alignments(const string &bed_path, int nbins, string output_dir = "")
+auto bucket_alignments(const string &bed_path, int nbins, string output_dir = "", bool extend=false)
 {
 	vector<string> files;
 	if (S_ISREG(stat_file(bed_path))) {
@@ -129,12 +129,14 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		while (getline(fin, s)) {
 			Hit h = Hit::from_bed(s);
 
-			int w = max(h.query_end - h.query_start, h.ref_end - h.ref_start);
-			w = min(15000, 4 * w);
-			h.query_start = max(0, h.query_start - w);
-			h.query_end += w;
-			h.ref_start = max(0, h.ref_start - w);
-			h.ref_end += w;
+			if (extend) {
+				int w = max(h.query_end - h.query_start, h.ref_end - h.ref_start);
+				w = min(15000, 4 * w);
+				h.query_start = max(0, h.query_start - w);
+				h.query_end += w;
+				h.ref_start = max(0, h.ref_start - w);
+				h.ref_end += w;
+			}
 
 			hits.push_back(h);
 			nhits++;
@@ -143,8 +145,10 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 	}
 
 	eprn("Read total {} alignments", hits.size());
-	hits = mergeBedpe(hits);
-	eprn("After merging remaining {} alignments", hits.size());
+	if (extend) {
+		hits = merge(hits);
+		eprn("After merging remaining {} alignments", hits.size());
+	}
 
 	vector<vector<Hit>> bins(10000);
 	for (auto &h: hits) {
@@ -264,7 +268,7 @@ void align_main(int argc, char **argv)
 		if (argc < 4) {
 			throw fmt::format("Not enough arguments to align-bucket");
 		}
-		bucket_alignments(argv[1], atoi(argv[3]), argv[2]);
+		bucket_alignments(argv[1], atoi(argv[3]), argv[2], true);
 	} else if (command == "generate") {
 		generate_alignments(argv[1], argv[2], atoi(argv[3]));
 	// } else if (command == "process") {
