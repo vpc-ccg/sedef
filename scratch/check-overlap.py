@@ -119,13 +119,13 @@ with open('temp_diff.bed') as f:
         # print [(i,x) for i,x in enumerate(l)]
         B = (l[q], int(l[q+1]), int(l[q+2]), l[q+3], int(l[q+4]), int(l[q+5]), l[q+6]+l[q+7]) # SEDEF
 
-        B = list(B)
-        d = min(10000, 4 * max(B[2] - B[1], B[5] - B[4]))
-        B[1] -= d
-        B[2] += d
-        B[4] -= d
-        B[5] += d
-        B = tuple(B)
+        # B = list(B)
+        # d = min(10000, 4 * max(B[2] - B[1], B[5] - B[4]))
+        # B[1] -= d
+        # B[2] += d
+        # B[4] -= d
+        # B[5] += d
+        # B = tuple(B)
         # exit(0)
 
         name = l[6]

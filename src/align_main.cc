@@ -31,8 +31,8 @@ vector<Hit> mergeBedpe(vector<Hit> &hits, const int merge_dist = 100) {
 
 	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
 		return 
-			tie(a.query->name, a.query_start, a.ref->name, a.ref_start) <
-			tie(b.query->name, b.query_start, b.ref->name, b.ref_start);
+			tie(a.ref->is_rc, a.query->name, a.query_start, a.ref->name, a.ref_start) <
+			tie(b.ref->is_rc, b.query->name, b.query_start, b.ref->name, b.ref_start);
 	});
 
 	Hit rec, prev;
@@ -41,14 +41,16 @@ vector<Hit> mergeBedpe(vector<Hit> &hits, const int merge_dist = 100) {
 	ssize_t nread;
 	multimap<int, Hit> windows;
 	for (auto &rec: hits) {
-		if (rec.query->name == rec.ref->name && rec.query_start == rec.ref_start && rec.query_end == rec.ref_end)
+		assert(!rec.query->is_rc);
+		if (rec.query->name == rec.ref->name && rec.query_start == rec.ref_start && rec.query_end == rec.ref_end &&
+			rec.query->is_rc == rec.ref->is_rc)
 			continue;
 		if ((&rec - &hits[0]) == 0) {
 			windows.emplace(rec.ref_end, rec);
 			prev = rec;
 			wcount++;
 		} else if (prev.query_end + merge_dist < rec.query_start || prev.query->name != rec.query->name || 
-				prev.ref->name != rec.ref->name) 
+				prev.ref->name != rec.ref->name || prev.ref->is_rc != rec.ref->is_rc) 
 		{
 			for (auto it: windows)
 				results.push_back(it.second);
