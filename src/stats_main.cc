@@ -33,6 +33,12 @@ void stats(const string &ref_path, const string &bed_path ) {
     string fa, fb;
     fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
     fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
+    if (h.query->is_rc) {
+      fa = rc(fa);
+    }
+    if (h.ref->is_rc) {
+	  fb = rc(fb);
+    }
     Alignment aln = align(fa, fb);
     int align_length = aln.alignment.length();
     int indel_a = 0;
