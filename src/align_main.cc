@@ -31,8 +31,8 @@ vector<Hit> merge(vector<Hit> &hits, const int merge_dist = 100) {
 
 	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
 		return 
-			tie(a.ref->is_rc, a.query->name, a.query_start, a.ref->name, a.ref_start) <
-			tie(b.ref->is_rc, b.query->name, b.query_start, b.ref->name, b.ref_start);
+			tie(a.ref->is_rc, a.query->name, a.ref->name, a.query_start, a.ref_start) <
+			tie(b.ref->is_rc, b.query->name, b.ref->name, b.query_start, b.ref_start);
 	});
 
 	Hit rec, prev;
