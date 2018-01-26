@@ -63,20 +63,20 @@ void stats(const string &ref_path, const string &bed_path ) {
         }
       }
     }
-    double fracMatch = double(matchB) / (align_length - indel_a);
+    double fracMatch = double(matchB) / (alignB);
     double fracMatchIndel = double(matchB) / (align_length);
   
-    double jcp = double(mismatchB) / (align_length - indel_a);
+    double jcp = double(mismatchB) / (alignB);
     double jcK = -0.75 * log(1- 4.0/3 * jcp);
     
-    double p = double(transitionsB) / (align_length - indel_a);
-    double q = double(transversionsB) / (align_length - indel_a);
+    double p = double(transitionsB) / (alignB);
+    double q = double(transversionsB) / (alignB);
     double w1 = 1.0 / (1 - 2.0 * p - q);
     double w2 = 1.0 / (1 - 2.0 * q);
     double k2K = 0.5 * log(w1) + 0.25 * log(w2);
     
     prn("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
-      h.to_bed(false), align_length, indel_a, indel_b, alignB, matchB, mismatchB,
+      line, align_length, indel_a, indel_b, alignB, matchB, mismatchB,
       transitionsB, transversionsB, fracMatch, fracMatchIndel, jcK, k2K);
   }
 }
