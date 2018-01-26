@@ -61,7 +61,7 @@ print ':: Loaded {} hits from WGAC'.format(df.shape[0])
 
 hits = {}
 name_to_coor = {}
-with open('temp.bed', 'w') as f:
+with open(path + '_temp.bed', 'w') as f:
     for _, r in df.iterrows():
         if '_' in r.chrom or '_' in r.otherChrom:
             continue
@@ -99,25 +99,25 @@ def process_path(path, pnew):
             for l in f:
                 l = l.strip().split('\t')
                 s1, e1, s2, e2 = map(int, l[1:3] + l[4:6])
-                o = max(e1-s1,e2-s2)*1
+                o = max(e1 - s1, e2 - s2) * 1
                 l[1:3] = [max(1, s1 - o), e1 + o]
                 l[4:6] = [max(1, s2 - o), e2 + o]
                 print >>fw, '\t'.join(map(str, l))
 
 pnew = path #+ "____"
 # process_path(path, pnew)
-system("bedtools pairtopair -a temp.bed -b <(cat {} | tr -d ,) -type both > temp_diff.bed".format(pnew))
+system("bedtools pairtopair -a {0}_temp.bed -b {0} -type both > {0}_temp_diff.bed".format(pnew))
 # os.unlink(pnew)
 print ':: After bedtools we have {} hits to process'.format(system("wc -l temp_diff.bed"))
 
-with open('temp_diff.bed') as f:
+with open(path + '_temp_diff.bed') as f:
     for l in f:
         l = l.strip().split()
         q = 0
         A = (l[q], int(l[q+1]), int(l[q+2]), l[q+3], int(l[q+4]), int(l[q+5]), l[q+8]+l[q+9]) # WGAC
         q = 10
         # print [(i,x) for i,x in enumerate(l)]
-        B = (l[q], int(l[q+1]), int(l[q+2]), l[q+3], int(l[q+4]), int(l[q+5]), l[q+6]+l[q+7]) # SEDEF
+        B = (l[q], int(l[q+1]), int(l[q+2]), l[q+3], int(l[q+4]), int(l[q+5]), l[q+7]+l[q+8]) # SEDEF
 
         # B = list(B)
         # d = min(10000, 4 * max(B[2] - B[1], B[5] - B[4]))
@@ -126,6 +126,8 @@ with open('temp_diff.bed') as f:
         # B[4] -= d
         # B[5] += d
         # B = tuple(B)
+        # exit(0)
+        # print B
         # exit(0)
 
         name = l[6]

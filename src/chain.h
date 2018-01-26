@@ -24,6 +24,8 @@ struct Anchor {
 	int query_start, query_end;
 	int ref_start, ref_end;
 	list<pair<int, int>> query_kmers, ref_kmers;
+	bool all_lowercase;
+	int matches, mismatches;
 
 	bool operator< (const Anchor &a) const {
 		return tie(query_start, ref_start) < tie(a.query_start, a.ref_start);

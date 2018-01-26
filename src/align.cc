@@ -345,28 +345,12 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 				rstr.substr(rlo_n, rlo - rlo_n), 
 				5, -4, 40, 1
 			);
-			//eprn("lside={}, {}->{} / {}->{}, cigar={}", side, qlo_n, qlo, rlo_n, rlo, gap.cigar_string());
-			int i = gap.cigar.size() - 1;
-			int sq = 0, sr = 0;
-			if (gap.cigar[i].first != 'M' && gap.cigar[i].second <= 10) {
-				if (gap.cigar[i].first == 'D') {
-					sq += gap.cigar[i].second;
-				} else {
-					sr += gap.cigar[i].second;
-				}
-				i--;
-			}
-			if (i >= 0 && gap.cigar[i].first == 'M') {
-				//eprn("added!");
-				sq += gap.cigar[i].second;
-				sr += gap.cigar[i].second;
 
-				aln.prepend_cigar(deque<pair<char, int>>(gap.cigar.begin() + i, gap.cigar.end()));
-				aln.a = qstr.substr(qlo - sq, sq) + aln.a;
-				aln.b = rstr.substr(rlo - sr, sr) + aln.b;
-				aln.start_a = qlo = qlo - sq; 
-				aln.start_b = rlo = rlo - sr;	
-			}
+			aln.prepend_cigar(gap.cigar);
+			aln.a = qstr.substr(qlo_n, qlo - qlo_n) + aln.a;
+			aln.b = rstr.substr(rlo_n, rlo - rlo_n) + aln.b;
+			aln.start_a = qlo = qlo_n; 
+			aln.start_b = rlo = rlo_n;	
 		}
 
 		int qhi_n = min(qhi + side, (int)qstr.size());
@@ -377,27 +361,12 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 				rstr.substr(rhi, rhi_n - rhi), 
 				5, -4, 40, 1
 			);
-			int i = 0;
-			int sq = 0, sr = 0;
-			//eprn("rside={}, {}->{} / {}->{}, cigar={}", side, qhi, qhi_n, rhi, rhi_n, gap.cigar_string());
-			if (gap.cigar[i].first != 'M' && gap.cigar[i].second <= 10) {
-				if (gap.cigar[i].first == 'D') {
-					sq += gap.cigar[i].second;
-				} else {
-					sr += gap.cigar[i].second;
-				}
-				i++;
-			}
-			if (i < gap.cigar.size() && gap.cigar[i].first == 'M') {
-				sq += gap.cigar[i].second;
-				sr += gap.cigar[i].second;
-
-				aln.append_cigar(deque<pair<char, int>>(gap.cigar.begin(), gap.cigar.begin() + i + 1));
-				aln.a += qstr.substr(qhi, sq);
-				aln.b += rstr.substr(rhi, sr);
-				aln.end_a = qhi = qhi + sq;
-				aln.end_b = rhi = rhi + sr;	
-			}
+			
+			aln.append_cigar(gap.cigar);
+			aln.a += qstr.substr(qhi, qhi_n - qhi);
+			aln.b += rstr.substr(rhi, rhi_n - rhi);
+			aln.end_a = qhi = qhi_n;
+			aln.end_b = rhi = rhi_n;
 		}
 	}
 

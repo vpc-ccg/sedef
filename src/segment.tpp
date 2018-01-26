@@ -9,71 +9,66 @@ using namespace std;
 /******************************************************************************/
 
 template<typename T>
-int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &q, int i) // q is inclusive
+int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q, int i) // [p, q] are both inclusive
 {
 	if (i >= tree.size()) {
 		return -1;
 	} else if (tree[i].a != -1) { // leaf
-		if (anchors[tree[i].a].x <= q)
+		if (p <= anchors[tree[i].a].x && anchors[tree[i].a].x <= q) {
 			return i;
+		} else {
+			return -1;
+		}
 	} else {
 		int pv = tree[i].p;
 		if (pv == -1) {
 			return -1; // nothing in [0, q]
 		}
 		assert(tree[pv].a != -1);
-		if (anchors[tree[pv].a].x <= q) {
+		if (p <= anchors[tree[pv].a].x && anchors[tree[pv].a].x <= q) {
 			return pv;
 		} else {
 			assert(2 * i + 1 < tree.size());
 			if (q <= tree[2 * i + 1].h) { // h is inclusive
-				return rmq(q, 2 * i + 1);
+				return rmq(p, q, 2 * i + 1);
+			} else if (p > tree[2 * i + 1].h) {
+				return rmq(p, q, 2 * i + 2);
 			} else {
-				int m1 = rmq(q, 2 * i + 1);
-				int m2 = rmq(q, 2 * i + 2); 
-				if (m1 == -1) return m2;
-				if (m2 == -1) return m1;
+				int m1 = rmq(p, q, 2 * i + 1);
+				int m2 = rmq(p, q, 2 * i + 2); 
+				if (m1 == -1) 
+					return m2;
+				if (m2 == -1) 
+					return m1;
+				assert(tree[m1].a != -1);
+				assert(tree[m2].a != -1);
 				return (anchors[tree[m1].a].score >= anchors[tree[m2].a].score) ? m1 : m2;
 			}
 		}
 	}
-	return -1; 
 }
 
 template<typename T>
-int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &q)
+int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q)
 {
-	int i = rmq(q, 0);
+	int i = rmq(p, q, 0);
 	return (i == -1 ? -1 : tree[i].a);
 }
 
 template<typename T>
 void SegmentTree<T>::activate(const SegmentTree<T>::Tp &q, int score)
 {
-	// eprn("activating {}::{}", q.first, q.second);
-	// for (auto &t: tree) {
-	// 	if (t.h == q && t.a != -1) {
-	// 		eprn("found {}", &t-&tree[0]);
-	// 	}
-	// }
-
 	int leaf = 0;
 	for (leaf = 0; leaf < tree.size() && (tree[leaf].a == -1 || q != anchors[tree[leaf].a].x); ) {
 		leaf = 2 * leaf + 1 + (q > tree[2 * leaf + 1].h);
 	}
-	// eprn("{}", leaf);
 	assert(leaf < tree.size());
 	assert(q == tree[leaf].h);
 	assert(tree[leaf].a != -1); // leaf
 	anchors[tree[leaf].a].score = score;
 
-	// eprn("found {}:{} at {}", q.first, q.second, leaf);
-	// for (auto i: path) {
-	// 	eprnn("--> {}/{} ", tree[i].h.first, tree[i].h.second);
-	// }
-	// eprn("--> {}/{} ", tree[leaf].h.first, tree[leaf].h.second);
-
 	for (int i = 0; i < tree.size(); ) {
+		assert(tree[leaf].a != -1);
 		if (tree[i].p == -1 || anchors[tree[leaf].a].score >= anchors[tree[tree[i].p].a].score)
 			swap(tree[i].p, leaf);
 		assert(tree[i].p != -1);
@@ -86,23 +81,68 @@ void SegmentTree<T>::activate(const SegmentTree<T>::Tp &q, int score)
 	}
 
 	activated++;
+	assert(activated <= anchors.size());
+}
+
+template<typename T>
+void SegmentTree<T>::deactivate(const SegmentTree<T>::Tp &q)
+{
+	int leaf = 0;
+	for (leaf = 0; leaf < tree.size() && (tree[leaf].a == -1 || q != anchors[tree[leaf].a].x); ) {
+		leaf = 2 * leaf + 1 + (q > tree[2 * leaf + 1].h);
+	}
+	assert(leaf < tree.size());
+	assert(q == tree[leaf].h);
+	assert(tree[leaf].a != -1); // leaf
+	anchors[tree[leaf].a].score = numeric_limits<int>::min();;
+
+	for (int i = 0; i < tree.size(); ) {
+		if (tree[i].p == -1) {
+			break;
+		} else if (tree[i].p == leaf) {
+			if (tree[i].a != -1) { // leaf
+				tree[i].p = -1;
+			} else {
+				// ^_^
+				assert(2 * i + 1 < tree.size());
+				if (2 * i + 2 < tree.size() && 
+					tree[2 * i + 2].p != -1 &&
+					(tree[2 * i + 1].p == -1 ||
+					 anchors[tree[tree[2 * i + 2].p].a].score > anchors[tree[tree[2 * i + 1].p].a].score))
+				{
+					tree[i].p = leaf = tree[2 * i + 2].p;
+					i = 2 * i + 2;
+				} else {
+					tree[i].p = leaf = tree[2 * i + 1].p;
+					i = 2 * i + 1;
+				}
+			}
+		} else {
+			i = 2 * i + 1 + (q > tree[2 * i + 1].h);
+		}
+	}
+
+	activated--;
+	assert(activated >= 0);
 }
 
 template<typename T>
 int SegmentTree<T>::initialize(int i, int s, int e, int &tree_i)
 {
 	// assert(i < tree.size());
-	if (i >= tree.size()) 
+	if (i >= tree.size()) {
 		return -1;
-	if (s + 1 == e) {
+	} else if (s + 1 == e) {
 		assert(tree_i < anchors.size());
 		tree[i] = Point(-1, tree_i, anchors[tree_i].x);
+		anchors[tree_i].score = numeric_limits<int>::min();
 		tree_i++;
 		return i;
 	} else {
 		int bnd = (s + e + 1) / 2;
 		int a = initialize(2 * i + 1, s, bnd, tree_i);
 		int b = initialize(2 * i + 2, bnd, e, tree_i);
+		// assert(2 * i + 1 < tree.size());
 		tree[i] = Point(-1, -1, tree[2 * i + 1 + (2 * i + 2 < tree.size())].h);
 		return max(a, max(i, b));
 	}
@@ -139,7 +179,7 @@ void SegmentTree<T>::plot(int w, int l, int i, int s, int e, vector<vector<strin
 {
 	if (i >= tree.size()) return;
 	int bnd = (s + e + 1) / 2;
-	plot(w/2, l+1, 2*i+1, s, bnd, PLOT);
+	if (tree[i].a == -1) plot(w/2, l+1, 2*i+1, s, bnd, PLOT);
 	PLOT[0][l] += fmt::format(
 		fmt::format("{{:^{}}}", w),
 		fmt::format("{}/{}{}", tree[i].h.first, tree[i].h.second,
@@ -149,10 +189,12 @@ void SegmentTree<T>::plot(int w, int l, int i, int s, int e, vector<vector<strin
 		fmt::format("{{:^{}}}", w),
 		fmt::format("{}", 
 			tree[i].p != -1 
-				? fmt::format("{}/{}", anchors[tree[tree[i].p].a].x.first, anchors[tree[tree[i].p].a].x.second) 
-				: tree[i].a != -1 ? fmt::format("({})", anchors[tree[i].a].score) : "")
+				? fmt::format("{}/{}", 
+					anchors[tree[tree[i].p].a].x.first, anchors[tree[tree[i].p].a].x.second) 
+				: tree[i].a != -1 ? fmt::format("({})", 
+					anchors[tree[i].a].score == numeric_limits<int>::min() ? -1 : anchors[tree[i].a].score) : "")
 	);
-	plot(w/2, l+1, 2*i+2, bnd, e, PLOT);
+	if (tree[i].a == -1) plot(w/2, l+1, 2*i+2, bnd, e, PLOT);
 }
 
 template<typename T>

@@ -28,8 +28,8 @@ struct SegmentTree {
 	std::vector<T> &anchors;
 	int activated;
 
-	// RMQ for [0, q]: returns index i in tree
-	int rmq(const Tp &q, int i);
+	// RMQ for [p, q]: returns index i in tree
+	int rmq(const Tp &p, const Tp &q, int i);
 	// RMQ for [0, q]: returns anchor with maximum value
 	int initialize(int i, int s, int e, int &tree_i);
 	
@@ -39,8 +39,10 @@ struct SegmentTree {
 public:
 	SegmentTree(std::vector<T> &a);
 
-	int rmq(const Tp &q); // returns index in anchors or -1
+	int rmq(const Tp &p, const Tp &q); // returns index in anchors or -1
 	void activate(const Tp &q, int score);
+	void deactivate(const Tp &q);
+
 	std::string plot();
 	bool empty();
 };
