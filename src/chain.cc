@@ -7,7 +7,7 @@
 #include "segment.h"
 #include "chain.h"
 
-using namespace std;
+using namespace std; 
 
 /******************************************************************************/
 
