@@ -11,6 +11,7 @@
 #include "search_main.h"
 #include "align_main.h"
 #include "wgac.h"
+#include "stats_main.h"
 
 using namespace std;
 
@@ -90,6 +91,8 @@ int main(int argc, char **argv)
 			wgac_main(argc - 2, argv + 2);
 		} else if (command == "test") {
 			test(argc - 2, argv + 2);
+		} else if (command == "stats") {
+			stats_main(argc - 2, argv + 2);
 		} else {
 			eprn("Whoops, invalid command!");
 		}
