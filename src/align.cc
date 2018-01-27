@@ -345,7 +345,9 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 				rstr.substr(rlo_n, rlo - rlo_n), 
 				5, -4, 40, 1
 			);
-
+			gap.trim_front();
+			qlo_n = qlo - (gap.end_a - gap.start_a);
+			rlo_n = rlo - (gap.end_b - gap.start_b);
 			aln.prepend_cigar(gap.cigar);
 			aln.a = qstr.substr(qlo_n, qlo - qlo_n) + aln.a;
 			aln.b = rstr.substr(rlo_n, rlo - rlo_n) + aln.b;
@@ -361,7 +363,9 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 				rstr.substr(rhi, rhi_n - rhi), 
 				5, -4, 40, 1
 			);
-			
+			gap.trim_back();
+			qhi_n = qhi + gap.end_a;
+			rhi_n = rhi + gap.end_b;
 			aln.append_cigar(gap.cigar);
 			aln.a += qstr.substr(qhi, qhi_n - qhi);
 			aln.b += rstr.substr(rhi, rhi_n - rhi);
@@ -381,6 +385,116 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 	aln.error = aln.calculate_error();
 	return aln;
 }
+
+void Alignment::trim_front() // ABCD -> --CD
+{
+	int max_score = 0, 
+		max_i = a.size();
+	int score = 0;
+	for (int i = alignment.size() - 1; i >= 0; i--) {
+		if (alignment[i] == '|') {
+			score += 5;
+		} else {
+			if (align_a[i] != '-' && align_b[i] != '-') {
+				score -= 4;
+			} else {
+				if (i == alignment.size() - 1 || 
+						(align_a[i] == '-' && align_a[i + 1] != '-') || 
+						(align_b[i] == '-' && align_b[i + 1] != '-')) 
+				{
+					score -= 40;
+				}
+				score -= 1;
+			}
+		}
+		if (score >= max_score) {
+			max_score = score, max_i = i;
+		}
+	}
+	if (max_i == a.size())
+		return;
+	for (int ci = 0, cur_len = 0; ci < cigar.size(); ci++) {
+		if (cigar[ci].second + cur_len > max_i) {
+			assert(cigar[ci].first == 'M');
+			// split this one
+			int need = max_i - cur_len;
+			cigar[ci].second -= need; 
+			for (int cj = 0; cj < ci; cj++)
+				cigar.pop_front();
+			start_a += need;
+			start_b += need;
+			break;
+		} 
+		cur_len += cigar[ci].second;
+		if (cigar[ci].first == 'M') {
+			start_a += cigar[ci].second; 
+			start_b += cigar[ci].second;
+		} else if (cigar[ci].first == 'I') {
+			start_b += cigar[ci].second;
+		} else {
+			start_a += cigar[ci].second;
+		}
+	}
+	a = a.substr(start_a, end_a - start_a);
+	b = b.substr(start_b, end_b - start_b);
+	populate_nice_alignment();
+}
+
+void Alignment::trim_back() // ABCD -> AB--
+{
+	int max_score = 0, 
+		max_i = -1;
+	int score = 0;
+	for (int i = 0; i < alignment.size(); i++) {
+		if (alignment[i] == '|') {
+			score += 5;
+		} else {
+			if (align_a[i] != '-' && align_b[i] != '-') {
+				score -= 4;
+			} else {
+				if (i == 0 || 
+						(align_a[i] == '-' && align_a[i - 1] != '-') || 
+						(align_b[i] == '-' && align_b[i - 1] != '-')) 
+				{
+					score -= 40;
+				}
+				score -= 1;
+			}
+		}
+		if (score >= max_score) {
+			max_score = score, max_i = i;
+		}
+	}
+	if (max_i == -1)
+		return;
+	end_a = start_a, end_b = start_b;
+	for (int ci = 0, cur_len = 0; ci < cigar.size(); ci++) {
+		if (cigar[ci].second + cur_len > max_i) {
+			assert(cigar[ci].first == 'M');
+			// split this one
+			int need = max_i - cur_len;
+			cigar[ci].second = need; 
+			while (cigar.size() - 1 > ci)
+				cigar.pop_back();
+			end_a += need;
+			end_b += need;
+			break;
+		} 
+		cur_len += cigar[ci].second;
+		if (cigar[ci].first == 'M') {
+			end_a += cigar[ci].second; 
+			end_b += cigar[ci].second;
+		} else if (cigar[ci].first == 'I') {
+			end_b += cigar[ci].second;
+		} else {
+			end_a += cigar[ci].second;
+		}
+	}
+	a = a.substr(start_a, end_a - start_a);
+	b = b.substr(start_b, end_b - start_b);
+	populate_nice_alignment();
+}
+
 
 /******************************************************************************/
 

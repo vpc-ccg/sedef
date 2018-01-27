@@ -15,6 +15,9 @@
 
 /******************************************************************************/
 
+typedef std::pair<int, int> Loci;
+typedef list<std::pair<int, int>> Guide;
+
 struct Alignment {
 	struct AlignmentError {
 		int gaps, gap_bases, mismatches, matches;
@@ -43,9 +46,12 @@ struct Alignment {
 
 	AlignmentError error;
 
+	void trim_front();
+	void trim_back();
+
 	static Alignment from_cigar(const std::string &a, const std::string &b, const std::string &cigar);
 	static Alignment from_anchors(const std::string &qstr, const std::string &rstr,
-		const std::list<std::pair<int, int>> &query_kmers, const std::list<std::pair<int, int>> &ref_kmers,
+		const Guide &query_kmers, const Guide &ref_kmers,
 		const int side);
 
 	std::string cigar_string();

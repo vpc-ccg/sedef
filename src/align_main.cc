@@ -198,61 +198,40 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 
 	eprn("Using k-mer size {}", kmer_size);
 
-	int WW=0;
-	// #pragma omp parallel for
+	int total_written = 0;
 	for (int i = 0; i < schedule.size(); i++) {
-		// auto &h = schedule[i].back();
 		for (auto &h: schedule[i]) {
-			// int extend = max(h.ref_end - h.ref_start, h.query_end - h.query_start);
-			// // eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
-			// h.query_start = max(h.query_start - extend, 0);
-			// h.ref_start = max(h.ref_start - extend, 0);
-			// h.query_end = min(h.query_end + extend, (int)fr.index.entry(h.query->name).length);
-			// h.ref_end = min(h.ref_end + extend, (int)fr.index.entry(h.ref->name).length);
-
-			// eprn("{:12n} {:12n} --> {:12n} {:12n}", h.query_start, h.query_end, h.ref_start, h.ref_end);
-
-			// if (fmt::format("{} {} {} {}", h.query_start, h.query_end, h.ref_start, h.ref_end) != "62038352 62039402 192191615 192193123") 
-				// continue;
-			string fa, fb;
-			// #pragma omp critical 
-			// {
-				fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
-				fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
-			// }
+			string fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
+			string fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
 			if (h.ref->is_rc) 
 				fb = rc(fb);
 
 			auto alns = fast_align(fa, fb, kmer_size);
-			// #pragma omp critical
-			// {
-				lines++;
-				for (auto &hh: alns) {
-					hh.query_start += h.query_start;
-					hh.query_end += h.query_start;
-					if (h.ref->is_rc) {
-						swap(hh.ref_start, hh.ref_end);
-						hh.ref_start = h.ref_end - hh.ref_start;
-						hh.ref_end = h.ref_end - hh.ref_end;
-						hh.ref->is_rc = true;
-					} else {
-						hh.ref_start += h.ref_start;
-						hh.ref_end += h.ref_start;
-					}
-					hh.query->name = h.query->name;
-					hh.ref->name = h.ref->name;
-					hh.ref->name = h.ref->name;
-					WW++;
-					prn("{}", hh.to_bed(false));
+			lines++;
+			for (auto &hh: alns) {
+				hh.query_start += h.query_start;
+				hh.query_end += h.query_start;
+				if (h.ref->is_rc) {
+					swap(hh.ref_start, hh.ref_end);
+					hh.ref_start = h.ref_end - hh.ref_start;
+					hh.ref_end = h.ref_end - hh.ref_end;
+					hh.ref->is_rc = true;
+				} else {
+					hh.ref_start += h.ref_start;
+					hh.ref_end += h.ref_start;
 				}
-				eprnn("\r {} out of {} ({:.1f}, len {}..{})", lines, total, pct(lines, total),
-					fa.size(), fb.size());
-			// }
-			// if (WW>5) break;
+				hh.query->name = h.query->name;
+				hh.ref->name = h.ref->name;
+				hh.ref->name = h.ref->name;
+				total_written++;
+				prn("{}", hh.to_bed(false));
+			}
+			eprnn("\r {} out of {} ({:.1f}, len {}..{})      ", lines, total, pct(lines, total),
+				fa.size(), fb.size());
 		}
 	}
 
-	eprn("\nFinished BED {} in {}s ({} lines)", bed_path, elapsed(T), lines);
+	eprn("\nFinished BED {} in {}s ({} lines, generated {} hits)", bed_path, elapsed(T), lines, total_written);
 }
 
 /******************************************************************************/

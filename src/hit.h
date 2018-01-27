@@ -12,7 +12,6 @@
 #include "align.h"
 #include "common.h"
 #include "fasta.h"
-#include "hash.h"
 
 /******************************************************************************/
 
@@ -27,10 +26,17 @@ struct Hit {
 	string name, comment;
 
 	Alignment aln;
+	std::pair<Guide, Guide> guides;
 
 	static Hit from_bed(const std::string &bed);
 	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
 	static Hit from_wgac(const string &bed);
 
 	std::string to_bed(bool do_rc=true);
+
+	bool operator< (const Hit &h) const {
+		return 
+			tie(query_start, query_end, ref_start, ref_end) < 
+			tie(h.query_start, h.query_end, h.ref_start, h.ref_end);
+	}
 };

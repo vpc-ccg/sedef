@@ -106,11 +106,13 @@ def process_path(path, pnew):
 
 pnew = path #+ "____"
 # process_path(path, pnew)
-system("bedtools pairtopair -a {0}_temp.bed -b {0} -type both > {0}_temp_diff.bed".format(pnew))
+if not os.path.exists(pnew + '_temp_diff.bed'):
+    print ':: Running Bedtools...'
+    system("bedtools pairtopair -a {0}_temp.bed -b {0} -type both > {0}_temp_diff.bed".format(pnew))
 # os.unlink(pnew)
-print ':: After bedtools we have {} hits to process'.format(system("wc -l temp_diff.bed"))
+print ':: After bedtools we have {} hits to process'.format(system("wc -l {}_temp_diff.bed".format(pnew)))
 
-with open(path + '_temp_diff.bed') as f:
+with open(pnew + '_temp_diff.bed') as f:
     for l in f:
         l = l.strip().split()
         q = 0

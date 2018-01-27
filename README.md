@@ -40,21 +40,95 @@ cat GRCh37GenomicSuperDup.tab \
 
 ## Run SEDEF searchcd se
 
-
-G S
-X Y
-
 ```bash
 
 for i in `seq 1 22` X Y; do 
 for j in `seq 1 22` X Y; do  
 	SI=`wc -c < fasta/chr${i}.fa`; 
 	SJ=`wc -c < fasta/chr${j}.fa`; 
-	if [ "$SI" -ge "$SJ" ] ; then for m in y n ; do
+	if [ "$SI" -le "$SJ" ] ; then for m in y n ; do
 		echo "qsub -cwd -V -b y -N \"S_${i}_${j}_${m}\" -l h_vmem=10G -l h_rt=24:00:00 -l h_stack=8M " \
 			"python2.7 mesa sedef/sedef search single fasta/hg19.fa chr$i chr$j $m"
 	done; fi
 done; done | parallel
+
+### MEGANODE
+
+for i in `seq 1 22` X Y; do 
+	for j in `seq 1 22` X Y; do  
+		SI=`awk '$1=="chr'$i'" {print $2}' hg19.fa.fai`; 
+		SJ=`awk '$1=="chr'$j'" {print $2}' hg19.fa.fai`; 
+		if [ "$SI" -le "$SJ" ] ; then 
+			for m in y n ; do
+			echo "~/mesa ./sedef search single hg19.fa chr$i chr$j $m >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
+			done; 
+		fi
+	done
+done | parallel --will-cite -j 80 --eta
+>> 10m 32s
+grep Total out/log/*.log | wc -l
+>> 600
+grep Wall out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
+>> 44880.1s (12.47 h)
+~/mesa ./sedef align bucket out out/bins 1000
+>> 0m 31s
+for j in out/bins/bucket_???? ; do
+	k=$(basename $j);
+	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
+done | parallel --will-cite -j 80 --eta
+>> 5m 54s
+grep Finished out/log/bins/*.log | wc -l
+>> 1000
+grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
+>> 20659 (5.74 h)cv
+cat out/*.bed > out.init.bed
+cat out/bins/*.bed > out.final.bed
+wc -l out.*bed
+>>   975511 out.final.bed
+>>  1656305 out.init.bed
+```
+
+
+
+
+## MOUSE
+```bash
+for i in `seq 1 19` X Y; do 
+	for j in `seq 1 19` X Y; do  
+		SI=`awk '$1=="chr'$i'" {print $2}' mm8.fa.fai`; 
+		SJ=`awk '$1=="chr'$j'" {print $2}' mm8.fa.fai`; 
+		if [ "$SI" -le "$SJ" ] ; then 
+			for m in y n ; do
+			echo "~/mesa ./sedef search single mm8.fa chr$i chr$j $m >mouse_out/${i}_${j}_${m}.bed 2>mouse_out/log/${i}_${j}_${m}.log"
+			done; 
+		fi
+	done
+done | time parallel --will-cite -j 80 --eta
+>> 12m 17s
+grep Total mouse_out/log/*.log | wc -l
+>> 462
+grep Wall mouse_out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
+>> 46962.9s (13.05 h)
+~/mesa ./sedef align bucket mouse_out mouse_out/bins 1000
+>> 0m 31s
+for j in mouse_out/bins/bucket_???? ; do
+	k=$(basename $j);
+	echo "~/mesa ./sedef align generate mm8.fa $j 11 >${j}.bed 2>mouse_out/log/bins/${k}.log"
+done | parallel --will-cite -j 80 --eta
+>> 5m 54s
+grep Finished mouse_out/log/bins/*.log | wc -l
+>> 1000
+grep Wall mouse_out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
+>> 20659 (5.74 h)cv
+cat mouse_out/*.bed > mouse_out.init.bed
+cat mouse_out/bins/*.bed > mouse_out.final.bed
+wc -l mouse_out.*bed
+>>   975511 mouse_out.final.bed
+>>  1656305 mouse_out.init.bed
+
+
+
+
 
 # Merge logs and remove progress bars and headers
 

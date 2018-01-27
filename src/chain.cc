@@ -31,7 +31,7 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 	}
 	
 	vector<int> slide(query.size() + ref.size(), -1);
-	vector<pair<Anchor, bool>> anchors;
+	vector<Hit> anchors;
 
 	last_n = -kmer_size, h = 0;
 	for (int i = 0; i < query.size(); i++) {
@@ -58,14 +58,18 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 				bool has_u = 0;
 				int len;
 				for (len = 0; q + len < query.size() && r + len < ref.size(); len++) {
-					assert(query[q + len] != 'N' && ref[r + len] != 'N');
+					if (query[q + len] == 'N' || ref[r + len] == 'N')
+						break;
 					has_u |= (isupper(query[q + len]) || isupper(ref[r + len]));
 					if (toupper(query[q + len]) != toupper(ref[r + len]))
 						break;
 				}
 				if (len >= kmer_size / 2) {
-					anchors.push_back(make_pair(
-						Anchor{q, q + len, r, r + len, {{q, q + len}}, {{r, r + len}}, has_u}, true));
+					anchors.push_back(Hit{
+						nullptr, q, q + len, 
+						nullptr, r, r + len, 
+						has_u, "", "", {}
+					});
 					slide[d] = q + len;
 				}
 			} else {
@@ -76,30 +80,36 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 	}
 	
 	for (int i = 1; i < anchors.size(); i++) {
-		assert(anchors[i - 1] < anchors[i]);
+		assert(tie(anchors[i - 1].query_start, anchors[i - 1].ref_start) <= 
+			tie(anchors[i].query_start, anchors[i].ref_start));
 	}
-	// sort(anchors.begin(), anchors.end());
-
 	return anchors; 
 }
 
-string XX,YY;
+/******************************************************************************/
 
-auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
+/*TODO*/ string XX,YY;
+
+auto chain_anchors(vector<Hit> &anchors)
 {
+	const double ratio = 4; // ratio: match to error
+	const int max_gap = MAX_ERROR * MIN_READ_SIZE;
+
+	auto T = cur_time();
+
 	struct Coor {
 		pair<int, int> x; 
 		int score, pos;
 		bool operator<(const Coor &a) const { return x < a.x; }
 	};
 	vector<Coor> xs, ys; // QUERY; pos in ANCHORS
+	xs.reserve(2 * anchors.size());
+	ys.reserve(anchors.size());
 	
 	int max_q = 0, max_r = 0, l = 0;
 	for (int i = 0; i < anchors.size(); i++) {
-		if (!anchors[i].second) 
-			continue;
 		l++;
-		auto &a = anchors[i].first;
+		auto &a = anchors[i];
 		xs.push_back({{a.query_start, i}, numeric_limits<int>::min(), i});
 		xs.push_back({{a.query_end, i}, numeric_limits<int>::min(), i});
 		ys.push_back({{a.ref_end - 1, i}, numeric_limits<int>::min(), i}); 
@@ -108,13 +118,10 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 		max_q = max(max_q, a.query_end);
 		max_r = max(max_r, a.ref_end);
 	}
+	// for (auto a: anchors) 
+	// 	dprn("!== {:6}..{:6} -> {:6}..{:6}", a.query_start, a.query_end, a.ref_start, a.ref_end);
 
-	// for (auto a: anchors) {
-	// 	dprn("!== {:6}..{:6} -> {:6}..{:6}", a.first.query_start, a.first.query_end,
-	// 		a.first.ref_start, a.first.ref_end);
-	// }
-
-	dprn("-- anchors to dp: {}", l);
+	dprn("-- anchors to dp: {:n}", l);
 
 	sort(xs.begin(), xs.end());
 	SegmentTree<Coor> tree(ys); 
@@ -124,20 +131,19 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 	vector<int> size_so_far(anchors.size(), 0);
 
 	set<pair<int, int>, greater<pair<int, int>>> maxes;
-	const double ratio = 4;
-	const int max_gap = MAX_ERROR * MIN_READ_SIZE;
 	int deactivate_bound = 0;
 
+	// dprn(">>>> init {}", elapsed(T)); T=cur_time();
 	for (auto &x: xs) {
 		int i = x.x.second;
-		auto &a = anchors[i].first;
+		auto &a = anchors[i];
 		if (x.x.first == a.query_start) {
 			while (deactivate_bound < (&x - &xs[0])) {
 				int t = xs[deactivate_bound].x.second; // index
-				if (xs[deactivate_bound].x.first == anchors[t].first.query_end) { // end point
-					if (a.query_start - anchors[t].first.query_end <= max_gap)
+				if (xs[deactivate_bound].x.first == anchors[t].query_end) { // end point
+					if (a.query_start - anchors[t].query_end <= max_gap)
 						break;
-					tree.deactivate({anchors[t].first.ref_end - 1, t});
+					tree.deactivate({anchors[t].ref_end - 1, t});
 				}
 				deactivate_bound++;
 			}
@@ -147,7 +153,7 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 				             {a.ref_start - 1, anchors.size()});
 			if (j != -1 && ys[j].score != numeric_limits<int>::min()) {
 				j = ys[j].pos;
-				auto &p = anchors[j].first;
+				auto &p = anchors[j];
 				assert(a.query_start >= p.query_end);
 				assert(a.ref_start >= p.ref_end);
 				int gap = (a.query_start - p.query_end + a.ref_start - p.ref_end);
@@ -164,149 +170,98 @@ auto chain_anchors(vector<pair<Anchor, bool>> &anchors)
 				dp[i] = w;
 				size_so_far[i] = (a.query_end - a.query_start);
 			}
-
-			// if (e.query_end <=)
-			// eprn("{}..{} -> {} and {} >= {}",
-				// a.query_start, a.query_end, size_so_far[i], dp[i], max(MIN_READ_SIZE, size_so_far[i]) * (ratio * (1 - MAX_GAP_ERROR) - MAX_GAP_ERROR));
-			if (dp[i] >= MIN_READ_SIZE * (ratio * (1 - MAX_ERROR) - MAX_ERROR)) {
-				maxes.insert({dp[i], i});
-			}
+			//if (dp[i] >= (MIN_READ_SIZE / 2) * (ratio * (1 - MAX_ERROR) - MAX_ERROR))
+			maxes.insert({dp[i], i});
 		} else {
 			int gap = (max_q + 1 - a.query_end + max_r + 1 - a.ref_end);
 			tree.activate({a.ref_end - 1, i}, dp[i] - gap);
 		}
 	}
+	// dprn(">>>> search {}", elapsed(T)); T=cur_time();
 
-
-	// dp=7083 exp_size=7336
-
-	// for (auto &m: maxes) {
-	// 	eprn("{}..{} [+] {} -> {} -> {} [{}]", 
-	// 		anchors[m.second].first.query_start, 
-	// 		anchors[m.second].first.ref_start, 
-	// 		anchors[m.second].first.query_end-anchors[m.second].first.query_start,
-	// 		m.first,
-	// 		XX.substr(anchors[m.second].first.query_start,anchors[m.second].first.query_end-anchors[m.second].first.query_start),
-	// 		m.second
-	// 	);
-	// }
-
-	vector<deque<int>> paths;
+	vector<int> path; path.reserve(anchors.size());
+	vector<pair<int, bool>> boundaries {{0, 0}};
+	vector<char> used(anchors.size(), 0);
 	for (auto &m: maxes) {
 		int maxi = m.second;
-		if (!anchors[maxi].second)
+		if (used[maxi])
 			continue;
-		paths.push_back(deque<int>());
-
-
-		// bool foooonf = 0;
-		while (maxi != -1 && (/*foooonf ||*/ anchors[maxi].second)) {
-			// if (maxi == 313771) {
-			// 	foooonf = 1;
-			// 	eprn("woohoo {}", paths.size());
-			// }
-			paths.back().push_front(maxi);
-			anchors[maxi].second = false;
+		bool has_u = 0;
+		while (maxi != -1 && !used[maxi]) {
+			path.push_back(maxi);
+			// paths.back().first.push_front(maxi);
+			has_u |= anchors[maxi].jaccard;
+			used[maxi] = true;
 			maxi = prev[maxi];
 		}
-
-		int qlo = anchors[paths.back().front()].first.query_start, 
-			qhi = anchors[paths.back().back()].first.query_end;
-		int rlo = anchors[paths.back().front()].first.ref_start,   
-			rhi = anchors[paths.back().back()].first.ref_end;
-
-// ||> 470,967..478,485 -> 507,252..514,823;   7,518   7,571; e=10.2 g= 2.0 m= 8.3
-		if (min(rhi - rlo, qhi - qlo) >= (1 - MAX_ERROR) * MIN_READ_SIZE) {
-			dprn("-- chain: (len:{}) {}..{} --> {}..{} [dp={} exp_size={}]", abs(qhi-qlo), 
-			qlo, qhi, rlo, rhi, dp[m.second], size_so_far[m.second]);
+		for (int ai = path.size() - 2; ai >= boundaries.back().first; ai--) {
+			assert(anchors[path[ai + 1]] < anchors[path[ai]]);
 		}
-
-		// if (foooonf) {
-		// 	eprn("path {}", paths.back().size());
-		// 	for (auto i: paths.back()) {
-		// 		dprn("=== [{:4}] {:6}..{:6} -> {:6}..{:6} -> {}", i, 
-		// 			anchors[i].first.query_start, anchors[i].first.query_end,
-		// 			anchors[i].first.ref_start, anchors[i].first.ref_end,
-		// 			dp[i]
-		// 		);
-		// 	}
-		// }
+		boundaries.push_back({path.size(), has_u});
 	}
-
-	return paths;
+	// dprn(">>>> recon {}", elapsed(T)); T=cur_time();
+	return make_pair(path, boundaries);
 }
 
-// ||> 470,967..478,485 -> 507,252..514,823;   7,518   7,571; e=10.2 g= 2.0 m= 8.3
 /******************************************************************************/
 
 vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 {
 	auto T = cur_time();
 	dprn("-- aligning query {:n} --> ref {:n}", query.size(), ref.size());
+	auto query_ptr = make_shared<Sequence>("QRY", query);
+	auto ref_ptr = make_shared<Sequence>("REF", ref);
 
-	// 1. Generate the list of hits (small anchors) inside the dot graph	
+	/// 1. Generate the list of hits (small anchors) inside the dot graph	
 	auto anchors = generate_anchors(query, ref, kmer_size);
 
-	// 2. Run DP on the anchors and collect all different anchors
-	vector<Anchor> chains;
-	auto chains_init = chain_anchors(anchors);	
-	for (auto &chain: chains_init) {
-		int qlo = anchors[chain.front()].first.query_start, 
-			qhi = anchors[chain.back()].first.query_end;
-		int rlo = anchors[chain.front()].first.ref_start,   
-			rhi = anchors[chain.back()].first.ref_end;
+	/// 2. Run DP on the anchors and collect all different anchors
+	vector<Hit> hits;
+	auto chains_init = chain_anchors(anchors);
+	auto &bounds = chains_init.second;	
+	auto &chain = chains_init.first;
+	for (int bi = 1; bi < bounds.size(); bi++) {
+		bool has_u = bounds[bi].second;
+		int be = bounds[bi].first;
+		int bs = bounds[bi - 1].first;
 
-		if (min(rhi - rlo, qhi - qlo) < (1 - 0.5) * MIN_READ_SIZE)
+		int qlo = anchors[chain[be - 1]].query_start, 
+			qhi = anchors[chain[bs]].query_end;
+		int rlo = anchors[chain[be - 1]].ref_start,   
+			rhi = anchors[chain[bs]].ref_end;
+
+		// check error
+		int span = max(rhi - rlo, qhi - qlo);
+		if (!(has_u && span >= 90) && !(span >= MIN_READ_SIZE * (1 - MAX_ERROR)))
 			continue;
 
 		assert(qhi <= query.size());
 		assert(rhi <= ref.size());
 
-		Anchor a { qlo, qhi, rlo, rhi, {}, {} };
-		for (int ai: chain) {
-			a.query_kmers.push_back(anchors[ai].first.query_kmers.front());
-			a.ref_kmers.push_back(anchors[ai].first.ref_kmers.front());
+		Hit a { query_ptr, qlo, qhi, ref_ptr, rlo, rhi, 0, "", "", {}, {} };
+		for (int bi = be - 1; bi >= bs; bi--) {
+			int ai = chain[bi];
+			a.guides.first.push_back({anchors[ai].query_start, anchors[ai].query_end});
+			a.guides.second.push_back({anchors[ai].ref_start, anchors[ai].ref_end});
 		}
-		
-		for (int ai = 1; ai < chain.size(); ai++)
-			assert(anchors[ai - 1] < anchors[ai]);
-		for (int ai = chain.front(); ai <= chain.back(); ai++) {
-			assert(anchors[ai].first.query_start >= qlo);
-			if (anchors[ai].first.query_end <= qhi && anchors[ai].first.ref_start >= rlo && anchors[ai].first.ref_end <= rhi) {
-				anchors[ai].second = false;
-			}
-		}
-		chains.push_back(a);
+		hits.push_back(a);
 	}
 	dprn(":: elapsed/dp = {}s", elapsed(T)); T=cur_time();
-	// exit(0);
 
-	// 3. Perform the full alignment
-	dprn("-- initial chains {}", chains.size());
-	dprn(":: elapsed/long = {}s", elapsed(T)); T=cur_time();
-	vector<Hit> hits;
-
-	auto query_ptr = make_shared<Sequence>("QRY", query);
-	auto ref_ptr = make_shared<Sequence>("REF", ref);
-	for (auto &ch: chains) {
-		auto hit = Hit {
-			query_ptr, ch.query_start, ch.query_end,
-			ref_ptr, ch.ref_start, ch.ref_end,
-			0, "", "", {}
-		};
-		//if (false) {
-		hit.aln = Alignment::from_anchors(query, ref, ch.query_kmers, ch.ref_kmers, 0);
-		// hit.comment += fmt::format("ORIG:{}..{}->{}..{}",
-		// 	ch.query_start, ch.query_end,
-		// 	ch.ref_start, ch.ref_end);
+	/// 3. Perform the full alignment
+	for (auto &hit: hits) {
+		hit.aln = Alignment::from_anchors(query, ref, hit.guides.first, hit.guides.second, 0);
 		hit.query_start = hit.aln.start_a;
 		hit.ref_start = hit.aln.start_b;
 		hit.query_end = hit.aln.end_a;
 		hit.ref_end = hit.aln.end_b;
-		hits.push_back(hit);
-		//}
 	}
 	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
+
+	/// 3. Refine these chains
+	void refine_chains(vector<Hit> &anchors);
+	refine_chains(hits);
+	dprn(":: elapsed/refinement = {}s", elapsed(T)); T=cur_time();
 
 	return hits;
 }
@@ -319,66 +274,133 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 
 // 478214..514552 [+] 21 -> 438446 -> atatcacagtgggtgtacacc ~ 313771
 
-
-
+#include <fstream>
 void test(int, char** argv)
 {
+	// auto x = align(
+	// 	"CAAGAGAATTAAATGGGTTATTGATTAAAAA",
+	// 	"TTTTTTCAAGAGAATTAAATCATTTCTTGATTA"
+	// );
+	// eprn("{}", x.print());
+	// x.trim_back();
+	// eprn("{}", x.print());
+	// x.trim_front();
+	// eprn("{}", x.print());
+	// exit(0);
+
 	FastaReference fr("data/hg19/hg19.fa");
-	string s;
-
-	Hit orig = Hit::from_bed(
-
-		// "chr11	3613666	3623181	chr3	125420867	125429396	align_both/0001/both008387	0	+	-"
-		// "chr10	98319847	98321003	chr10	126555985	126557221	align_both/0001/both006029	0	+	+	0	0	0"
-		"chr1	88000	121417	chr1	235525	267707	align_both/0012/both060569	0	0	+	+"
-	);
-	Hit h = Hit::from_bed(
-		// "chr11	3144946	3696247	chr3	125374462	125935440	0	0	+	-	560978	0	OK;;"
-		// "chr10	98308557	98331750	chr10	126545044	126567993	0	0	+	+	23193	0			OK"
-		"chr1	50861	154752	chr1	211516	283810	0	0	+	+	103891"
-	);
-	eprn("link: http://humanparalogy.gs.washington.edu/build37/{}", orig.name);
-	eprn("RC: {} {}", h.query->is_rc, h.ref->is_rc);
-	// h = orig;
-
-	auto q = fr.get_sequence(h.query->name, h.query_start, h.query_end);
-	auto r = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
-	if (h.ref->is_rc) r = rc(r);
-	XX=q;
-	
+	string s, s2, sl;
 	const int k = 11;
 
-	eprn("{} {}", string(60, '*'), k);
-	eprn("Q -> {}...{}\nR -> {}...{}", q.substr(0, 20), q.substr(q.size() - 20),
-		r.substr(0, 20), r.substr(r.size() - 20));
-	eprn("{} {}", string(60, '*'), k);
+	ifstream MISS("out/misses.txt");
+	int line = 0;
+	while (getline(MISS, sl)) {
+		auto TT = cur_time();
+		auto ssl = split(sl, ' ');
+		// if (ssl[1] != "align_both/0014/both071602") continue;
 
-	auto T = cur_time();
-	auto hits = fast_align(q, r, k);
-	sort(hits.begin(), hits.end(), [](Hit a, Hit b){ return a.query_start < b.query_start; });
-	eprn("{} {}", string(60, '*'), k);
-	for (auto &hit: hits) {
-		eprn("||> {:7n}..{:7n} -> {:7n}..{:7n}; {:7n} {:7n}; e={:4.1f} g={:4.1f} m={:4.1f}", 
-			hit.query_start, hit.query_end,
-			hit.ref_start, hit.ref_end,
-			hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-			hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error(),
-			hit.comment
+		ifstream fin("out/bucket_0000_temp_diff.bed");
+		s2 = "";
+		while (getline(fin, s)) {
+			auto ss = split(s, '\t');
+			if (ss[6] == ssl[1]) {
+				for (int x = 10; x < ss.size(); x++) s2 += ss[x] + "\t";
+				break;
+			}
+		}
+		
+		eprn("Hit http://humanparalogy.gs.washington.edu/build37/{} @ {}", ssl[1], ssl[0]);
+		if (s2 == "") {
+			eprn("-- complete miss");
+			continue;
+		}
+		Hit orig = Hit::from_bed(
+			// "chr11	3613666	3623181	chr3	125420867	125429396	align_both/0001/both008387	0	+	-"
+			// "chr10	98319847	98321003	chr10	126555985	126557221	align_both/0001/both006029	0	+	+	0	0	0"
+			// "chr1	88000	121417	chr1	235525	267707	align_both/0012/both060569	0	0	+	+"
+			s
 		);
-		// eprn("{}", hit.aln.print(80));
+		Hit h = Hit::from_bed(
+			// "chr11	3144946	3696247	chr3	125374462	125935440	0	0	+	-	560978	0	OK;;"
+			// "chr10	98308557	98331750	chr10	126545044	126567993	0	0	+	+	23193	0			OK"
+			// "chr1	50861	154752	chr1	211516	283810	0	0	+	+	103891"
+			s2
+		);
+		eprn("{}{} {}...", "+-"[orig.query->is_rc], "+-"[orig.ref->is_rc], orig.to_bed(false).substr(0, 75));
+		eprn("{}{} {}...", "+-"[h.query->is_rc], "+-"[h.ref->is_rc], h.to_bed(false).substr(0, 50));
+
+		auto q = fr.get_sequence(h.query->name, h.query_start, h.query_end);
+		auto r = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
+		if (h.ref->is_rc) r = rc(r);
+
+		eprn("{} {}", string(60, '*'), k);
+		int oqs = orig.query_start - h.query_start, 
+			oqe = orig.query_end - h.query_start,
+			ors = !orig.ref->is_rc ? orig.ref_start - h.ref_start : (h.ref_end - h.ref_start) - (orig.ref_end   - h.ref_start), 
+			ore = !orig.ref->is_rc ? orig.ref_end   - h.ref_start : (h.ref_end - h.ref_start) - (orig.ref_start - h.ref_start);
+
+		vector<int> oqcov(oqe - oqs, 0), 
+					orcov(ore - ors, 0);
+		auto T = cur_time();
+		auto hits = fast_align(q, r, k);
+		sort(hits.begin(), hits.end(), [](Hit a, Hit b){ return a.query_start < b.query_start; });
+		eprn("{} {}", string(60, '*'), k);
+		for (auto &hit: hits) {
+			// eprn("||> {:7n}..{:7n} -> {:7n}..{:7n}; {:7n} {:7n}; e={:4.1f} g={:4.1f} m={:4.1f}", 
+			// 	hit.query_start, hit.query_end,
+			// 	hit.ref_start, hit.ref_end,
+			// 	hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
+			// 	hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error(),
+			// 	hit.comment
+			// );
+
+			int over_qs = max(hit.query_start, oqs),
+				over_qe = min(hit.query_end, oqe);
+			int over_rs = max(hit.ref_start, ors),
+				over_re = min(hit.ref_end, ore);
+
+			if (over_qs <= over_qe && over_rs <= over_re) {
+				for (int i = over_qs; i < over_qe; i++)
+					oqcov[i - oqs]++;
+				for (int i = over_rs; i < over_re; i++)
+					orcov[i - ors]++;
+			}
+
+			// eprn("{}", hit.aln.print(80));
+		}
+
+		eprn("{} {}", string(60, '*'), k);
+
+		eprn("-- looking for {:n}..{:n} -> {:n}..{:n}", oqs, oqe, ors, ore);
+		eprn("   Q -> {}...{}\n   R -> {}...{}", q.substr(oqs, 20), q.substr(oqe - 20, 20),
+			r.substr(ors, 20), r.substr(ore - 20, 20));
+
+		int p=0;
+		for (int i = 0; i < oqcov.size(); ) {
+			int j;
+			for (j = i + 1; j < oqcov.size() && oqcov[i] == oqcov[j]; j++);
+			eprnn("   |> {:6}..{:6}~>{:2.0f}%/{}={:<2} ", i + oqs, j + oqs, 
+				pct(j-i,oqcov.size()), j-i, oqcov[i]);
+			if (oqcov[i]) p+=pct(j-i,oqcov.size());
+			i = j;
+		} eprn("=== {}", p); int p1=p; p = 0;
+		for (int i = 0; i < orcov.size(); ) {
+			int j;
+			for (j = i + 1; j < orcov.size() && orcov[i] == orcov[j]; j++);
+			eprnn("   |> {:6}..{:6}~>{:2.0f}%/{}={:<2} ", i + ors, j + ors, pct(j-i,orcov.size()), 
+				j-i, orcov[i]);
+			if (orcov[i]) p+=pct(j-i,orcov.size());
+			i = j;
+		} eprn("=== {}", p);
+
+		eprn("line {:3} {} @ {} : {:5} hits, {:3} {:3} --> {:3.1f} s\n", line++, ssl[1], ssl[0],
+			hits.size(), p1, p, elapsed(TT));
+		//if (p1 < 95 || p < 95)
+			cin.get();
 	}
-
-	int oqs = orig.query_start - h.query_start, 
-		 oqe = orig.query_end - h.query_start,
-		 ors = !orig.ref->is_rc ? orig.ref_start - h.ref_start : (h.ref_end - h.ref_start) - (orig.ref_end   - h.ref_start), 
-		 ore = !orig.ref->is_rc ? orig.ref_end   - h.ref_start : (h.ref_end - h.ref_start) - (orig.ref_start - h.ref_start);
-
-	eprn("{} {}", string(60, '*'), k);
-	eprn("Looking for {:n}..{:n} -> {:n}..{:n}", oqs, oqe, ors, ore);
-	eprn("Q -> {}...{}\nR -> {}...{}", q.substr(oqs, 20), q.substr(oqe - 20, 20),
-		r.substr(ors, 20), r.substr(ore - 20, 20));
-	
 	//eprn("total {}s\n", elapsed(T));
+
+	// -- looking for 20,321..22,929 -> 19,569..23,541
 
 	// string q = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATACAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGTGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCAGGGATGCGGGGTGGGGGCAGGTACATCCTCTCTTGAGCTACAGCAGATTAACTCTGTTCTGTTTCATTGTGGTTGTTTAGTTTGCGTTTTTTTTTCTCCAACTTTGTGCTTCATCGGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGACAAAAAAGCTACATCCCTGCCTCTACCTCCATCGCATGCAAAATGTGTATTCAGTGAACGCTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGTCCCCAGACAACCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGAGACTCACCTTGGTTGTGTTCTTTGATTAGTGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAATGTAAGACCACCATCAGCACATAGGAGTTCTGCATTGGTTTGGTCTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGGTTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGGGTTAAGATAAGAGACTGTGGAGACC";
 	// string r = "ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATTCAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGCGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCGGGGATGCGGGGTGGGGGCAGCTACGTCCTCTCTTGAGCTACAGCAGATTCACTCTGTTCTGTTTCATTGTTGCTTAGTTTGCGTTTTGTTTCTCCAACTTTGTGCCTCATCAGGAAAAGCTTTGGATCACAATTCCCAGTGCTGAAGAAAAGGCCAAACTCTGGAAAAAATTTTGAATATTTTGAGCCAAATGTGAGGACCACAACCTGTGAGAACGGAAAATAAATCCTGGGACCCCAGACTCACTAAGCCAAAGGGAAAAGCCAAGCTGGGAACTGGCTTATGCAAACCTGCTTCCCATCTGGTTCCTAAATAAGATAGCTATTACACAAAGATAAAAAAGCTACATCCCTGCCTCTACCTCCCTCGCATGTAAAATGTGTATTCAGTGAACACTGACCAAAGACAGAAGAATGCAACCATTTGCCTCTGATTTACCCACACCCATTTTTTCCACTTCTTCCCCTTTCCCCAATACCCGCACTTTTCCCCTTTACTTACTGAGGCCCCCAGACAATCTTTGGGAAAAGCACGGACCACAGTTTTTCCTGTGGTTCTCTGTTCTTTTCTCAGGTGTGTCCTTAACCTTGCAAATAGATTTCTTGAAATGATTGACACTCACCTTGGTTGTGTTCTTTGATCAGCGCCTGTGACGCAGCTTCAGGAGGTCCTGAGAACGTGTGCACAGTTTAGTCGGCAGAAACTTAGGGAAACGTAAGACCACCATCAGTACGTAGGAGTTGTGCATTGGTTTGGTCTGGAAGGAGGAAAATTCAAAGTAATGGGGCTTACAGGTCATAGATAGATTCAAAGATTTTCTGATTGTCAATTGATTGAAAGAATTATTATCTACAGACCTGCTATCAATAGAAAGGAGAGTCTGAGTTAAGATAAGAGACTGTGGAGACC";

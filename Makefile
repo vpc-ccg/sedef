@@ -41,7 +41,7 @@ profile: $(SOURCES) $(EXECUTABLE)
 
 gprofile: CXX=g++
 gprofile: LDFLAGS=-Wl,--no-as-needed,-lprofiler,--as-needed -ltcmalloc -lrt -lz -fopenmp
-gprofile: CPPFLAGS+=-g -O1
+gprofile: CPPFLAGS+=-g -O2
 gprofile: $(SOURCES) $(EXECUTABLE)
 
 LIB = libsedef
