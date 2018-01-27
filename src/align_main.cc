@@ -131,7 +131,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 
 			if (extend) {
 				int w = max(h.query_end - h.query_start, h.ref_end - h.ref_start);
-				w = min(15000, 4 * w);
+				w = min(15000, 5 * w);
 				h.query_start = max(0, h.query_start - w);
 				h.query_end += w;
 				h.ref_start = max(0, h.ref_start - w);

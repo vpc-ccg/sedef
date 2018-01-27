@@ -16,7 +16,6 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
 	unordered_map<uint32_t, list<int>> ref_hashes;
-
 	int last_n = - kmer_size;
 	uint32_t h = 0;
 	for (int i = 0; i < ref.size(); i++) {
@@ -469,8 +468,8 @@ void test(int, char** argv)
 
 		eprn("line {:3} {} @ {} : {:5} hits, {:3} {:3} --> {:3.1f} s\n", line++, ssl[1], ssl[0],
 			hits.size(), p1, p, elapsed(TT));
-		if (p1 < 95 || p < 95)
-			cin.get();
+		// if (p1 < 95 || p < 95)
+			// cin();
 	}
 	//eprn("total {}s\n", elapsed(T));
 
