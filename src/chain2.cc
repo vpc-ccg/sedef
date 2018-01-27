@@ -20,10 +20,10 @@ using namespace std;
 
 void refine_chains(vector<Hit> &anchors)
 {
-	const double MATCH = 5;
-	const double MISMATCH = 4;
+	const double MATCH = 10;
+	const double MISMATCH = 1;
 	const double GAP = 1;
-	const double GAPOPEN = 40;
+	const double GAPOPEN = 100;
 	const double SIZE = 0;
 
 	/// OVERLAPS!
@@ -47,6 +47,7 @@ void refine_chains(vector<Hit> &anchors)
 		// 	a.aln.cigar_string());
 	}
 
+	const int max_space = 10000;
 	vector<int> dp(anchors.size(), 0);
 	vector<int> gaps_so_far(anchors.size(), 0);
 	vector<int> prev(anchors.size(), -1);
@@ -69,6 +70,10 @@ void refine_chains(vector<Hit> &anchors)
 
 			int ma = max(cqs - p.query_end, crs - p.ref_end);
 			int mi = min(cqs - p.query_end, crs - p.ref_end);
+
+			if (ma >= max_space)
+				continue;
+
 			int mis = min(MISMATCH * mi, GAPOPEN + GAP * 2 * mi),
 				gap = GAPOPEN + GAP * (ma - mi);
 			int sco = dp[aj] + score[ai] - mis - gap + SIZE * ma;
@@ -130,7 +135,8 @@ void refine_chains(vector<Hit> &anchors)
 				anchors[p].guides.second.begin(), anchors[p].guides.second.end());
 		}
 
-		hit.aln = Alignment::from_anchors(hit.query->seq, hit.ref->seq, hit.guides.first, hit.guides.second, 0);
+		hit.aln = Alignment::from_anchors(
+			hit.query->seq, hit.ref->seq, hit.guides.first, hit.guides.second, 0);
 		hit.query_start = hit.aln.start_a;
 		hit.ref_start = hit.aln.start_b;
 		hit.query_end = hit.aln.end_a;

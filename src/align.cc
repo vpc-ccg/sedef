@@ -312,13 +312,31 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 		aln.a += qstr.substr(qk_p->second, qk->second - qk_p->second);
 		aln.b += rstr.substr(rk_p->second, rk->second - rk_p->second);
 		if (qk->first - qk_p->second && rk->first - rk_p->second) {
-			auto gap = align(
-				qstr.substr(qk_p->second, qk->first - qk_p->second), 
-				rstr.substr(rk_p->second, rk->first - rk_p->second), 
-				5, -4, 40, 1
-			);
-			// eprnn(" {}", gap.cigar_string());
-			aln.append_cigar(gap.cigar);
+			if (qk->first - qk_p->second <= 1000 && rk->first - rk_p->second <= 1000) { // "close" hits
+				auto gap = align(
+					qstr.substr(qk_p->second, qk->first - qk_p->second), 
+					rstr.substr(rk_p->second, rk->first - rk_p->second), 
+					5, -4, 40, 1
+				);
+				// eprnn(" {}", gap.cigar_string());
+				aln.append_cigar(gap.cigar);
+			} else { // assume only one part is the gap
+				int ma = max(qk->first - qk_p->second, rk->first - rk_p->second);
+				int mi = min(qk->first - qk_p->second, rk->first - rk_p->second);
+				auto ma1 = align(
+					qstr.substr(qk_p->second, mi), 
+					rstr.substr(rk_p->second, mi), 
+					5, -4, 40, 1
+				);
+				ma1.cigar.push_back({qk->first - qk_p->second == mi ? 'I' : 'D', ma - mi});
+				auto ma2 = align(
+					qstr.substr(qk->first - mi, mi), 
+					rstr.substr(rk->first - mi, mi), 
+					5, -4, 40, 1
+				);
+				ma2.cigar.push_front({qk->first - qk_p->second == mi ? 'I' : 'D', ma - mi});
+				aln.append_cigar(ma2.error.error() < ma2.error.error() ? ma2.cigar : ma1.cigar);
+			}
 		} else if (qk->first - qk_p->second) {
 			aln.append_cigar({{'D', qk->first - qk_p->second}});	
 		} else if (rk->first - rk_p->second) {

@@ -68,7 +68,7 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 					anchors.push_back(Hit{
 						nullptr, q, q + len, 
 						nullptr, r, r + len, 
-						has_u, "", "", {}
+						has_u
 					});
 					slide[d] = q + len;
 				}
@@ -127,10 +127,12 @@ auto chain_anchors(vector<Hit> &anchors)
 	SegmentTree<Coor> tree(ys); 
 
 	vector<int> prev(anchors.size(), -1);
-	vector<int> dp(anchors.size(), 0);
-	vector<int> size_so_far(anchors.size(), 0);
+	vector<pair<int, int>> dp(anchors.size());
+	for (int i = 0; i < dp.size(); i++)
+		dp[i] = {0, i};
+	// vector<int> size_so_far(anchors.size(), 0);
 
-	set<pair<int, int>, greater<pair<int, int>>> maxes;
+	// set<pair<int, int>, greater<pair<int, int>>> maxes;
 	int deactivate_bound = 0;
 
 	// dprn(">>>> init {}", elapsed(T)); T=cur_time();
@@ -157,32 +159,33 @@ auto chain_anchors(vector<Hit> &anchors)
 				assert(a.query_start >= p.query_end);
 				assert(a.ref_start >= p.ref_end);
 				int gap = (a.query_start - p.query_end + a.ref_start - p.ref_end);
-				if (w + dp[j] - gap > 0) {
-					dp[i] = w + dp[j] - gap;
+				if (w + dp[j].first - gap > 0) {
+					dp[i].first = w + dp[j].first - gap;
 					prev[i] = j;
-					size_so_far[i] = size_so_far[j] + (a.query_end - a.query_start) + 
-						max(a.query_start - p.query_end, a.ref_start - p.ref_end);
+					// size_so_far[i] = size_so_far[j] + (a.query_end - a.query_start) + 
+					// 	max(a.query_start - p.query_end, a.ref_start - p.ref_end);
 				} else {
-					dp[i] = w;
-					size_so_far[i] = (a.query_end - a.query_start);
+					dp[i].first = w;
+					// size_so_far[i] = (a.query_end - a.query_start);
 				}
 			} else {
-				dp[i] = w;
-				size_so_far[i] = (a.query_end - a.query_start);
+				dp[i].first = w;
+				// size_so_far[i] = (a.query_end - a.query_start);
 			}
 			//if (dp[i] >= (MIN_READ_SIZE / 2) * (ratio * (1 - MAX_ERROR) - MAX_ERROR))
-			maxes.insert({dp[i], i});
+			// maxes.insert({dp[i].first, i});
 		} else {
 			int gap = (max_q + 1 - a.query_end + max_r + 1 - a.ref_end);
-			tree.activate({a.ref_end - 1, i}, dp[i] - gap);
+			tree.activate({a.ref_end - 1, i}, dp[i].first - gap);
 		}
 	}
+	sort(dp.begin(), dp.end(), greater<pair<int, int>>());
 	// dprn(">>>> search {}", elapsed(T)); T=cur_time();
 
 	vector<int> path; path.reserve(anchors.size());
 	vector<pair<int, bool>> boundaries {{0, 0}};
 	vector<char> used(anchors.size(), 0);
-	for (auto &m: maxes) {
+	for (auto &m: dp) {
 		int maxi = m.second;
 		if (used[maxi])
 			continue;
@@ -297,7 +300,7 @@ void test(int, char** argv)
 	while (getline(MISS, sl)) {
 		auto TT = cur_time();
 		auto ssl = split(sl, ' ');
-		// if (ssl[1] != "align_both/0014/both071602") continue;
+		if (ssl[1] != "align_both/0013/both067680") continue;
 
 		ifstream fin("out/bucket_0000_temp_diff.bed");
 		s2 = "";
@@ -396,7 +399,7 @@ void test(int, char** argv)
 		eprn("line {:3} {} @ {} : {:5} hits, {:3} {:3} --> {:3.1f} s\n", line++, ssl[1], ssl[0],
 			hits.size(), p1, p, elapsed(TT));
 		//if (p1 < 95 || p < 95)
-			cin.get();
+			// cin.get();
 	}
 	//eprn("total {}s\n", elapsed(T));
 
