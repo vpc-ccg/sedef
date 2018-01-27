@@ -49,8 +49,8 @@ else:
 #         l = l.strip().split()
 #         sizes[l[0]] = l[1]
 
-df = pd.read_table("data/GRCh37GenomicSuperDup.tab")
-
+tab_file = "data/GRCh37GenomicSuperDup.tab"
+df = pd.read_table(tab_file)
 if chrom1 != '':
     if chrom1 != chrom2 or strand == '_':
         df = df[(df.chrom == chrom1) & (df.otherChrom == chrom2) & (df.strand == strand)]
@@ -58,7 +58,6 @@ if chrom1 != '':
         df = df[(df.chrom == chrom1) & (df.otherChrom == chrom2) & (df.strand == strand) & (df.chromStart < df.otherStart)]
 df['chromSize'] = df.chromEnd - df.chromStart
 print ':: Loaded {} hits from WGAC'.format(df.shape[0])
-
 hits = {}
 name_to_coor = {}
 with open(path + '_temp.bed', 'w') as f:
@@ -106,7 +105,7 @@ def process_path(path, pnew):
 
 pnew = path #+ "____"
 # process_path(path, pnew)
-if not os.path.exists(pnew + '_temp_diff.bed'):
+if True or not os.path.exists(pnew + '_temp_diff.bed'):
     print ':: Running Bedtools...'
     system("bedtools pairtopair -a {0}_temp.bed -b {0} -type both > {0}_temp_diff.bed".format(pnew))
 # os.unlink(pnew)
@@ -151,53 +150,80 @@ try:
     for name, h in hits.items():
         if len(h) == 0: 
             continue
-        ok = any(v[0][0][0] >= 100 and v[0][1][0] >= 100 for v in h)
-        if not ok: 
-            partials[name] += h
+
+        A = h[0][1]
+        oqcov = np.zeros(A[2] - A[1])
+        orcov = np.zeros(A[5] - A[4])
+
+        for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(h):
+            over_qs = max(B[1], A[1])
+            over_qe = min(B[2], A[2])
+            over_rs = max(B[4], A[4])
+            over_re = min(B[5], A[5])
+            if over_qs <= over_qe and over_rs <= over_re:
+                oqcov[over_qs - A[1]:over_qe - A[1]] = 1
+                orcov[over_rs - A[4]:over_re - A[4]] = 1
+
+        p1 = np.sum(oqcov)/len(oqcov)
+        p2 = np.sum(orcov)/len(orcov)
+
+        if p1 < .85 or p2 < .85:
+            partials[name] += [(p1, p2), h]
+        # ok = any(v[0][0][0] >= 100 and v[0][1][0] >= 100 for v in h)
+        # if not ok: 
 
     tm = len(partials)
     print ':: Partial {} hits ({:.1f}%)'.format(tm, 100.0*tm/len(hits))
-    for k in sorted(partials.keys(), key=lambda y: sum(yy[0][0][0] + yy[0][1][0] for yy in partials[y])):
+    for k in sorted(partials.keys(), key=lambda y: sum(partials[y][0])):
         print '   -- partial http://humanparalogy.gs.washington.edu/build37/{0}'.format(k)
-        for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(partials[k]):
-            print '      === {:.1f}% ({} of {}) and {:.1f}% ({} of {})'.format(p1, n1, t1, p2, n2, t2)
-            A += (A[2] - A[1], A[5] - A[4])
-            B += (B[2] - B[1], B[5] - B[4])
-            print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*A)
-            print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*B)
+        p1, p2 = partials[k][0]
+        print '      {:.2f} {:.2f}'.format(p1*100, p2*100)
+
+            # print '      === {:.1f}% ({} of {}) and {:.1f}% ({} of {})'.format(p1, n1, t1, p2, n2, t2)
+            # A += (A[2] - A[1], A[5] - A[4])
+            # B += (B[2] - B[1], B[5] - B[4])
+            # print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*A)
+            # print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*B)
+
+        # for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(partials[k]):
+        #     print '      === {:.1f}% ({} of {}) and {:.1f}% ({} of {})'.format(p1, n1, t1, p2, n2, t2)
+        #     A += (A[2] - A[1], A[5] - A[4])
+        #     B += (B[2] - B[1], B[5] - B[4])
+        #     print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*A)
+        #     print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} ... len {:9,} -> {:9,} '.format(*B)
             # print '>> need: {:.2f} {:.2f}'.format(e1, e2)
 
     tm = sum(1 for k, v in hits.iteritems() if k not in partials and len(v) > 0)
     print ':: Full {} hits ({:.1f}%)'.format(tm, 100.0*tm/len(hits))
-    for k, v in hits.iteritems():
-        if k in partials or len(v) == 0:
-            continue
+    # for k, v in hits.iteritems():
+    #     if k in partials or len(v) == 0:
+    #         continue
 
-        found = 0
-        for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(v, reverse=True):
-            if not tuple(A[0:3]) < tuple(A[3:6]):
-                A = A[3:6] + A[0:3] + (A[6],)
-            if not tuple(B[0:3]) < tuple(B[3:6]):
-                B = B[3:6] + B[0:3] + (B[6],)
+    #     found = 0
+    #     for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(v, reverse=True):
+    #         if not tuple(A[0:3]) < tuple(A[3:6]):
+    #             A = A[3:6] + A[0:3] + (A[6],)
+    #         if not tuple(B[0:3]) < tuple(B[3:6]):
+    #             B = B[3:6] + B[0:3] + (B[6],)
 
-            chr_eq = (A[0] == B[0] and A[3] == B[3])
-            str_eq = A[6] == B[6]
-            l_eq = A[1] >= B[1] and A[2] <= B[2] 
-            r_eq = A[4] >= B[4] and A[5] <= B[5]
+    #         chr_eq = (A[0] == B[0] and A[3] == B[3])
+    #         str_eq = A[6] == B[6]
+    #         l_eq = A[1] >= B[1] and A[2] <= B[2] 
+    #         r_eq = A[4] >= B[4] and A[5] <= B[5]
 
-            eq = chr_eq and str_eq and l_eq and r_eq
-            if eq:
-                found = 1
-                break
-        if found == 0:
-            print 'whooops!!!'
-            for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(v, reverse=True):
-                print p1, p2
-                print n1, n2
-                print t1, t2
-                print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} '.format(*A)
-                print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} '.format(*B)
-            exit(0)
+    #         eq = chr_eq and str_eq and l_eq and r_eq
+    #         if eq:
+    #             found = 1
+    #             break
+    #     if found == 0:
+    #         print 'whooops!!!'
+    #         for (((p1, n1, t1, e1), (p2, n2, t2, e2)), A, B) in sorted(v, reverse=True):
+    #             print p1, p2
+    #             print n1, n2
+    #             print t1, t2
+    #             print '          wgac:  {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} '.format(*A)
+    #             print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} '.format(*B)
+    #         exit(0)
 
 
 except IOError:

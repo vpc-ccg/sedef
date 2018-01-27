@@ -14,6 +14,7 @@
 #include "align.h"
 #include "common.h"
 #include "fasta.h"
+#include "hit.h"
 #include "extern/ksw2.h"
 
 using namespace std;
@@ -287,73 +288,67 @@ void Alignment::append_cigar(const deque<pair<char, int>> &app)
 }
 
 Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
-	const list<pair<int, int>> &query_kmers, const list<pair<int, int>> &ref_kmers,
+	vector<Hit> &guide,
 	const int side) 
 {
-	auto qk_p = query_kmers.begin();
-	auto rk_p = ref_kmers.begin();
-	Alignment aln {
-		"A", qk_p->first, qk_p->second, 
-		"B", rk_p->first, rk_p->second,
-		qstr.substr(qk_p->first, qk_p->second - qk_p->first),
-		rstr.substr(rk_p->first, rk_p->second - rk_p->first),
-		"", "", "",
-		{{'M', qk_p->second - qk_p->first}}, {}
-	};
-	assert(query_kmers.size() == ref_kmers.size());
+	// eprn("aligning {} to {}", qstr.size(), rstr.size());
 
-	for (auto qk = next(qk_p), rk = next(rk_p); qk != query_kmers.end(); qk++, rk++) {
-		// eprnn("--- {:6}..{:6} vs {:6}..{:6}", qk_p->first, qk_p->second,
-		// 	rk_p->first, rk_p->second);
-		assert(qk->first >= qk_p->second);
-		assert(rk->first >= rk_p->second);
-		aln.end_a = qk->second;
-		aln.end_b = rk->second;
-		aln.a += qstr.substr(qk_p->second, qk->second - qk_p->second);
-		aln.b += rstr.substr(rk_p->second, rk->second - rk_p->second);
-		if (qk->first - qk_p->second && rk->first - rk_p->second) {
-			if (qk->first - qk_p->second <= 1000 && rk->first - rk_p->second <= 1000) { // "close" hits
-				auto gap = align(
-					qstr.substr(qk_p->second, qk->first - qk_p->second), 
-					rstr.substr(rk_p->second, rk->first - rk_p->second), 
-					5, -4, 40, 1
-				);
-				// eprnn(" {}", gap.cigar_string());
+	auto prev = guide.begin();
+	Alignment aln = prev->aln;
+	for (auto cur = next(prev); cur != guide.end(); cur++) {
+		int qs = cur->query_start, qe = cur->query_end;
+		int qps = prev->query_start, qpe = prev->query_end;
+
+		int rs = cur->ref_start, re = cur->ref_end;
+		int rps = prev->ref_start, rpe = prev->ref_end;
+
+		// eprn("   {}..{}->{}..{}", qps, qpe, rps, rpe);
+		// eprn("TO {}..{}->{}..{}", qs, qe, rs, re);
+
+		assert(qpe <= qs);
+		assert(rpe <= rs);
+
+		aln.end_a = qe;
+		aln.end_b = re;
+		aln.a += qstr.substr(qpe, qe - qpe); 
+		aln.b += rstr.substr(rpe, re - rpe); 
+		
+		int qgap = qs - qpe, rgap = rs - rpe;
+		if (qgap && rgap) {
+			if (qgap <= 1000 && rgap <= 1000) { // "close" hits
+				auto gap = align(qstr.substr(qpe, qgap), rstr.substr(rpe, rgap), 5, -4, 40, 1);
 				aln.append_cigar(gap.cigar);
 			} else { // assume only one part is the gap
-				int ma = max(qk->first - qk_p->second, rk->first - rk_p->second);
-				int mi = min(qk->first - qk_p->second, rk->first - rk_p->second);
-				auto ma1 = align(
-					qstr.substr(qk_p->second, mi), 
-					rstr.substr(rk_p->second, mi), 
-					5, -4, 40, 1
-				);
-				ma1.cigar.push_back({qk->first - qk_p->second == mi ? 'I' : 'D', ma - mi});
-				auto ma2 = align(
-					qstr.substr(qk->first - mi, mi), 
-					rstr.substr(rk->first - mi, mi), 
-					5, -4, 40, 1
-				);
-				ma2.cigar.push_front({qk->first - qk_p->second == mi ? 'I' : 'D', ma - mi});
+				int ma = max(qgap, rgap);
+				int mi = min(qgap, rgap);
+				auto ma1 = align(qstr.substr(qpe, mi), rstr.substr(rpe, mi), 5, -4, 40, 1);
+				ma1.cigar.push_back({qgap == mi ? 'I' : 'D', ma - mi});
+				auto ma2 = align(qstr.substr(qs - mi, mi), rstr.substr(rs - mi, mi), 5, -4, 40, 1);
+				ma2.cigar.push_front({qgap == mi ? 'I' : 'D', ma - mi});
 				aln.append_cigar(ma2.error.error() < ma2.error.error() ? ma2.cigar : ma1.cigar);
 			}
-		} else if (qk->first - qk_p->second) {
-			aln.append_cigar({{'D', qk->first - qk_p->second}});	
-		} else if (rk->first - rk_p->second) {
-			aln.append_cigar({{'I', rk->first - rk_p->second}});	
+		} else if (qgap) {
+			aln.append_cigar({{'D', qgap}});	
+		} else if (rgap) {
+			aln.append_cigar({{'I', rgap}});	
 		} 
 		// eprn("");
-		assert(qk->second - qk->first == rk->second - rk->first);
-		aln.append_cigar({{'M', qk->second - qk->first}});
-		qk_p = qk, rk_p = rk;
+		// assert(qe - qs == re - rs);
+		aln.append_cigar(cur->aln.cigar);
+		prev = cur;
 	}
 	// Add end
 
 
-	int qlo = query_kmers.front().first, 
-		 qhi = query_kmers.back().second;
-	int rlo = ref_kmers.front().first,   
-		 rhi = ref_kmers.back().second;
+	int qlo = aln.start_a, qhi = aln.end_a;
+	int rlo = aln.start_b, rhi = aln.end_b;
+	// eprn("{}", aln.cigar_string());
+	// eprn("{}", aln.print());
+	// eprn("{} {}\n{} {}", aln.a.size(), aln.a, qhi-qlo, qstr.substr(qlo, qhi - qlo));
+	assert(aln.a == qstr.substr(qlo, qhi - qlo));
+	assert(aln.b == rstr.substr(rlo, rhi - rlo));
+	// eprn("alohaaaa");
+
 	if (side) {
 		int qlo_n = max(0, qlo - side);
 		int rlo_n = max(0, rlo - side);
@@ -363,7 +358,10 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 				rstr.substr(rlo_n, rlo - rlo_n), 
 				5, -4, 40, 1
 			);
+			// eprn("alignment ok {} vs {}\n{}", qlo-qlo_n, rlo-rlo_n, gap.print());
 			gap.trim_front();
+			// eprn("trim ok\n{}", gap.print());
+
 			qlo_n = qlo - (gap.end_a - gap.start_a);
 			rlo_n = rlo - (gap.end_b - gap.start_b);
 			aln.prepend_cigar(gap.cigar);
@@ -399,8 +397,15 @@ Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
 	assert(aln.a == qstr.substr(qlo, qhi - qlo));
 	assert(aln.b == rstr.substr(rlo, rhi - rlo));
 
+	// eprn("alohaaaa2");
+
 	aln = aln.trim();
 	aln.error = aln.calculate_error();
+
+	// eprn("final {}", aln.cigar_string());
+	// eprn("{}", aln.print());
+	// cin.get();
+
 	return aln;
 }
 
@@ -431,7 +436,10 @@ void Alignment::trim_front() // ABCD -> --CD
 	}
 	if (max_i == a.size())
 		return;
+	// eprn("max i is {}", max_i);
+	// eprn("{}\n{}", cigar_string(), print());
 	for (int ci = 0, cur_len = 0; ci < cigar.size(); ci++) {
+		// eprn("{} {}", start_a, start_b);
 		if (cigar[ci].second + cur_len > max_i) {
 			assert(cigar[ci].first == 'M');
 			// split this one
@@ -516,7 +524,7 @@ void Alignment::trim_back() // ABCD -> AB--
 
 /******************************************************************************/
 
-Alignment align_helper(const string &tseq, const string &qseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
+Alignment align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
 	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
 
@@ -539,7 +547,7 @@ Alignment align_helper(const string &tseq, const string &qseq, int sc_mch, int s
 			bandwidth, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
 			0, &ez);
 		for (int i = 0; i < ez.n_cigar; i++) {
-			cigar.push_back({"MID"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
+			cigar.push_back({"MDI"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
 		}
 		free(ez.cigar);
 	}

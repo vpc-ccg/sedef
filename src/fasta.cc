@@ -96,17 +96,22 @@ FastaReference::~FastaReference(void)
 	munmap(filemm, filesize);
 }
 
-string FastaReference::get_sequence(string seqname, int start, int end) 
+string FastaReference::get_sequence(string seqname, int start, int *end) 
 {
 	FastaIndexEntry entry = index.entry(seqname);
 	
 	if (start < 0) {
 		start = 0;
 	}
-	if (end < 0 || end > entry.length) {
-		end = entry.length;
+	int length;
+	if (end == nullptr || *end > entry.length) {
+		length = entry.length - start;
+		if (end != nullptr) {
+			*end = entry.length;
+		}
+	} else {
+		length = *end - start;
 	}
-	int length = end - start;
 
 	// we have to handle newlines
 	// approach: count newlines before start

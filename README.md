@@ -53,17 +53,23 @@ for j in `seq 1 22` X Y; do
 done; done | parallel
 
 ### MEGANODE
+```
 
+# MEGANODE
+
+# Cojk
+
+```bash
 for i in `seq 1 22` X Y; do 
-	for j in `seq 1 22` X Y; do  
-		SI=`awk '$1=="chr'$i'" {print $2}' hg19.fa.fai`; 
-		SJ=`awk '$1=="chr'$j'" {print $2}' hg19.fa.fai`; 
-		if [ "$SI" -le "$SJ" ] ; then 
-			for m in y n ; do
-			echo "~/mesa ./sedef search single hg19.fa chr$i chr$j $m >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
-			done; 
-		fi
-	done
+for j in `seq 1 22` X Y; do  
+	SI=`awk '$1=="chr'$i'" {print $2}' hg19.fa.fai`; 
+	SJ=`awk '$1=="chr'$j'" {print $2}' hg19.fa.fai`; 
+	if [ "$SI" -le "$SJ" ] ; then 
+		for m in y n ; do
+		echo "~/mesa ./sedef search single hg19.fa chr$i chr$j $m >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
+		done; 
+	fi
+done
 done | parallel --will-cite -j 80 --eta
 >> 10m 32s
 grep Total out/log/*.log | wc -l
@@ -75,23 +81,20 @@ grep Wall out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
 for j in out/bins/bucket_???? ; do
 	k=$(basename $j);
 	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
-done | parallel --will-cite -j 80 --eta
->> 5m 54s
+done | time parallel --will-cite -j 80 --eta
+>> 18m 36s
 grep Finished out/log/bins/*.log | wc -l
 >> 1000
 grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 20659 (5.74 h)cv
-cat out/*.bed > out.init.bed
+>> 82061 (22.79 h)
+cat out/bins/bucket_???? > out.init.bed
 cat out/bins/*.bed > out.final.bed
 wc -l out.*bed
 >>   975511 out.final.bed
 >>  1656305 out.init.bed
 ```
 
-
-
-
-## MOUSE
+## Mis
 ```bash
 for i in `seq 1 19` X Y; do 
 	for j in `seq 1 19` X Y; do  
@@ -110,16 +113,16 @@ grep Total mouse_out/log/*.log | wc -l
 grep Wall mouse_out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
 >> 46962.9s (13.05 h)
 ~/mesa ./sedef align bucket mouse_out mouse_out/bins 1000
->> 0m 31s
+>> 
 for j in mouse_out/bins/bucket_???? ; do
 	k=$(basename $j);
 	echo "~/mesa ./sedef align generate mm8.fa $j 11 >${j}.bed 2>mouse_out/log/bins/${k}.log"
 done | parallel --will-cite -j 80 --eta
->> 5m 54s
+>> 
 grep Finished mouse_out/log/bins/*.log | wc -l
 >> 1000
 grep Wall mouse_out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 20659 (5.74 h)cv
+>> 236095 (65.58 h)cv
 cat mouse_out/*.bed > mouse_out.init.bed
 cat mouse_out/bins/*.bed > mouse_out.final.bed
 wc -l mouse_out.*bed

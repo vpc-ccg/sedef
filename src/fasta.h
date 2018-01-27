@@ -50,7 +50,7 @@ struct FastaReference {
 	
 	FastaReference(string filename);
 	~FastaReference();
-	string get_sequence(string seqname, int start = 0, int end = -1);
+	string get_sequence(string seqname, int start = 0, int *end = 0);
 };
 
 /******************************************************************************/

@@ -201,8 +201,8 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 	int total_written = 0;
 	for (int i = 0; i < schedule.size(); i++) {
 		for (auto &h: schedule[i]) {
-			string fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
-			string fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
+			string fa = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
+			string fb = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
 			if (h.ref->is_rc) 
 				fb = rc(fb);
 

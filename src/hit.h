@@ -26,7 +26,6 @@ struct Hit {
 	string name, comment;
 
 	Alignment aln;
-	std::pair<Guide, Guide> guides;
 
 	static Hit from_bed(const std::string &bed);
 	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
