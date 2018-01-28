@@ -39,6 +39,9 @@ public:
 			tie(query_start, query_end, ref_start, ref_end) < 
 			tie(h.query_start, h.query_end, h.ref_start, h.ref_end);
 	}
+
+public:
+	void extend(const double factor, const int max_extend);
 };
 
 void update_from_alignment(Hit &h);

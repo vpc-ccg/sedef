@@ -27,6 +27,11 @@ using namespace std;
 
 /******************************************************************************/
 
+const double EXTEND_RATIO = 5;
+const int MAX_EXTEND = 15000;
+
+/******************************************************************************/
+
 auto stat_file(const string &path)
 {
 	struct stat path_stat;
@@ -65,17 +70,10 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		string s;
 		while (getline(fin, s)) {
 			Hit h = Hit::from_bed(s);
-
 			if (extend) {
-				int w = max(h.query_end - h.query_start, h.ref_end - h.ref_start);
-				w = min(15000, 5 * w);
-				h.query_start = max(0, h.query_start - w);
-				h.query_end += w;
-				h.ref_start = max(0, h.ref_start - w);
-				h.ref_end += w;
+				h.extend(EXTEND_RATIO, MAX_EXTEND);
 			}
-			int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
-			max_complexity = max(max_complexity, complexity);
+			max_complexity = max(max_complexity, (int)sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start)));
 
 			hits.push_back(h);
 			nhits++;

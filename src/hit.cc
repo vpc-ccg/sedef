@@ -153,6 +153,18 @@ string Hit::to_bed(bool do_rc) const
 
 /******************************************************************************/
 
+void Hit::extend(const double factor, const int max_extend)
+{
+	int w = max(query_end - query_start, ref_end - ref_start);
+	w = min(max_extend, int(5 * factor));
+	query_start = max(0, query_start - w);
+	query_end += w;
+	ref_start = max(0, ref_start - w);
+	ref_end += w;
+}
+
+/******************************************************************************/
+
 void update_from_alignment(Hit &h)
 {
 	h.query_start = h.aln.start_a; 
