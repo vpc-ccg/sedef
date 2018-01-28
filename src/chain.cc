@@ -62,7 +62,7 @@ vector<Anchor> generate_anchors(const string &query, const string &ref, const in
 			continue;
 		
 		auto it = ref_hashes.find(h);
-		if (it == ref_hashes.end()) // || it->second.size() >= 1000)
+		if (it == ref_hashes.end() || it->second.size() >= 1000)
 			continue;
 
 		int q = i - kmer_size + 1;
@@ -331,7 +331,7 @@ void test(int, char** argv)
 		if (ssl[1] != "align_both/0020/both102222") continue;
 		// align_both/0017/both087945
 		// align_both/0020/both102222
-		
+
 		ifstream fin("out/ww.bed");
 		bool ok=0;
 		while (getline(fin, s)) {
