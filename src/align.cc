@@ -161,6 +161,9 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 	assert(b == rstr.substr(rlo, rhi - rlo));
 	// eprn("alohaaaa");
 
+	// populate_nice_alignment();
+	// eprn("{}", cigar_string());
+
 	if (side) {
 		int qlo_n = max(0, qlo - side);
 		int rlo_n = max(0, rlo - side);
@@ -206,6 +209,8 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 	// *this = this->trim(); NEEDED?
 	// trim();
 	populate_nice_alignment();
+	// eprn("{}", print(70));
+
 
 	// eprn("final {}", aln.cigar_string());
 	// eprn("{}", aln.print());
@@ -217,8 +222,6 @@ Alignment::Alignment(const string &qstr, const string &rstr,
 	const vector<Anchor> &guide, const vector<int> &guide_idx):
 	chr_a("A"),	chr_b("B")
 {
-	// eprn("aligning {} to {}", qstr.size(), rstr.size());
-
 	if (guide_idx.size() == 0) {
 		*this = Alignment();
 		return;

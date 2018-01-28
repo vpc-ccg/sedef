@@ -97,7 +97,7 @@ vector<Anchor> generate_anchors(const string &query, const string &ref, const in
 			}
 		}
 	}
-	dprn("{:n} {:n}", anchors.size(), anchors.capacity());
+	// dprn("{:n} {:n}", anchors.size(), anchors.capacity());
 	// for (int i = 1; i < anchors.size(); i++) {
 	// 	assert(tie(anchors[i - 1].query_start, anchors[i - 1].ref_start) <= 
 	// 		tie(anchors[i].query_start, anchors[i].ref_start));
@@ -126,7 +126,7 @@ auto chain_anchors(vector<Anchor> &anchors)
 		xs.push_back({{a.q + a.l, i}, SegmentTree<Coor>::MIN, i});
 		ys.push_back({{a.r + a.l - 1, i}, SegmentTree<Coor>::MIN, i}); 
 		
-		assert(a.q < a.q + a.l);
+		assert(a.l);
 		max_q = max(max_q, a.q + a.l);
 		max_r = max(max_r, a.r + a.l);
 	}
@@ -150,14 +150,14 @@ auto chain_anchors(vector<Anchor> &anchors)
 			while (deactivate_bound < (&x - &xs[0])) {
 				int t = xs[deactivate_bound].x.second; // index
 				if (xs[deactivate_bound].x.first == anchors[t].q + anchors[t].l) { // end point
-					if (a.q - anchors[t].q + anchors[t].l <= MAX_CHAIN_GAP)
+					if (a.q - (anchors[t].q + anchors[t].l) <= MAX_CHAIN_GAP)
 						break;
 					tree.deactivate({anchors[t].r + anchors[t].l - 1, t});
 				}
 				deactivate_bound++;
 			}
 
-			int w = MATCH_CHAIN_SCORE * (a.q + a.l - a.q);
+			int w = MATCH_CHAIN_SCORE * a.l;
 			int j = tree.rmq({a.r - MAX_CHAIN_GAP, 0}, 
 				             {a.r - 1, anchors.size()});
 			if (j != -1 && ys[j].score != SegmentTree<Coor>::MIN) {
@@ -165,7 +165,7 @@ auto chain_anchors(vector<Anchor> &anchors)
 				auto &p = anchors[j];
 				assert(a.q >= p.q + p.l);
 				assert(a.r >= p.r + p.l);
-				int gap = (a.q - p.q + p.l + a.r - p.r + p.l);
+				int gap = (a.q - (p.q + p.l) + a.r - (p.r + p.l));
 				if (w + dp[j].first - gap > 0) {
 					dp[i].first = w + dp[j].first - gap;
 					prev[i] = j;
@@ -176,7 +176,7 @@ auto chain_anchors(vector<Anchor> &anchors)
 				dp[i].first = w;
 			}
 		} else {
-			int gap = (max_q + 1 - a.q + a.l + max_r + 1 - a.r + a.l);
+			int gap = (max_q + 1 - (a.q + a.l) + max_r + 1 - (a.r + a.l));
 			tree.activate({a.r + a.l - 1, i}, dp[i].first - gap);
 		}
 	}
@@ -306,8 +306,8 @@ void test2()
 
 void test(int, char** argv)
 {
-	// test2();
-	// exit(0);
+	test2();
+	exit(0);
 	// auto x = align(
 	// 	"CAAGAGAATTAAATGGGTTATTGATTAAAAA",
 	// 	"TTTTTTCAAGAGAATTAAATCATTTCTTGATTA"
@@ -328,8 +328,10 @@ void test(int, char** argv)
 	while (getline(MISS, sl)) {
 		auto TT = cur_time();
 		auto ssl = vector<string>{"miss", sl}; // split(sl, ' ');
-		// if (ssl[1] != "align_both/0019/both097366") continue;
-
+		if (ssl[1] != "align_both/0020/both102222") continue;
+		// align_both/0017/both087945
+		// align_both/0020/both102222
+		
 		ifstream fin("out/ww.bed");
 		bool ok=0;
 		while (getline(fin, s)) {

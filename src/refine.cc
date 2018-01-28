@@ -127,7 +127,7 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			anchors.front().ref, rlo, rhi
 		};
 
-		if (est_size < REFINE_MIN_READ)
+		if (est_size < REFINE_MIN_READ - REFINE_SIDE_ALIGN)
 			continue;
 		vector<Hit> guide;
 		Hit *prev = &anchors[paths.back()[0]];
