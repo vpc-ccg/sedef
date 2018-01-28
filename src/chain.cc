@@ -441,8 +441,8 @@ void test(int, char** argv)
 
 		eprn("line {:3} {} @ {} : {:5} hits, {:3} {:3} --> {:3.1f} s\n", line++, ssl[1], ssl[0],
 			hits.size(), p1, p, elapsed(TT));
-		// if (p1 < 95 || p < 95)
-			// cin();
+		if (p1 < 80 || p < 80)
+			cin.get();
 	}
 	//eprn("total {}s\n", elapsed(T));
 

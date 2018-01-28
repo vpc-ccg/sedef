@@ -13,5 +13,5 @@
 
 /******************************************************************************/
 
-std::vector<Hit> merge(std::vector<Hit> &hits, const int merge_dist = 100);
+std::vector<Hit> merge(std::vector<Hit> &hits, const int merge_dist);
 

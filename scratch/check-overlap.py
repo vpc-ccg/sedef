@@ -49,7 +49,8 @@ else:
 #         l = l.strip().split()
 #         sizes[l[0]] = l[1]
 
-tab_file = "data/mm8WGAC.tab"
+# tab_file = "data/mm8WGAC.tab"
+tab_file = "data/GRCh37GenomicSuperDup.tab"
 df = pd.read_table(tab_file)
 if chrom1 != '':
     if chrom1 != chrom2 or strand == '_':

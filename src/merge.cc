@@ -64,11 +64,14 @@ vector<Hit> merge(vector<Hit> &hits, const int merge_dist)
 			windows.emplace(rec.ref_end, rec);
 			prev = rec;
 			wcount++;
-		} else if (prev.query_end + merge_dist < rec.query_start || prev.query->name != rec.query->name || 
-				prev.ref->name != rec.ref->name || prev.ref->is_rc != rec.ref->is_rc) 
+		} else if (prev.query_end + merge_dist < rec.query_start || 
+			prev.query->name != rec.query->name || 
+			prev.ref->name != rec.ref->name || 
+			prev.ref->is_rc != rec.ref->is_rc) 
 		{
-			for (auto it: windows)
+			for (auto it: windows) {
 				results.push_back(it.second);
+			}
 			windows.clear();
 			windows.emplace(rec.ref_end, rec);
 			prev = rec;

@@ -29,6 +29,7 @@ using namespace std;
 
 const double EXTEND_RATIO = 5;
 const int MAX_EXTEND = 15000;
+const int MERGE_DIST = 250;
 
 /******************************************************************************/
 
@@ -80,7 +81,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 
 	eprn("Read total {} alignments", hits.size());
 	if (extend) {
-		hits = merge(hits);
+		hits = merge(hits, MERGE_DIST);
 		eprn("After merging remaining {} alignments", hits.size());
 	}
 	int max_complexity = 0;

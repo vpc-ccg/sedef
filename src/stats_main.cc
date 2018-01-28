@@ -46,7 +46,7 @@ void stats(const string &ref_path, const string &bed_path)
 		hits.push_back(h);
 	}
 	eprn("Loaded {} hits", hits.size());
-	hits = merge(hits);
+	hits = merge(hits, 250);
 	eprn("After merging remaining {} hits", hits.size());
 	for (auto &h: hits) {
 		prn("{}", h.to_bed(false));
