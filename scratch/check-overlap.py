@@ -49,8 +49,8 @@ else:
 #         l = l.strip().split()
 #         sizes[l[0]] = l[1]
 
-# tab_file = "data/mm8WGAC.tab"
 tab_file = "data/GRCh37GenomicSuperDup.tab"
+tab_file = "data/mm8WGAC.tab"
 df = pd.read_table(tab_file)
 if chrom1 != '':
     if chrom1 != chrom2 or strand == '_':
@@ -145,7 +145,7 @@ try:
         if len(vs) == 0:
             print '   -- missed http://humanparalogy.gs.washington.edu/build37/{0}'.format(name)
             r = name_to_coor[name]
-            print '      wgac: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} ... {} ... len {:9,} -> {:9,} '.format(
+            print '      wgac: {}\t{}\t{}\t{}\t{}\t{}\t{} ... len {:9,} -> {:9,} '.format(
                 r.chrom, r.chromStart, r.chromEnd, r.otherChrom, r.otherStart, r.otherEnd, r.strand,
                 r.chromEnd - r.chromStart, r.otherEnd - r.otherStart
             )

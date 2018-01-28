@@ -29,30 +29,31 @@ void stats(const string &ref_path, const string &bed_path)
 
 	string line;
 	vector<Hit> hits;
+	int hit_count = 0;
 	while (getline(fin, line)) {
 		string cigar;
 		auto h = Hit::from_bed(line, &cigar);
-		// string fa = fr.get_sequence(h.query->name, h.query_start, h.query_end);
-		// string fb = fr.get_sequence(h.ref->name, h.ref_start, h.ref_end);
-		// assert(!h.query->is_rc);
-		// if (h.query->is_rc) {
-		// 	fa = rc(fa);
-		// }
-		// if (h.ref->is_rc) {
-		// 	fb = rc(fb);
-		// }
-		// assert(cigar.size());
-		// h.aln = align(fa, fb, cigar);
-		hits.push_back(h);
-	}
-	eprn("Loaded {} hits", hits.size());
-	hits = merge(hits, 250);
-	eprn("After merging remaining {} hits", hits.size());
-	for (auto &h: hits) {
-		prn("{}", h.to_bed(false));
-	}
-	exit(0);
-	for (auto &h: hits) {
+		string fa = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
+		string fb = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
+		assert(!h.query->is_rc); 
+		if (h.query->is_rc) {
+			fa = rc(fa);
+		}
+		if (h.ref->is_rc) {
+			fb = rc(fb);
+		}
+		assert(cigar.size());
+		h.aln = Alignment(fa, fb, cigar);
+		// hits.push_back(h);
+	// }
+	// eprn("Loaded {} hits", hits.size());
+	// // hits = merge(hits, 250);
+	// // eprn("After merging remaining {} hits", hits.size());
+	// // for (auto &h: hits) {
+	// // 	prn("{}", h.to_bed(false));
+	// // }
+	// // exit(0);
+	// for (auto &h: hits) {
 		int align_length = h.aln.span();
 		int indel_a = 0;
 		int indel_b = 0;
@@ -72,8 +73,8 @@ void stats(const string &ref_path, const string &bed_path)
 			indel_b += b == '-';
 			matchB += a != '-' && a == b;
 			if (a != '-' && b != '-') {
-				lowercaseA += islower(a);
-				lowercaseB += islower(b);
+				lowercaseA += (bool)islower(h.aln.align_a[i]);
+				lowercaseB += (bool)islower(h.aln.align_b[i]);
 				alignB += 1;
 				if (a != b) {
 					mismatchB += 1;
@@ -105,7 +106,10 @@ void stats(const string &ref_path, const string &bed_path)
 			align_length, indel_a, indel_b, alignB, matchB, mismatchB,
 			transitionsB, transversionsB, fracMatch, fracMatchIndel, jcK, k2K,
 			lowercaseA, lowercaseB);
+		eprnn("\rProcessed hit {:n}", ++hit_count);
+		exit(0);
 	}
+	eprn("\nDone!");
 }
 
 /******************************************************************************/

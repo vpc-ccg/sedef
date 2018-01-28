@@ -43,13 +43,15 @@ for j in `seq 1 22` X Y; do
 		done; 
 	fi
 done
-done | parallel --will-cite -j 80 --eta
->> 10m 32s
+done | time parallel --will-cite -j 80 --eta
+>> 10m 11s
 
 grep Total out/log/*.log | wc -l
 >> 600s
 grep Wall out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 44880s (12.47 h)
+>> 43414.7 (12.06 h)
+grep Memory out/log/*.log | awk '{if($3>m)m=$3}END{print m}'
+>> 4889.0
 ```
 
 Then use `sedef-align` to bucket the files for the optimal parallel alignment, and
@@ -57,29 +59,57 @@ afterwards run the whole alignment:
 
 ```bash
 ~/mesa ./sedef align bucket out out/bins 1000
->> 47s
+>> 36s (5.2G)
 
 for j in out/bins/bucket_???? ; do
 	k=$(basename $j);
 	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
 done | time parallel --will-cite -j 80 --eta
->> 27m 33s
+>> 9m 32s
 
 grep Finished out/log/bins/*.log | wc -l
 >> 1000
 grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 43704 (12.14 h)  
+>> 20715.4 (5.75 h)  
+grep Memory out/log/bins/*.log | awk '{if($3>m)m=$3}END{print m}'
+>> 4993.0
 ```
 
 Finally, run `sedef-stats` to produce the final output:
 
 ```bash
+cat out/*.bed > out.bed
 cat out/bins/bucket_???? > out.init.bed
 cat out/bins/*.bed > out.final.bed
 wc -l out.*bed
->>   975511 out.final.bed
->>  1656305 out.init.bed
+>>  1656305 out/out.bed
+>>  1558896 out/out.init.bed
+>>   953709 out/out.final.bed
 ```
+
+Then analyse:
+
+```bash
+rsync -Pva meganode:/local-scratch/ibrahim/sedef/out.*bed  out/
+for i in out/out.bed out/out.init.bed out/out.final.bed ; do 
+	mesa python scratch/check-overlap.py $i > ${i}.log  ; 
+done
+
+mesa ./sedef stats data/hg19/hg19.fa out/out.final.bed > out/out.finished.bed
+>> 1m 43s (1.9G)
+```
+
+
+Misses & partials:
+
++-------------------+------------+-----+----------------+-------+
++ Stage             + Misses     + Kbp + Partial misses + Kbp   +
++-------------------+------------+-----+----------------+-------+
++ Seed              + 167 (0.7%) + 652 + 1,348 (5.5%)   + 6,163 +
++ Merge & Extend    + 133 (0.5%) + 505 +    73 (0.3%)   +   384 +
++ Chain             + 135 (0.6%) + 515 +   215 (0.9%)   + 1,536 +
++-------------------+------------+-----+----------------+-------+
+
 
 ### Mouse
 

@@ -306,8 +306,8 @@ void test2()
 
 void test(int, char** argv)
 {
-	test2();
-	exit(0);
+	// test2();
+	// exit(0);
 	// auto x = align(
 	// 	"CAAGAGAATTAAATGGGTTATTGATTAAAAA",
 	// 	"TTTTTTCAAGAGAATTAAATCATTTCTTGATTA"
@@ -323,12 +323,17 @@ void test(int, char** argv)
 	string s, s2, sl;
 	const int k = 11;
 
+	   // -- missed http://humanparalogy.gs.washington.edu/build37/align_both/0021/both107733
+      // wgac: chrY    1,264,234..  2,018,238 -> chrX    1,314,234..  2,068,238 ... + ... len   754,004 ->
+   // -- missed http://humanparalogy.gs.washington.edu/build37/align_both/0021/both107778
+      // wgac: chrY    2,068,238..  2,649,520 -> chrX    2,118,238..  2,699,520 ... + ... len   581,282 ->
+
 	ifstream MISS("out/misses.txt");
 	int line = 0;
 	while (getline(MISS, sl)) {
 		auto TT = cur_time();
 		auto ssl = vector<string>{"miss", sl}; // split(sl, ' ');
-		if (ssl[1] != "align_both/0020/both102222") continue;
+		if (ssl[1] != "align_both/0021/both107733") continue;
 		// align_both/0017/both087945
 		// align_both/0020/both102222
 
