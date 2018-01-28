@@ -21,8 +21,8 @@ public:
 	int ref_end() { return re; }
 	string cigar() { return c.cigar_string(); }
 	int alignment_size() { return c.span(); }
-	int gaps() { return c.error.gap_bases();  }
-	int mismatches() { return c.error.mismatches();  }
+	int gaps() { return c.gap_bases();  }
+	int mismatches() { return c.mismatches();  }
 
 
 	bool operator==(const PyHit &q) const {
