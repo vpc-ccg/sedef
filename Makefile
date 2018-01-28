@@ -1,5 +1,5 @@
 CXX=icpc
-CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color
+CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color -march=native
 LDFLAGS=-lrt -lz -fopenmp
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)

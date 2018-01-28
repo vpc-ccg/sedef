@@ -37,11 +37,11 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			- REFINE_MISMATCH * a.aln.mismatches()
 			- REFINE_GAP * a.aln.gap_bases()
 		);
-		dprn("-- init {}: (len:{}) {}..{} --> {}..{} ; score = {} cigar = {}", 
-			&a-&anchors[0],
-			abs(a.query_start- a.query_end), 
-			a.query_start, a.query_end, a.ref_start, a.ref_end, score.back(),
-			a.aln.cigar_string());
+		// dprn("-- init {}: (len:{}) {}..{} --> {}..{} ; score = {} cigar = {}", 
+		// 	&a-&anchors[0],
+		// 	abs(a.query_start- a.query_end), 
+		// 	a.query_start, a.query_end, a.ref_start, a.ref_end, score.back(),
+		// 	a.aln.cigar_string());
 	}
 
 	vector<int> dp(anchors.size(), 0);

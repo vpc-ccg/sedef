@@ -76,8 +76,8 @@ vector<PyHit> PyAligner::jaccard_align(const string &q, const string &r)
 
 vector<PyHit> PyAligner::chain_align(const string &q, const string &r)
 {
-	extern int DEBUG;
-	DEBUG = 0;
+	// extern int DEBUG;
+	// DEBUG = 0;
 	vector<PyHit> hits;
 	auto hi = fast_align(q, r);
 	for (auto &pp: hi) {

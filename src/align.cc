@@ -23,6 +23,10 @@ using namespace std;
 
 auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
+	// #ifdef __SSE4_1__
+	// eprn(">> >> >> woohoo sse4");
+	// #endif
+
 	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
 
 	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
@@ -44,6 +48,10 @@ auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis
 			bandwidth, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
 			0, &ez);
 		for (int i = 0; i < ez.n_cigar; i++) {
+			// if((ez.cigar[i] & 0xf) >= 3) {
+			// 	eprn("{}", ez.cigar[i] & 0xf);
+			// 	exit(1);
+			// }
 			cigar.push_back({"MDI"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
 		}
 		free(ez.cigar);
@@ -185,6 +193,98 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 			end_b = rhi = rhi_n;
 		}
 	}
+
+	assert(qlo >= 0);
+	assert(rlo >= 0);
+	assert(qhi <= qstr.size());
+	assert(rhi <= rstr.size());
+	assert(a == qstr.substr(qlo, qhi - qlo));
+	assert(b == rstr.substr(rlo, rhi - rlo));
+
+	// eprn("alohaaaa2");
+
+	// *this = this->trim(); NEEDED?
+	// trim();
+	populate_nice_alignment();
+
+	// eprn("final {}", aln.cigar_string());
+	// eprn("{}", aln.print());
+	// cin.get();
+}
+
+
+Alignment::Alignment(const string &qstr, const string &rstr, 
+	const vector<Anchor> &guide, const vector<int> &guide_idx):
+	chr_a("A"),	chr_b("B")
+{
+	// eprn("aligning {} to {}", qstr.size(), rstr.size());
+
+	if (guide_idx.size() == 0) {
+		*this = Alignment();
+		return;
+	}
+
+	auto prev = guide_idx.begin();
+	start_a = guide[*prev].q;
+	end_a = guide[*prev].q + guide[*prev].l;
+	start_b = guide[*prev].r;
+	end_b = guide[*prev].r + guide[*prev].l;
+	a = qstr.substr(start_a, end_a - start_a); 
+	b = rstr.substr(start_b, end_b - start_b); 
+	cigar = {{'M', end_a - start_a}};
+	assert(end_a - start_a == end_b - start_b);
+
+	for (auto cur = next(prev); cur != guide_idx.end(); cur++) {
+		int qs = guide[*cur].q, qe = guide[*cur].q + guide[*cur].l;
+		int qps = guide[*prev].q, qpe = guide[*prev].q + guide[*prev].l;
+
+		int rs = guide[*cur].r, re = guide[*cur].r + guide[*cur].l;
+		int rps = guide[*prev].r, rpe = guide[*prev].r + guide[*prev].l;
+
+		assert(qpe <= qs);
+		assert(rpe <= rs);
+
+		end_a = qe;
+		end_b = re;
+		a += qstr.substr(qpe, qe - qpe); 
+		b += rstr.substr(rpe, re - rpe); 
+		
+		int qgap = qs - qpe, rgap = rs - rpe;
+		if (qgap && rgap) {
+			if (qgap <= 1000 && rgap <= 1000) { // "close" hits
+				Alignment gap(qstr.substr(qpe, qgap), rstr.substr(rpe, rgap));
+				append_cigar(gap.cigar);
+			} else { // assume only one part is the gap
+				int ma = max(qgap, rgap);
+				int mi = min(qgap, rgap);
+				Alignment ma1(qstr.substr(qpe, mi), rstr.substr(rpe, mi));
+				ma1.cigar.push_back({qgap == mi ? 'I' : 'D', ma - mi});
+				Alignment ma2(qstr.substr(qs - mi, mi), rstr.substr(rs - mi, mi));
+				ma2.cigar.push_front({qgap == mi ? 'I' : 'D', ma - mi});
+				append_cigar(ma2.total_error() < ma2.total_error() ? ma2.cigar : ma1.cigar);
+			}
+		} else if (qgap) {
+			append_cigar({{'D', qgap}});	
+		} else if (rgap) {
+			append_cigar({{'I', rgap}});	
+		} 
+		// eprn("");
+		assert(qe - qs == re - rs);
+		append_cigar({{'M', qe - qs}});
+		prev = cur;
+	}
+	// Add end
+
+
+	int qlo = start_a, qhi = end_a;
+	int rlo = start_b, rhi = end_b;
+	// eprn("{}", cigar_string());
+	// populate_nice_alignment();
+	// eprn("{}", print());
+	// eprn("{} {}\n{} {}", a.size(), a.substr(0,50), qhi-qlo, qstr.substr(qlo, qhi - qlo).substr(0,50));
+	assert(a == qstr.substr(qlo, qhi - qlo));
+	assert(b == rstr.substr(rlo, rhi - rlo));
+	// eprn("alohaaaa");
 
 	assert(qlo >= 0);
 	assert(rlo >= 0);
@@ -585,7 +685,7 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 string Alignment::cigar_string() const
 {
 	string res;
-	for (auto &p: cigar) {
+	for (auto &p: cigar) if (p.second) {
 		res += fmt::format("{}{}", p.second, p.first);
 	}
 	return res;

@@ -142,13 +142,27 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 	int total_written = 0;
 	for (int i = 0; i < schedule.size(); i++) {
 		for (auto &h: schedule[i]) {
+			lines++;
+			// 1557 out of 1559 (99.9, len 184647..182999)      chr16	5128906	5451300	chr4	3946932	4274093			+	-327161	0			OK;;;
+ 			//1558 out of 1559 (99.9, len 322394..327161)      ^C^CProcess PID:   5413
+			// if (lines !=  1559) {
+				// continue;
+			// }
+			// eprn("{}", h.to_bed(0));
+
 			string fa = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
 			string fb = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
 			if (h.ref->is_rc) 
 				fb = rc(fb);
 
+			eprnn("\r Processing {} out of {} ({:.1f}%, len {:10n} to {:10n})", lines, total, 
+				pct(lines, total),
+				fa.size(), fb.size());
+
+
+			// eprn("{}", h.to_bed(0));
+
 			auto alns = fast_align(fa, fb, kmer_size);
-			lines++;
 			for (auto &hh: alns) {
 				hh.query_start += h.query_start;
 				hh.query_end += h.query_start;
@@ -167,8 +181,7 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 				total_written++;
 				prn("{}", hh.to_bed(false));
 			}
-			eprnn("\r {} out of {} ({:.1f}, len {}..{})      ", lines, total, pct(lines, total),
-				fa.size(), fb.size());
+			// eprn("{}", h.to_bed(false));
 		}
 	}
 

@@ -17,6 +17,12 @@
 
 struct Hit;
 
+struct Anchor {
+	int q, r, l;
+	char has_u;
+};
+
+
 /******************************************************************************/
 
 struct Alignment {
@@ -43,6 +49,9 @@ public:
 	Alignment(const std::string &fa, const std::string &fb);
 	Alignment(const std::string &fa, const std::string &fb, const std::string &cigar);
 	Alignment(const std::string &qstr, const std::string &rstr, const std::vector<Hit> &guide, const int side);
+	Alignment(const string &qstr, const string &rstr, 
+		const vector<Anchor> &guide, const vector<int> &guide_idx);
+
 
 private: // Internal functions (modify)
 	void populate_nice_alignment();
@@ -90,7 +99,7 @@ public:
 	}
 
 public:
-	friend std::vector<Hit> generate_anchors(const std::string &query, const std::string &ref, const int kmer_size);
+	// friend std::vector<Hit> generate_anchors(const std::string &query, const std::string &ref, const int kmer_size);
 	friend void test(int, char** argv);
 	friend void update_from_alignment(Hit &h);
 	friend void stats(const std::string &ref_path, const std::string &bed_path);

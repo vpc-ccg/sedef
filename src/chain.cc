@@ -21,7 +21,7 @@ const int MATCH_CHAIN_SCORE = 4;
 
 /******************************************************************************/
 
-vector<Hit> generate_anchors(const string &query, const string &ref, const int kmer_size = 12)
+vector<Anchor> generate_anchors(const string &query, const string &ref, const int kmer_size)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
@@ -38,11 +38,20 @@ vector<Hit> generate_anchors(const string &query, const string &ref, const int k
 			continue;
 		ref_hashes[h].push_back(i - kmer_size + 1);
 	}
-	
+
 	vector<int> slide(query.size() + ref.size(), -1);
-	vector<Hit> anchors;
+	vector<Anchor> anchors;
+	dprn("got {} hashes", ref_hashes.size());
+
+	// vector<int> qq;
+	// for(auto &q:ref_hashes) {qq.push_back(q.second.size());}
+	// 	sort(qq.begin(), qq.end());
+	// eprn("{}", qq.back());qq.pop_back();
+	// eprn("{}", qq.back());qq.pop_back();
+	// eprn("{}", qq.back());
 
 	last_n = -kmer_size, h = 0;
+	int w = 0;
 	for (int i = 0; i < query.size(); i++) {
 		if (query[i] == 'N') 
 			last_n = i;
@@ -53,7 +62,7 @@ vector<Hit> generate_anchors(const string &query, const string &ref, const int k
 			continue;
 		
 		auto it = ref_hashes.find(h);
-		if (it == ref_hashes.end()) 
+		if (it == ref_hashes.end()) // || it->second.size() >= 1000)
 			continue;
 
 		int q = i - kmer_size + 1;
@@ -67,26 +76,19 @@ vector<Hit> generate_anchors(const string &query, const string &ref, const int k
 				bool has_u = 0;
 				int len;
 				for (len = 0; q + len < query.size() && r + len < ref.size(); len++) {
-					if (query[q + len] == 'N' || ref[r + len] == 'N')
+					if (query[q + len] == 'N' || ref[r + len] == 'N') {
+						assert(len >= kmer_size);
 						break;
-					has_u |= (isupper(query[q + len]) || isupper(ref[r + len]));
+					}
 					if (toupper(query[q + len]) != toupper(ref[r + len]))
 						break;
+					has_u |= (isupper(query[q + len]) || isupper(ref[r + len]));
 				}
 				if (len >= kmer_size) {
-					Alignment aln; 
-					aln.start_a = q;
-					aln.end_a = q + len;
-					aln.start_b = r;
-					aln.end_b = r + len;
-					aln.a = query.substr(q, len);
-					aln.b = ref.substr(r, len);
-					aln.cigar = {{'M', len}};
-					anchors.push_back(Hit {
-						nullptr, q, q + len, 
-						nullptr, r, r + len, 
-						has_u, "", "", aln
-					});
+					if (anchors.size() >= (1<<20) && anchors.size() == anchors.capacity()) {
+						anchors.reserve(anchors.size() * 1.5);
+					}
+					anchors.emplace_back(Anchor{q, r, len, has_u});
 					slide[d] = q + len;
 				}
 			} else {
@@ -95,15 +97,15 @@ vector<Hit> generate_anchors(const string &query, const string &ref, const int k
 			}
 		}
 	}
-	
-	for (int i = 1; i < anchors.size(); i++) {
-		assert(tie(anchors[i - 1].query_start, anchors[i - 1].ref_start) <= 
-			tie(anchors[i].query_start, anchors[i].ref_start));
-	}
+	dprn("{:n} {:n}", anchors.size(), anchors.capacity());
+	// for (int i = 1; i < anchors.size(); i++) {
+	// 	assert(tie(anchors[i - 1].query_start, anchors[i - 1].ref_start) <= 
+	// 		tie(anchors[i].query_start, anchors[i].ref_start));
+	// }
 	return anchors; 
 }
 
-auto chain_anchors(vector<Hit> &anchors)
+auto chain_anchors(vector<Anchor> &anchors)
 {
 	auto T = cur_time();
 
@@ -120,13 +122,13 @@ auto chain_anchors(vector<Hit> &anchors)
 	for (int i = 0; i < anchors.size(); i++) {
 		l++;
 		auto &a = anchors[i];
-		xs.push_back({{a.query_start, i}, SegmentTree<Coor>::MIN, i});
-		xs.push_back({{a.query_end, i}, SegmentTree<Coor>::MIN, i});
-		ys.push_back({{a.ref_end - 1, i}, SegmentTree<Coor>::MIN, i}); 
+		xs.push_back({{a.q, i}, SegmentTree<Coor>::MIN, i});
+		xs.push_back({{a.q + a.l, i}, SegmentTree<Coor>::MIN, i});
+		ys.push_back({{a.r + a.l - 1, i}, SegmentTree<Coor>::MIN, i}); 
 		
-		assert(a.query_start < a.query_end);
-		max_q = max(max_q, a.query_end);
-		max_r = max(max_r, a.ref_end);
+		assert(a.q < a.q + a.l);
+		max_q = max(max_q, a.q + a.l);
+		max_r = max(max_r, a.r + a.l);
 	}
 	// for (auto a: anchors) 
 	// 	dprn("!== {:6}..{:6} -> {:6}..{:6}", a.query_start, a.query_end, a.ref_start, a.ref_end);
@@ -144,26 +146,26 @@ auto chain_anchors(vector<Hit> &anchors)
 	for (auto &x: xs) {
 		int i = x.x.second;
 		auto &a = anchors[i];
-		if (x.x.first == a.query_start) {
+		if (x.x.first == a.q) {
 			while (deactivate_bound < (&x - &xs[0])) {
 				int t = xs[deactivate_bound].x.second; // index
-				if (xs[deactivate_bound].x.first == anchors[t].query_end) { // end point
-					if (a.query_start - anchors[t].query_end <= MAX_CHAIN_GAP)
+				if (xs[deactivate_bound].x.first == anchors[t].q + anchors[t].l) { // end point
+					if (a.q - anchors[t].q + anchors[t].l <= MAX_CHAIN_GAP)
 						break;
-					tree.deactivate({anchors[t].ref_end - 1, t});
+					tree.deactivate({anchors[t].r + anchors[t].l - 1, t});
 				}
 				deactivate_bound++;
 			}
 
-			int w = MATCH_CHAIN_SCORE * (a.query_end - a.query_start);
-			int j = tree.rmq({a.ref_start - MAX_CHAIN_GAP, 0}, 
-				             {a.ref_start - 1, anchors.size()});
+			int w = MATCH_CHAIN_SCORE * (a.q + a.l - a.q);
+			int j = tree.rmq({a.r - MAX_CHAIN_GAP, 0}, 
+				             {a.r - 1, anchors.size()});
 			if (j != -1 && ys[j].score != SegmentTree<Coor>::MIN) {
 				j = ys[j].pos;
 				auto &p = anchors[j];
-				assert(a.query_start >= p.query_end);
-				assert(a.ref_start >= p.ref_end);
-				int gap = (a.query_start - p.query_end + a.ref_start - p.ref_end);
+				assert(a.q >= p.q + p.l);
+				assert(a.r >= p.r + p.l);
+				int gap = (a.q - p.q + p.l + a.r - p.r + p.l);
 				if (w + dp[j].first - gap > 0) {
 					dp[i].first = w + dp[j].first - gap;
 					prev[i] = j;
@@ -174,8 +176,8 @@ auto chain_anchors(vector<Hit> &anchors)
 				dp[i].first = w;
 			}
 		} else {
-			int gap = (max_q + 1 - a.query_end + max_r + 1 - a.ref_end);
-			tree.activate({a.ref_end - 1, i}, dp[i].first - gap);
+			int gap = (max_q + 1 - a.q + a.l + max_r + 1 - a.r + a.l);
+			tree.activate({a.r + a.l - 1, i}, dp[i].first - gap);
 		}
 	}
 	sort(dp.begin(), dp.end(), greater<pair<int, int>>());
@@ -190,13 +192,13 @@ auto chain_anchors(vector<Hit> &anchors)
 		bool has_u = 0;
 		while (maxi != -1 && !used[maxi]) {
 			path.push_back(maxi);
-			has_u |= anchors[maxi].jaccard;
+			has_u |= anchors[maxi].has_u;
 			used[maxi] = true;
 			maxi = prev[maxi];
 		}
-		for (int ai = path.size() - 2; ai >= boundaries.back().first; ai--) {
-			assert(anchors[path[ai + 1]] < anchors[path[ai]]);
-		}
+		// for (int ai = path.size() - 2; ai >= boundaries.back().first; ai--) {
+		// 	assert(anchors[path[ai + 1]] < anchors[path[ai]]);
+		// }
 		boundaries.push_back({path.size(), has_u});
 	}
 	return make_pair(path, boundaries);
@@ -213,10 +215,11 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 
 	/// 1. Generate the list of hits (small anchors) inside the dot graph	
 	auto anchors = generate_anchors(query, ref, kmer_size);
+	dprn("-- got {} anchors in {} s", anchors.size(), elapsed(T)); T=cur_time();
 
 	/// 2. Run DP on the anchors and collect all different anchors
 	vector<Hit> hits;
-	vector<vector<Hit>> guides;
+	vector<vector<int>> guides;
 	auto chains_init = chain_anchors(anchors);
 	auto &bounds = chains_init.second;	
 	auto &chain = chains_init.first;
@@ -225,10 +228,10 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 		int be = bounds[bi].first;
 		int bs = bounds[bi - 1].first;
 
-		int qlo = anchors[chain[be - 1]].query_start, 
-			qhi = anchors[chain[bs]].query_end;
-		int rlo = anchors[chain[be - 1]].ref_start,   
-			rhi = anchors[chain[bs]].ref_end;
+		int qlo = anchors[chain[be - 1]].q,
+			qhi = anchors[chain[bs]].q + anchors[chain[bs]].l;
+		int rlo = anchors[chain[be - 1]].r,   
+			rhi = anchors[chain[bs]].r + anchors[chain[bs]].l;
 
 		// check error
 		int span = max(rhi - rlo, qhi - qlo);
@@ -239,17 +242,17 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 		assert(rhi <= ref.size());
 
 		Hit a { query_ptr, qlo, qhi, ref_ptr, rlo, rhi };
-		guides.push_back(vector<Hit>());
+		guides.push_back(vector<int>());
 		for (int bi = be - 1; bi >= bs; bi--) {
-			guides.back().push_back(anchors[chain[bi]]);
+			guides.back().push_back(chain[bi]);
 		}
 		hits.push_back(a);
 	}
 	dprn(":: elapsed/dp = {}s", elapsed(T)); T=cur_time();
-
+	
 	/// 3. Perform the full alignment
 	for (auto &hit: hits) {
-		hit.aln = Alignment(query, ref, guides[&hit - &hits[0]], 0);
+		hit.aln = Alignment(query, ref, anchors, guides[&hit - &hits[0]]);
 		update_from_alignment(hit);
 	}
 	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
@@ -264,8 +267,47 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 
 /******************************************************************************/
 
+void test2()
+{
+// 1556 out of 1559 (99.8, len 115473..123766)      chr16	32019249	32203896	chr16	33746594	33929593			+	+	184647	0			OK;;;
+// 1557 out of 1559 (99.9, len 184647..182999)      chr16	5128906	5451300	chr4	3946932	4274093			+	-327161	0			OK;;;
+
+	const int k=11;
+	FastaReference fr("data/hg19/hg19.fa");
+
+	auto TT = cur_time();
+	Hit h = Hit::from_bed(
+		"chrX	35014	3024029	chrY	0	2984783			+	+	2989015	0	;;"
+	);
+	eprn("{}{} {}...", "+-"[h.query->is_rc], "+-"[h.ref->is_rc], h.to_bed(false).substr(0, 50));
+
+	auto q = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
+	auto r = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
+	if (h.ref->is_rc) r = rc(r);
+	assert(r.size() == h.ref_end - h.ref_start);
+	assert(q.size() == h.query_end - h.query_start);
+
+	eprn("{} {}", string(60, '*'), k);
+	auto T = cur_time();
+	auto hits = fast_align(q, r, k);
+	sort(hits.begin(), hits.end(), [](Hit a, Hit b){ return a.query_start < b.query_start; });
+	eprn("{} {}", string(60, '*'), k);
+	for (auto &hit: hits) {
+		eprn("||> {:7n}..{:7n} -> {:7n}..{:7n}; {:7n} {:7n}; e={:4.1f} g={:4.1f} m={:4.1f}", 
+			hit.query_start, hit.query_end,
+			hit.ref_start, hit.ref_end,
+			hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
+			hit.aln.total_error(), hit.aln.gap_error(), hit.aln.mismatch_error(),
+			hit.comment
+		);
+	}
+	eprn("done in {} s", elapsed(TT));
+}
+
 void test(int, char** argv)
 {
+	// test2();
+	// exit(0);
 	// auto x = align(
 	// 	"CAAGAGAATTAAATGGGTTATTGATTAAAAA",
 	// 	"TTTTTTCAAGAGAATTAAATCATTTCTTGATTA"

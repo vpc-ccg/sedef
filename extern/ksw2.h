@@ -118,6 +118,7 @@ static inline void ksw_backtrack(void *km, int is_rot, int is_rev, int with_N, c
 								int i0, int j0,
 								 int64_t *m_cigar_, int64_t *n_cigar_, uint32_t **cigar_)
 { // p[] - lower 3 bits: which type gets the max; bit
+	assert(with_N == 0);
 	int64_t n_cigar = 0, m_cigar = *m_cigar_, i = i0, j = j0, r, state = 0;
 	uint32_t *cigar = *cigar_, tmp;
 	while (i >= 0 && j >= 0) { // at the beginning of the loop, _state_ tells us which state to check
