@@ -20,9 +20,9 @@ public:
 	int ref_start() { return rs; }
 	int ref_end() { return re; }
 	string cigar() { return c.cigar_string(); }
-	int alignment_size() { return c.alignment.size(); }
-	int gaps() { return c.error.gap_bases;  }
-	int mismatches() { return c.error.mismatches;  }
+	int alignment_size() { return c.span(); }
+	int gaps() { return c.error.gap_bases();  }
+	int mismatches() { return c.error.mismatches();  }
 
 
 	bool operator==(const PyHit &q) const {
