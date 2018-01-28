@@ -57,18 +57,18 @@ afterwards run the whole alignment:
 
 ```bash
 ~/mesa ./sedef align bucket out out/bins 1000
->> 42s
+>> 47s
 
 for j in out/bins/bucket_???? ; do
 	k=$(basename $j);
 	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
 done | time parallel --will-cite -j 80 --eta
->> 18m 36s
+>> 27m 33s
 
 grep Finished out/log/bins/*.log | wc -l
 >> 1000
 grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 82061 (22.79 h)  
+>> 43704 (12.14 h)  
 ```
 
 Finally, run `sedef-stats` to produce the final output:

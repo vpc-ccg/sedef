@@ -20,6 +20,7 @@ const double REFINE_GAPOPEN = 100;
 
 const int REFINE_MIN_READ = 900;
 const int REFINE_SIDE_ALIGN = 250;
+const int REFINE_MAX_GAP = 10000;
 
 /******************************************************************************/
 
@@ -43,7 +44,6 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			a.aln.cigar_string());
 	}
 
-	const int max_space = 10000;
 	vector<int> dp(anchors.size(), 0);
 	vector<int> prev(anchors.size(), -1);
 	set<pair<int, int>, greater<pair<int, int>>> maxes;
@@ -70,7 +70,7 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			int ma = max(cqs - p.query_end, crs - p.ref_end);
 			int mi = min(cqs - p.query_end, crs - p.ref_end);
 
-			if (ma >= max_space)
+			if (ma >= REFINE_MAX_GAP)
 				continue;
 
 			int mis = REFINE_MISMATCH * mi, 

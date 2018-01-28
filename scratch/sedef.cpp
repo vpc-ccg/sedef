@@ -92,7 +92,7 @@ vector<PyHit> PyAligner::chain_align(const string &q, const string &r)
 
 vector<PyHit> PyAligner::full_align(const string &q, const string &r)
 {
-	auto aln = align(q, r);
+	auto aln = Alignment(q, r);
 	return vector<PyHit> {{
 		0, q.size(),
 		0, r.size(),
