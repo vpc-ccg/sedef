@@ -1,5 +1,7 @@
 /// 786
 
+#include <fstream>
+
 #include "common.h"
 #include "fasta.h"
 #include "align.h"
@@ -262,12 +264,6 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 
 /******************************************************************************/
 
- // 9494..8508 [+] 21 -> 19385 atatcacagtgggtgtacacc
- // 9,515 --> ref 8,529
-
-// 478214..514552 [+] 21 -> 438446 -> atatcacagtgggtgtacacc ~ 313771
-
-#include <fstream>
 void test(int, char** argv)
 {
 	// auto x = align(

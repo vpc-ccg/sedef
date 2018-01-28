@@ -135,7 +135,7 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			auto &cur = anchors[paths.back()[pi]];
 			if (cur.query_start < prev->query_end || cur.ref_start < prev->ref_end) {
 				prev->aln.merge(cur.aln, qseq, rseq);
-				update_from_alignment(hit);
+				update_from_alignment(*prev);
 			} else {
 				guide.push_back(*prev);
 				prev = &cur;

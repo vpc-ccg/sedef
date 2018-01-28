@@ -146,8 +146,9 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 	int qlo = start_a, qhi = end_a;
 	int rlo = start_b, rhi = end_b;
 	// eprn("{}", cigar_string());
+	// populate_nice_alignment();
 	// eprn("{}", print());
-	// eprn("{} {}\n{} {}", a.size(), a, qhi-qlo, qstr.substr(qlo, qhi - qlo));
+	// eprn("{} {}\n{} {}", a.size(), a.substr(0,50), qhi-qlo, qstr.substr(qlo, qhi - qlo).substr(0,50));
 	assert(a == qstr.substr(qlo, qhi - qlo));
 	assert(b == rstr.substr(rlo, rhi - rlo));
 	// eprn("alohaaaa");
