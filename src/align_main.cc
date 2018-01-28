@@ -59,7 +59,6 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 	}
 
 	vector<Hit> hits;
-	int max_complexity = 0;
 	for (auto &file: files) {
 		ifstream fin(file.c_str());
 		if (!fin.is_open()) {
@@ -73,8 +72,6 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 			if (extend) {
 				h.extend(EXTEND_RATIO, MAX_EXTEND);
 			}
-			max_complexity = max(max_complexity, (int)sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start)));
-
 			hits.push_back(h);
 			nhits++;
 		}
@@ -86,7 +83,13 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		hits = merge(hits);
 		eprn("After merging remaining {} alignments", hits.size());
 	}
-
+	int max_complexity = 0;
+	for (auto &h: hits) {
+		max_complexity = max(
+			max_complexity, 
+			(int)sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start))
+		);
+	}
 	vector<vector<Hit>> bins(max_complexity / 1000 + 1);
 	for (auto &h: hits) {
 		int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
