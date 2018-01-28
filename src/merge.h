@@ -4,8 +4,14 @@
 
 #pragma once
 
+/******************************************************************************/
+
+#include <string>
+
+#include "common.h"
 #include "hit.h"
 
 /******************************************************************************/
 
-void align_main(int argc, char **argv);
+std::vector<Hit> merge(std::vector<Hit> &hits, const int merge_dist = 100);
+

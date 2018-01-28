@@ -49,7 +49,7 @@ else:
 #         l = l.strip().split()
 #         sizes[l[0]] = l[1]
 
-tab_file = "data/GRCh37GenomicSuperDup.tab"
+tab_file = "data/mm8WGAC.tab"
 df = pd.read_table(tab_file)
 if chrom1 != '':
     if chrom1 != chrom2 or strand == '_':
@@ -134,6 +134,9 @@ with open(pnew + '_temp_diff.bed') as f:
         name = l[6]
         hits[name].append((diff(A, B), A, B))
 
+missed_bases = 0
+part_missed_bases = 0
+
 try:
     tm = sum(1 for k, vs in hits.items() if len(vs) == 0)
     print ':: Missed {} hits ({:.1f}%)'.format(tm, 100.0*tm/len(hits))
@@ -145,6 +148,8 @@ try:
                 r.chrom, r.chromStart, r.chromEnd, r.otherChrom, r.otherStart, r.otherEnd, r.strand,
                 r.chromEnd - r.chromStart, r.otherEnd - r.otherStart
             )
+            missed_bases += -r.chromStart+r.chromEnd
+            missed_bases += -r.otherStart+r.otherEnd
 
     partials = defaultdict(list)
     for name, h in hits.items():
@@ -167,8 +172,11 @@ try:
         p1 = np.sum(oqcov)/len(oqcov)
         p2 = np.sum(orcov)/len(orcov)
 
-        if p1 < .85 or p2 < .85:
+        if round(p1*100,0) < 80 or round(p2*100,0) < 80:
             partials[name] += [(p1, p2), h]
+
+        part_missed_bases += len(oqcov) - np.sum(oqcov)
+        part_missed_bases += len(orcov) - np.sum(orcov)
         # ok = any(v[0][0][0] >= 100 and v[0][1][0] >= 100 for v in h)
         # if not ok: 
 
@@ -225,6 +233,9 @@ try:
     #             print '          sedef: {:5} {:11,}..{:11,} -> {:5} {:11,}..{:11,} {} '.format(*B)
     #         exit(0)
 
+
+    print missed_bases
+    print part_missed_bases
 
 except IOError:
     pass

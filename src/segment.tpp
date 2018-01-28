@@ -9,7 +9,7 @@ using namespace std;
 /******************************************************************************/
 
 template<typename T>
-int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q, int i) // [p, q] are both inclusive
+int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q, int i) const // [p, q] are both inclusive
 {
 	if (i >= tree.size()) {
 		return -1;
@@ -49,7 +49,7 @@ int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q
 }
 
 template<typename T>
-int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q)
+int SegmentTree<T>::rmq(const SegmentTree<T>::Tp &p, const SegmentTree<T>::Tp &q) const
 {
 	int i = rmq(p, q, 0);
 	return (i == -1 ? -1 : tree[i].a);
@@ -94,7 +94,7 @@ void SegmentTree<T>::deactivate(const SegmentTree<T>::Tp &q)
 	assert(leaf < tree.size());
 	assert(q == tree[leaf].h);
 	assert(tree[leaf].a != -1); // leaf
-	anchors[tree[leaf].a].score = numeric_limits<int>::min();;
+	anchors[tree[leaf].a].score = SegmentTree<T>::MIN;;
 
 	for (int i = 0; i < tree.size(); ) {
 		if (tree[i].p == -1) {
@@ -135,7 +135,7 @@ int SegmentTree<T>::initialize(int i, int s, int e, int &tree_i)
 	} else if (s + 1 == e) {
 		assert(tree_i < anchors.size());
 		tree[i] = Point(-1, tree_i, anchors[tree_i].x);
-		anchors[tree_i].score = numeric_limits<int>::min();
+		anchors[tree_i].score = SegmentTree<T>::MIN;
 		tree_i++;
 		return i;
 	} else {
@@ -192,13 +192,13 @@ void SegmentTree<T>::plot(int w, int l, int i, int s, int e, vector<vector<strin
 				? fmt::format("{}/{}", 
 					anchors[tree[tree[i].p].a].x.first, anchors[tree[tree[i].p].a].x.second) 
 				: tree[i].a != -1 ? fmt::format("({})", 
-					anchors[tree[i].a].score == numeric_limits<int>::min() ? -1 : anchors[tree[i].a].score) : "")
+					anchors[tree[i].a].score == SegmentTree<T>::MIN ? -1 : anchors[tree[i].a].score) : "")
 	);
 	if (tree[i].a == -1) plot(w/2, l+1, 2*i+2, bnd, e, PLOT);
 }
 
 template<typename T>
-string SegmentTree<T>::plot()  
+string SegmentTree<T>::plot() const
 {
 	vector<vector<string>> PLOT(2, vector<string>(50));
 
@@ -226,7 +226,7 @@ string SegmentTree<T>::plot()
 }
 
 template<typename T>
-bool SegmentTree<T>::empty()
+bool SegmentTree<T>::empty() const
 {
 	return (activated == 0);
 }

@@ -72,11 +72,6 @@ int main(int argc, char **argv)
 	// const double MAX_GAP_ERROR  = MAX_EDIT_ERROR * ERROR_RATIO;
 	// const double GAP_FREQUENCY  = 0.005;
 
-	eprn("        Parameters: READ_SIZE      = {}\n"
-	     "                    MAX_ERROR      = {:.2f} ({:.2f} EDIT + {:.2f} GAP; GAPFREQ={:.3f})",
-		MIN_READ_SIZE, 
-		MAX_ERROR, MAX_EDIT_ERROR, MAX_GAP_ERROR, GAP_FREQUENCY);
-
 	string command = argv[1];
 
 	try {

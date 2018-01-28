@@ -21,73 +21,9 @@
 #include "fasta.h"
 #include "chain.h"
 #include "hit.h"
+#include "merge.h"
 
 using namespace std;
-
-/******************************************************************************/
-
-vector<Hit> merge(vector<Hit> &hits, const int merge_dist = 100) {
-	vector<Hit> results;
-
-	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
-		return 
-			tie(a.ref->is_rc, a.query->name, a.ref->name, a.query_start, a.ref_start) <
-			tie(b.ref->is_rc, b.query->name, b.ref->name, b.query_start, b.ref_start);
-	});
-
-	Hit rec, prev;
-	int wcount = 0;
-	size_t len = 0;
-	ssize_t nread;
-	multimap<int, Hit> windows;
-	for (auto &rec: hits) {
-		assert(!rec.query->is_rc);
-		if (rec.query->name == rec.ref->name && rec.query_start == rec.ref_start && rec.query_end == rec.ref_end &&
-			rec.query->is_rc == rec.ref->is_rc)
-			continue;
-		if ((&rec - &hits[0]) == 0) {
-			windows.emplace(rec.ref_end, rec);
-			prev = rec;
-			wcount++;
-		} else if (prev.query_end + merge_dist < rec.query_start || prev.query->name != rec.query->name || 
-				prev.ref->name != rec.ref->name || prev.ref->is_rc != rec.ref->is_rc) 
-		{
-			for (auto it: windows)
-				results.push_back(it.second);
-			windows.clear();
-			windows.emplace(rec.ref_end, rec);
-			prev = rec;
-			wcount++;
-		} else {
-			bool needUpdate = 1;
-			while (needUpdate) {
-				auto start_loc = windows.lower_bound(rec.ref_start - merge_dist);
-				needUpdate = 0;
-				while (start_loc != windows.end()) {
-					if (start_loc->second.query_end + merge_dist < rec.query_start ||
-							  start_loc->second.ref_end < rec.ref_start - merge_dist ||
-							  start_loc->second.ref_start > rec.ref_end + merge_dist) 
-					{
-						 start_loc++;
-						 continue;
-					}
-					needUpdate = 1;
-					rec.query_end = max(rec.query_end, start_loc->second.query_end);
-					rec.ref_end = max(rec.ref_end, start_loc->second.ref_end);
-					rec.query_start = min(rec.query_start, start_loc->second.query_start);
-					rec.ref_start = min(rec.ref_start, start_loc->second.ref_start);
-					windows.erase(start_loc++);
-				}
-			}
-			windows.emplace(rec.ref_end, rec);
-		}
-		rec.query_end = max(rec.query_end, prev.query_end);
-		prev = rec;
-	}
-	for (auto it: windows)
-		results.push_back(it.second);
-	return results;
-}
 
 /******************************************************************************/
 
@@ -118,6 +54,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 	}
 
 	vector<Hit> hits;
+	int max_complexity = 0;
 	for (auto &file: files) {
 		ifstream fin(file.c_str());
 		if (!fin.is_open()) {
@@ -137,6 +74,8 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 				h.ref_start = max(0, h.ref_start - w);
 				h.ref_end += w;
 			}
+			int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
+			max_complexity = max(max_complexity, complexity);
 
 			hits.push_back(h);
 			nhits++;
@@ -150,7 +89,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		eprn("After merging remaining {} alignments", hits.size());
 	}
 
-	vector<vector<Hit>> bins(10000);
+	vector<vector<Hit>> bins(max_complexity / 1000 + 1);
 	for (auto &h: hits) {
 		int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
 		assert(complexity / 1000 < bins.size());

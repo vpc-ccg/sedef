@@ -27,15 +27,18 @@ struct Hit {
 
 	Alignment aln;
 
-	static Hit from_bed(const std::string &bed);
+public:
+	static Hit from_bed(const std::string &bed, std::string *cigar = nullptr);
 	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
 	static Hit from_wgac(const string &bed);
 
-	std::string to_bed(bool do_rc=true);
-
-	bool operator< (const Hit &h) const {
+public:
+	std::string to_bed(bool do_rc=true) const;
+	bool operator<(const Hit &h) const {
 		return 
 			tie(query_start, query_end, ref_start, ref_end) < 
 			tie(h.query_start, h.query_end, h.ref_start, h.ref_end);
 	}
 };
+
+void update_from_alignment(Hit &h);

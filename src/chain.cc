@@ -6,12 +6,20 @@
 #include "search.h"
 #include "segment.h"
 #include "chain.h"
+#include "refine.h"
 
 using namespace std; 
 
 /******************************************************************************/
 
-auto generate_anchors(const string &query, const string &ref, const int kmer_size = 12)
+const int MIN_UPPERCASE_MATCH = 90;
+const int MAX_CHAIN_GAP = MAX_ERROR * MIN_READ_SIZE;
+
+const int MATCH_CHAIN_SCORE = 4;
+
+/******************************************************************************/
+
+vector<Hit> generate_anchors(const string &query, const string &ref, const int kmer_size = 12)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
@@ -64,27 +72,19 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 						break;
 				}
 				if (len >= kmer_size) {
-					anchors.push_back(Hit{
+					Alignment aln; 
+					aln.start_a = q;
+					aln.end_a = q + len;
+					aln.start_b = r;
+					aln.end_b = r + len;
+					aln.a = query.substr(q, len);
+					aln.b = ref.substr(r, len);
+					aln.cigar = {{'M', len}};
+					anchors.push_back(Hit {
 						nullptr, q, q + len, 
 						nullptr, r, r + len, 
-						has_u,
-						"", "",
-						Alignment { 
-							"", q, q + len,
-							"", r, r + len,
-							query.substr(q, len),
-							ref.substr(r, len),
-							"", "", "",
-							{{'M', len}}
-						}
+						has_u, "", "", aln
 					});
-					// string s = query.substr(q, len);
-					// string qq = ref.substr(r, len);
-					// transform(s.begin(), s.end(), s.begin(), ::toupper);
-					// transform(qq.begin(), qq.end(), qq.begin(), ::toupper);
-					// assert(s==qq);
-					// eprn("{} -> {}",  == ref.substr(q, len));
-					// query.substr(q, len) == ref.substr(q, len)
 					slide[d] = q + len;
 				}
 			} else {
@@ -101,15 +101,8 @@ auto generate_anchors(const string &query, const string &ref, const int kmer_siz
 	return anchors; 
 }
 
-/******************************************************************************/
-
-/*TODO*/ string XX,YY;
-
 auto chain_anchors(vector<Hit> &anchors)
 {
-	const double ratio = 4; // ratio: match to error
-	const int max_gap = MAX_ERROR * MIN_READ_SIZE;
-
 	auto T = cur_time();
 
 	struct Coor {
@@ -125,9 +118,9 @@ auto chain_anchors(vector<Hit> &anchors)
 	for (int i = 0; i < anchors.size(); i++) {
 		l++;
 		auto &a = anchors[i];
-		xs.push_back({{a.query_start, i}, numeric_limits<int>::min(), i});
-		xs.push_back({{a.query_end, i}, numeric_limits<int>::min(), i});
-		ys.push_back({{a.ref_end - 1, i}, numeric_limits<int>::min(), i}); 
+		xs.push_back({{a.query_start, i}, SegmentTree<Coor>::MIN, i});
+		xs.push_back({{a.query_end, i}, SegmentTree<Coor>::MIN, i});
+		ys.push_back({{a.ref_end - 1, i}, SegmentTree<Coor>::MIN, i}); 
 		
 		assert(a.query_start < a.query_end);
 		max_q = max(max_q, a.query_end);
@@ -135,7 +128,6 @@ auto chain_anchors(vector<Hit> &anchors)
 	}
 	// for (auto a: anchors) 
 	// 	dprn("!== {:6}..{:6} -> {:6}..{:6}", a.query_start, a.query_end, a.ref_start, a.ref_end);
-
 	dprn("-- anchors to dp: {:n}", l);
 
 	sort(xs.begin(), xs.end());
@@ -143,14 +135,10 @@ auto chain_anchors(vector<Hit> &anchors)
 
 	vector<int> prev(anchors.size(), -1);
 	vector<pair<int, int>> dp(anchors.size());
-	for (int i = 0; i < dp.size(); i++)
+	for (int i = 0; i < dp.size(); i++) {
 		dp[i] = {0, i};
-	// vector<int> size_so_far(anchors.size(), 0);
-
-	// set<pair<int, int>, greater<pair<int, int>>> maxes;
+	}
 	int deactivate_bound = 0;
-
-	// dprn(">>>> init {}", elapsed(T)); T=cur_time();
 	for (auto &x: xs) {
 		int i = x.x.second;
 		auto &a = anchors[i];
@@ -158,17 +146,17 @@ auto chain_anchors(vector<Hit> &anchors)
 			while (deactivate_bound < (&x - &xs[0])) {
 				int t = xs[deactivate_bound].x.second; // index
 				if (xs[deactivate_bound].x.first == anchors[t].query_end) { // end point
-					if (a.query_start - anchors[t].query_end <= max_gap)
+					if (a.query_start - anchors[t].query_end <= MAX_CHAIN_GAP)
 						break;
 					tree.deactivate({anchors[t].ref_end - 1, t});
 				}
 				deactivate_bound++;
 			}
 
-			int w = ratio * (a.query_end - a.query_start);
-			int j = tree.rmq({a.ref_start - max_gap, 0}, 
+			int w = MATCH_CHAIN_SCORE * (a.query_end - a.query_start);
+			int j = tree.rmq({a.ref_start - MAX_CHAIN_GAP, 0}, 
 				             {a.ref_start - 1, anchors.size()});
-			if (j != -1 && ys[j].score != numeric_limits<int>::min()) {
+			if (j != -1 && ys[j].score != SegmentTree<Coor>::MIN) {
 				j = ys[j].pos;
 				auto &p = anchors[j];
 				assert(a.query_start >= p.query_end);
@@ -177,25 +165,18 @@ auto chain_anchors(vector<Hit> &anchors)
 				if (w + dp[j].first - gap > 0) {
 					dp[i].first = w + dp[j].first - gap;
 					prev[i] = j;
-					// size_so_far[i] = size_so_far[j] + (a.query_end - a.query_start) + 
-					// 	max(a.query_start - p.query_end, a.ref_start - p.ref_end);
 				} else {
 					dp[i].first = w;
-					// size_so_far[i] = (a.query_end - a.query_start);
 				}
 			} else {
 				dp[i].first = w;
-				// size_so_far[i] = (a.query_end - a.query_start);
 			}
-			//if (dp[i] >= (MIN_READ_SIZE / 2) * (ratio * (1 - MAX_ERROR) - MAX_ERROR))
-			// maxes.insert({dp[i].first, i});
 		} else {
 			int gap = (max_q + 1 - a.query_end + max_r + 1 - a.ref_end);
 			tree.activate({a.ref_end - 1, i}, dp[i].first - gap);
 		}
 	}
 	sort(dp.begin(), dp.end(), greater<pair<int, int>>());
-	// dprn(">>>> search {}", elapsed(T)); T=cur_time();
 
 	vector<int> path; path.reserve(anchors.size());
 	vector<pair<int, bool>> boundaries {{0, 0}};
@@ -207,7 +188,6 @@ auto chain_anchors(vector<Hit> &anchors)
 		bool has_u = 0;
 		while (maxi != -1 && !used[maxi]) {
 			path.push_back(maxi);
-			// paths.back().first.push_front(maxi);
 			has_u |= anchors[maxi].jaccard;
 			used[maxi] = true;
 			maxi = prev[maxi];
@@ -217,7 +197,6 @@ auto chain_anchors(vector<Hit> &anchors)
 		}
 		boundaries.push_back({path.size(), has_u});
 	}
-	// dprn(">>>> recon {}", elapsed(T)); T=cur_time();
 	return make_pair(path, boundaries);
 }
 
@@ -251,7 +230,7 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 
 		// check error
 		int span = max(rhi - rlo, qhi - qlo);
-		if (!(has_u && span >= 90) && !(span >= MIN_READ_SIZE * (1 - MAX_ERROR)))
+		if (!(has_u && span >= MIN_UPPERCASE_MATCH) && !(span >= MIN_READ_SIZE * (1 - MAX_ERROR)))
 			continue;
 
 		assert(qhi <= query.size());
@@ -268,14 +247,12 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 
 	/// 3. Perform the full alignment
 	for (auto &hit: hits) {
-		hit.aln = Alignment::from_anchors(query, ref, guides[&hit - &hits[0]], 0);
-		hit.query_start = hit.aln.start_a; hit.query_end = hit.aln.end_a;
-		hit.ref_start = hit.aln.start_b; hit.ref_end = hit.aln.end_b;
+		hit.aln = Alignment(query, ref, guides[&hit - &hits[0]], 0);
+		update_from_alignment(hit);
 	}
 	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
 
 	/// 3. Refine these chains
-	void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq);
 	refine_chains(hits, query, ref);
 	dprn(":: elapsed/refinement = {}s", elapsed(T)); T=cur_time();
 
@@ -423,7 +400,7 @@ void test(int, char** argv)
 				hit.query_start, hit.query_end,
 				hit.ref_start, hit.ref_end,
 				hit.query_end - hit.query_start, hit.ref_end - hit.ref_start,
-				hit.aln.error.error(), hit.aln.error.gap_error(), hit.aln.error.mis_error(),
+				hit.aln.total_error(), hit.aln.gap_error(), hit.aln.mismatch_error(),
 				hit.comment
 			);
 

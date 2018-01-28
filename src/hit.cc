@@ -21,7 +21,7 @@ using namespace std;
 
 /******************************************************************************/
 
-Hit Hit::from_bed(const string &bed)
+Hit Hit::from_bed(const string &bed, std::string *cigar)
 {
 	auto ss = split(bed, '\t');
 	assert(ss.size() >= 10);
@@ -44,6 +44,10 @@ Hit Hit::from_bed(const string &bed)
 	}
 	if (ss.size() >= 14) {
 		h.jaccard = atoi(ss[13].c_str());
+	}
+
+	if (ss.size() >= 13 && cigar != nullptr) {
+		*cigar = ss[12];
 	}
 
 	return h;
@@ -81,7 +85,7 @@ Hit Hit::from_bed(const string &bed, shared_ptr<Sequence> query, shared_ptr<Sequ
 		h.comment = ss[13];
 	}
 	if (ss.size() >= 13) {
-		h.aln = Alignment::from_cigar(query->seq, ref->seq, ss[12]);
+		h.aln = Alignment(query->seq, ref->seq, ss[12]);
 	}
 
 	return h;
@@ -113,7 +117,7 @@ Hit Hit::from_wgac(const string &bed)
 
 /******************************************************************************/
 
-string Hit::to_bed(bool do_rc)
+string Hit::to_bed(bool do_rc) const
 {
 	assert(!query->is_rc);
 	return fmt::format(
@@ -128,7 +132,7 @@ string Hit::to_bed(bool do_rc)
 		do_rc && ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
 		do_rc && ref->is_rc ?  ref->seq.size() - ref_start + 1 : ref_end,
 		name,
-		aln.a.size() ? fmt::format("{:.1f}", aln.error.error()) : "",
+		aln.span() ? fmt::format("{:.1f}", aln.total_error()) : "",
 		query->is_rc ? "-" : "+",
 		ref->is_rc ? "-" : "+",
 		// Optional fields
@@ -138,11 +142,22 @@ string Hit::to_bed(bool do_rc)
 		// - Jaccard similarity
 		// - Reason
 		max(query_end - query_start, ref_end - ref_start),
-		aln.alignment.size(),
+		aln.span(),
 		aln.cigar_string(),
 		fmt::format("{}\t{}", 
-			aln.a.size() ? fmt::format("m={:.1f}\tg={:.1f}", aln.error.mis_error(), aln.error.gap_error()) : "",
+			aln.span() ? fmt::format("m={:.1f}\tg={:.1f}", aln.mismatch_error(), aln.gap_error()) : "",
 			comment.size() ? comment + ";" : ""
 		)
 	);
 }
+
+/******************************************************************************/
+
+void update_from_alignment(Hit &h)
+{
+	h.query_start = h.aln.start_a; 
+	h.query_end = h.aln.end_a;
+	h.ref_start = h.aln.start_b; 
+	h.ref_end = h.aln.end_b;
+}
+

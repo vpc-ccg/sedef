@@ -16,6 +16,7 @@
 template<typename T>
 struct SegmentTree {
 	typedef decltype(T::x) Tp;
+	const static int MIN = numeric_limits<int>::min();
 
 	struct Point {
 		int p, a; /* h is inclusive; a is index in the original array; -1 otherwise */
@@ -29,7 +30,7 @@ struct SegmentTree {
 	int activated;
 
 	// RMQ for [p, q]: returns index i in tree
-	int rmq(const Tp &p, const Tp &q, int i);
+	int rmq(const Tp &p, const Tp &q, int i) const;
 	// RMQ for [0, q]: returns anchor with maximum value
 	int initialize(int i, int s, int e, int &tree_i);
 	
@@ -39,12 +40,13 @@ struct SegmentTree {
 public:
 	SegmentTree(std::vector<T> &a);
 
-	int rmq(const Tp &p, const Tp &q); // returns index in anchors or -1
+	int rmq(const Tp &p, const Tp &q) const; // returns index in anchors or -1
 	void activate(const Tp &q, int score);
 	void deactivate(const Tp &q);
 
-	std::string plot();
-	bool empty();
+public: // utilities
+	std::string plot() const;
+	bool empty() const;
 };
 
 #include "segment.tpp"

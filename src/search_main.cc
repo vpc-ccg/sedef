@@ -178,6 +178,11 @@ void search_parallel(const string &ref_path)
 
 void search_single(const string &ref_path, const string &query_chr, const string &ref_chr, bool is_ref_complement, int kmer_size, int window_size)
 {
+	eprn("        Parameters: READ_SIZE      = {}\n"
+	     "                    MAX_ERROR      = {:.2f} ({:.2f} EDIT + {:.2f} GAP; GAPFREQ={:.3f})",
+		MIN_READ_SIZE, 
+		MAX_ERROR, MAX_EDIT_ERROR, MAX_GAP_ERROR, GAP_FREQUENCY);
+
 	bool is_same_genome = (ref_chr == query_chr) && !is_ref_complement;
 	eprn("Same genome:        {}", is_same_genome);
 	eprn("Reverse complement: {}", is_ref_complement);

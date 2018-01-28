@@ -21,60 +21,189 @@ using namespace std;
 
 /******************************************************************************/
 
-Alignment Alignment::from_cigar(const string &a, const string &b, const string &cigar_str)
+auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
-	auto aln = Alignment{ "A", 0, (int)a.size(), "B", 0, (int)b.size(), a, b, "", "", "", {}, {} };
+	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
+
+	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
+	int8_t mat[25] = { 
+		a, b, b, b, 0, 
+		b, a, b, b, 0, 
+		b, b, a, b, 0, 
+		b, b, b, a, 0, 
+		0, 0, 0, 0, 0 
+	};
+	deque<pair<char, int>> cigar;
+	for (int SP = 0; SP < min(tseq.size(), qseq.size()); SP += STEP) {
+		ksw_extz_t ez;
+		ksw_extz2_sse(0, 
+			min(STEP, (int)(qseq.size() - SP)), (const uint8_t*)(qseq.c_str() + SP), 
+			min(STEP, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
+			5, mat, // M; MxM matrix
+			gapo, gape, 
+			bandwidth, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
+			0, &ez);
+		for (int i = 0; i < ez.n_cigar; i++) {
+			cigar.push_back({"MDI"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
+		}
+		free(ez.cigar);
+	}
+	return cigar;
+}
+
+/******************************************************************************/
+
+Alignment::Alignment(): 
+	start_a(0), end_a(0), 
+	start_b(0), end_b(0)
+{
+	error = { 0, 0, 0, 0 };
+}
+
+Alignment::Alignment(const string &fa, const string &fb):
+	chr_a("A"), start_a(0), end_a(fa.size()), 
+	chr_b("B"), start_b(0), end_b(fb.size()),
+	a(fa), b(fb)
+{
+	string xa = fa, xb = fb;
+
+	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
+	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
+
+	cigar = align_helper(xa, xb, MATCH, MISMATCH, -GAP_OPEN, -GAP_EXTEND, -1);
+	populate_nice_alignment();
+}
+
+Alignment::Alignment(const string &fa, const string &fb, const string &cigar_str):
+	chr_a("A"), start_a(0), end_a(fa.size()), 
+	chr_b("B"), start_b(0), end_b(fb.size()),
+	a(fa), b(fb)
+{
 	for (int ci = 0, num = 0; ci < cigar_str.size(); ci++) {
 		if (isdigit(cigar_str[ci])) {
 			num = 10 * num + (cigar_str[ci] - '0');
 		} else if (cigar_str[ci] == ';') {
 			continue;
 		} else {
-			aln.cigar.push_back({cigar_str[ci], num});
+			cigar.push_back({cigar_str[ci], num});
 			num = 0;
 		}
 	}
-	aln.populate_nice_alignment();
-	return aln;
+	populate_nice_alignment();
 }
 
-string Alignment::cigar_string()
+Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &guide, const int side) 
 {
-	string res;
-	for (auto &p: cigar) {
-		res += fmt::format("{}{}", p.second, p.first);
+	// eprn("aligning {} to {}", qstr.size(), rstr.size());
+
+	auto prev = guide.begin();
+	*this = prev->aln;
+	for (auto cur = next(prev); cur != guide.end(); cur++) {
+		int qs = cur->query_start, qe = cur->query_end;
+		int qps = prev->query_start, qpe = prev->query_end;
+
+		int rs = cur->ref_start, re = cur->ref_end;
+		int rps = prev->ref_start, rpe = prev->ref_end;
+
+		// eprn("   {}..{}->{}..{}", qps, qpe, rps, rpe);
+		// eprn("TO {}..{}->{}..{}", qs, qe, rs, re);
+
+		assert(qpe <= qs);
+		assert(rpe <= rs);
+
+		end_a = qe;
+		end_b = re;
+		a += qstr.substr(qpe, qe - qpe); 
+		b += rstr.substr(rpe, re - rpe); 
+		
+		int qgap = qs - qpe, rgap = rs - rpe;
+		if (qgap && rgap) {
+			if (qgap <= 1000 && rgap <= 1000) { // "close" hits
+				Alignment gap(qstr.substr(qpe, qgap), rstr.substr(rpe, rgap));
+				append_cigar(gap.cigar);
+			} else { // assume only one part is the gap
+				int ma = max(qgap, rgap);
+				int mi = min(qgap, rgap);
+				Alignment ma1(qstr.substr(qpe, mi), rstr.substr(rpe, mi));
+				ma1.cigar.push_back({qgap == mi ? 'I' : 'D', ma - mi});
+				Alignment ma2(qstr.substr(qs - mi, mi), rstr.substr(rs - mi, mi));
+				ma2.cigar.push_front({qgap == mi ? 'I' : 'D', ma - mi});
+				append_cigar(ma2.total_error() < ma2.total_error() ? ma2.cigar : ma1.cigar);
+			}
+		} else if (qgap) {
+			append_cigar({{'D', qgap}});	
+		} else if (rgap) {
+			append_cigar({{'I', rgap}});	
+		} 
+		// eprn("");
+		// assert(qe - qs == re - rs);
+		append_cigar(cur->aln.cigar);
+		prev = cur;
 	}
-	return res;
-}
+	// Add end
 
-Alignment Alignment::trim() 
-{
-	auto result = *this;
-	while (result.cigar.size()) {
-		if (result.cigar[0].first == 'D') {
-			result.a = result.a.substr(result.cigar[0].second);
-			result.start_a += result.cigar[0].second;
-			result.cigar.pop_front();
-		} else if (result.cigar[0].first == 'I') {
-			result.b = result.b.substr(result.cigar[0].second);
-			result.start_b += result.cigar[0].second;
-			result.cigar.pop_front();
-		} else if (result.cigar.back().first == 'D') {
-			result.end_a -= result.cigar.back().second;
-			result.a = result.a.substr(0, result.a.size() - result.cigar.back().second);
-			result.cigar.pop_back();
-		} else if (result.cigar.back().first == 'I') {
-			result.end_b -= result.cigar.back().second;
-			result.b = result.b.substr(0, result.b.size() - result.cigar.back().second);
-			result.cigar.pop_back();
-		} else {
-			break;
+
+	int qlo = start_a, qhi = end_a;
+	int rlo = start_b, rhi = end_b;
+	// eprn("{}", cigar_string());
+	// eprn("{}", print());
+	// eprn("{} {}\n{} {}", a.size(), a, qhi-qlo, qstr.substr(qlo, qhi - qlo));
+	assert(a == qstr.substr(qlo, qhi - qlo));
+	assert(b == rstr.substr(rlo, rhi - rlo));
+	// eprn("alohaaaa");
+
+	if (side) {
+		int qlo_n = max(0, qlo - side);
+		int rlo_n = max(0, rlo - side);
+		if (qlo - qlo_n && rlo - rlo_n) {
+			Alignment gap(qstr.substr(qlo_n, qlo - qlo_n), rstr.substr(rlo_n, rlo - rlo_n));
+			// eprn("alignment ok {} vs {}\n{}", qlo-qlo_n, rlo-rlo_n, gap.print());
+			gap.trim_front();
+			// eprn("trim ok\n{}", gap.print());
+
+			qlo_n = qlo - (gap.end_a - gap.start_a);
+			rlo_n = rlo - (gap.end_b - gap.start_b);
+			prepend_cigar(gap.cigar);
+			a = qstr.substr(qlo_n, qlo - qlo_n) + a;
+			b = rstr.substr(rlo_n, rlo - rlo_n) + b;
+			start_a = qlo = qlo_n; 
+			start_b = rlo = rlo_n;	
+		}
+
+		int qhi_n = min(qhi + side, (int)qstr.size());
+		int rhi_n = min(rhi + side, (int)rstr.size());
+		if (qhi_n - qhi && rhi_n - rhi) {
+			Alignment gap(qstr.substr(qhi, qhi_n - qhi), rstr.substr(rhi, rhi_n - rhi));
+			gap.trim_back();
+			qhi_n = qhi + gap.end_a;
+			rhi_n = rhi + gap.end_b;
+			append_cigar(gap.cigar);
+			a += qstr.substr(qhi, qhi_n - qhi);
+			b += rstr.substr(rhi, rhi_n - rhi);
+			end_a = qhi = qhi_n;
+			end_b = rhi = rhi_n;
 		}
 	}
 
-	result.populate_nice_alignment();
-	return result;
+	assert(qlo >= 0);
+	assert(rlo >= 0);
+	assert(qhi <= qstr.size());
+	assert(rhi <= rstr.size());
+	assert(a == qstr.substr(qlo, qhi - qlo));
+	assert(b == rstr.substr(rlo, rhi - rlo));
+
+	// eprn("alohaaaa2");
+
+	// *this = this->trim(); NEEDED?
+	// trim();
+	populate_nice_alignment();
+
+	// eprn("final {}", aln.cigar_string());
+	// eprn("{}", aln.print());
+	// cin.get();
 }
+
+/******************************************************************************/
 
 void Alignment::populate_nice_alignment()
 {
@@ -97,316 +226,50 @@ void Alignment::populate_nice_alignment()
 			else                align_a += "-";
 		}
 	}
-}
 
-Alignment::AlignmentError Alignment::calculate_error()
-{
-	if (!alignment.size()) populate_nice_alignment();
-
-	int gaps = 0, gap_bases = 0, mismatches = 0, matches = 0;
+	error = AlignmentError { 0, 0, 0, 0 };
 	for (auto &c: cigar) {
-		if (c.first != 'M') gaps++, gap_bases += c.second;
+		if (c.first != 'M') {
+			error.gaps++; 
+			error.gap_bases += c.second;
+		}
 	}
 	for (int i = 0; i < alignment.size(); i++) {
 		if (align_a[i] != '-' && align_b[i] != '-') {
 			if (toupper(align_a[i]) == toupper(align_b[i])) {
-				matches++;
+				error.matches++;
 			} else {
-				mismatches++;
+				error.mismatches++;
 			}
 		}
 	}
-	return AlignmentError{gaps, gap_bases, mismatches, matches};
 }
 
-string Alignment::print(int width)
+void Alignment::trim() 
 {
-	if (!alignment.size()) {
-		populate_nice_alignment();
-	}
-
-	string res;
-	int qa = start_a, sa = 0;
-	int qb = start_b, sb = 0;
-
-	auto err = calculate_error();
-	res += fmt::format(
-		"       A: {:>9}..{:<9} (len {:7})    Gaps:       {:5} = {:.0f}% ({})\n"
-		"       B: {:>9}..{:<9} (len {:7})    Mismatches: {:5} = {:.0f}%\n"
-		"   CIGAR: {}\n",
-		start_a, end_a, end_a - start_a, 
-		err.gap_bases, err.gap_error(), err.gaps,
-		start_b, end_b, end_b - start_b,
-		err.mismatches, err.mis_error(),
-		cigar_string()
-	);
-	for (int i = 0; i < alignment.size(); i += width) {
-		res += fmt::format(
-			"   {:10}: {} {}\n   {:10}  {} {}\n   {:10}: {} {}\n", 
-			qa, align_a.substr(i, width),   sa,  
-			"", alignment.substr(i, width), i+align_a.substr(i, width).size(),
-			qb, align_b.substr(i, width), sb);
-		for (auto c: align_a.substr(i, width)) if (c != '-') qa++, sa++;
-		for (auto c: align_b.substr(i, width)) if (c != '-') qb++, sb++;
-	}
-	return res;
-}
-
-string Alignment::print_only_alignment(int width)
-{
-	if (!alignment.size()) {
-		populate_nice_alignment();
-	}
-
-	if (width == -1) { 
-		width = alignment.size();
-	}
-	string res;
-	for (int i = 0; i < alignment.size(); i += width) {
-		res += fmt::format(
-			"{}\n{}\n{}\n\n", 
-			align_a.substr(i, width),  
-			alignment.substr(i, width),
-			align_b.substr(i, width)
-		);
-	}
-	return res;
-}
-
-void Alignment::cigar_from_alignment() 
-{
-	cigar.clear();
-	int sz = 0;
-	char op = 0, top;
-	for (int i = 0; i < alignment.size(); i++) {
-		if (align_a[i] == '-') {
-			top = 'I';
-		} else if (align_b[i] == '-') {
-			top = 'D';
+	while (cigar.size()) {
+		if (cigar[0].first == 'D') {
+			a = a.substr(cigar[0].second);
+			start_a += cigar[0].second;
+			cigar.pop_front();
+		} else if (cigar[0].first == 'I') {
+			b = b.substr(cigar[0].second);
+			start_b += cigar[0].second;
+			cigar.pop_front();
+		} else if (cigar.back().first == 'D') {
+			end_a -= cigar.back().second;
+			a = a.substr(0, a.size() - cigar.back().second);
+			cigar.pop_back();
+		} else if (cigar.back().first == 'I') {
+			end_b -= cigar.back().second;
+			b = b.substr(0, b.size() - cigar.back().second);
+			cigar.pop_back();
 		} else {
-			top = 'M';
-		}
-
-		if (op != top) {
-			if (op) cigar.push_back(make_pair(op, sz));
-			op = top, sz = 0;
-		}
-		sz++;
-	}
-	cigar.push_back(make_pair(op, sz));
-}
-
-vector<Alignment> Alignment::max_sum(int min_span)
-{
-	assert(alignment.size());
-
-	// start/end in the alignment
-	int best_score = -1, best_start = 0, best_end = 0;
-	int score_so_far = 0, start_so_far = 0, end_so_far = 0;
-
-	vector<int> lookup_a(alignment.size() + 1, 0); int ia = 0;
-	vector<int> lookup_b(alignment.size() + 1, 0); int ib = 0;
-
-	vector<pair<int, int>> hits; // start, end
-	for (int i = 0; i < alignment.size(); i++) {
-		int score = (alignment[i] == '|' ? 1 : -1);
-
-		if (score > score_so_far) {
-			if (best_end - best_start >= min_span 
-				&& (!hits.size() || hits.back() != make_pair(best_start, best_end))) 
-			{
-				hits.push_back({best_start, best_end});
-			}
-			score_so_far = score;
-			start_so_far = i;
-			end_so_far = i + 1;
-			best_score = score_so_far;
-			best_start = start_so_far, best_end = end_so_far;
-		} else {
-			score_so_far += score;
-			end_so_far++;
-		}
-
-		if (score_so_far > best_score) {
-			best_score = score_so_far;
-			best_start = start_so_far, best_end = end_so_far; 
-		}
-
-		lookup_a[i] = ia;
-		lookup_b[i] = ib;
-		if (align_a[i] != '-') ia++; 
-		if (align_b[i] != '-') ib++;
-	}
-	lookup_a[alignment.size()] = ia;
-	lookup_b[alignment.size()] = ib;
-
-	if (best_end - best_start >= min_span 
-		&& (!hits.size() || hits.back() != make_pair(best_start, best_end))) 
-	{
-		hits.push_back({best_start, best_end});
-	}
-
-	vector<Alignment> results;
-	for (auto &h: hits) {
-		// translate: a --> b
-		results.push_back({
-			chr_a, start_a + lookup_a[h.first], start_a + lookup_a[h.second],
-			chr_b, start_b + lookup_b[h.first], start_b + lookup_b[h.second],
-			a.substr(lookup_a[h.first], lookup_a[h.second] - lookup_a[h.first]),
-			b.substr(lookup_b[h.first], lookup_b[h.second] - lookup_b[h.first]),
-			align_a.substr(h.first, h.second - h.first),
-			align_b.substr(h.first, h.second - h.first),
-			alignment.substr(h.first, h.second - h.first),
-			{}
-		});
-		results.back().cigar_from_alignment();
-	}
-
-	return results;
-}
-
-void Alignment::prepend_cigar(const deque<pair<char, int>> &app)
-{
-	assert(app.size());
-	if (cigar.size() && cigar.front().first == app.back().first) {
-		cigar.front().second += app.back().second;
-		cigar.insert(cigar.begin(), app.begin(), app.end() - 1);
-	} else {
-		cigar.insert(cigar.begin(), app.begin(), app.end());
-	}
-}
-
-void Alignment::append_cigar(const deque<pair<char, int>> &app)
-{
-	assert(app.size());
-	if (cigar.size() && cigar.back().first == app.front().first) {
-		cigar.back().second += app.front().second;
-		cigar.insert(cigar.end(), next(app.begin()), app.end());
-	} else {
-		cigar.insert(cigar.end(), app.begin(), app.end());
-	}
-}
-
-Alignment Alignment::from_anchors(const string &qstr, const string &rstr,
-	vector<Hit> &guide,
-	const int side) 
-{
-	// eprn("aligning {} to {}", qstr.size(), rstr.size());
-
-	auto prev = guide.begin();
-	Alignment aln = prev->aln;
-	for (auto cur = next(prev); cur != guide.end(); cur++) {
-		int qs = cur->query_start, qe = cur->query_end;
-		int qps = prev->query_start, qpe = prev->query_end;
-
-		int rs = cur->ref_start, re = cur->ref_end;
-		int rps = prev->ref_start, rpe = prev->ref_end;
-
-		// eprn("   {}..{}->{}..{}", qps, qpe, rps, rpe);
-		// eprn("TO {}..{}->{}..{}", qs, qe, rs, re);
-
-		assert(qpe <= qs);
-		assert(rpe <= rs);
-
-		aln.end_a = qe;
-		aln.end_b = re;
-		aln.a += qstr.substr(qpe, qe - qpe); 
-		aln.b += rstr.substr(rpe, re - rpe); 
-		
-		int qgap = qs - qpe, rgap = rs - rpe;
-		if (qgap && rgap) {
-			if (qgap <= 1000 && rgap <= 1000) { // "close" hits
-				auto gap = align(qstr.substr(qpe, qgap), rstr.substr(rpe, rgap), 5, -4, 40, 1);
-				aln.append_cigar(gap.cigar);
-			} else { // assume only one part is the gap
-				int ma = max(qgap, rgap);
-				int mi = min(qgap, rgap);
-				auto ma1 = align(qstr.substr(qpe, mi), rstr.substr(rpe, mi), 5, -4, 40, 1);
-				ma1.cigar.push_back({qgap == mi ? 'I' : 'D', ma - mi});
-				auto ma2 = align(qstr.substr(qs - mi, mi), rstr.substr(rs - mi, mi), 5, -4, 40, 1);
-				ma2.cigar.push_front({qgap == mi ? 'I' : 'D', ma - mi});
-				aln.append_cigar(ma2.error.error() < ma2.error.error() ? ma2.cigar : ma1.cigar);
-			}
-		} else if (qgap) {
-			aln.append_cigar({{'D', qgap}});	
-		} else if (rgap) {
-			aln.append_cigar({{'I', rgap}});	
-		} 
-		// eprn("");
-		// assert(qe - qs == re - rs);
-		aln.append_cigar(cur->aln.cigar);
-		prev = cur;
-	}
-	// Add end
-
-
-	int qlo = aln.start_a, qhi = aln.end_a;
-	int rlo = aln.start_b, rhi = aln.end_b;
-	// eprn("{}", aln.cigar_string());
-	// eprn("{}", aln.print());
-	// eprn("{} {}\n{} {}", aln.a.size(), aln.a, qhi-qlo, qstr.substr(qlo, qhi - qlo));
-	assert(aln.a == qstr.substr(qlo, qhi - qlo));
-	assert(aln.b == rstr.substr(rlo, rhi - rlo));
-	// eprn("alohaaaa");
-
-	if (side) {
-		int qlo_n = max(0, qlo - side);
-		int rlo_n = max(0, rlo - side);
-		if (qlo - qlo_n && rlo - rlo_n) {
-			auto gap = align(
-				qstr.substr(qlo_n, qlo - qlo_n), 
-				rstr.substr(rlo_n, rlo - rlo_n), 
-				5, -4, 40, 1
-			);
-			// eprn("alignment ok {} vs {}\n{}", qlo-qlo_n, rlo-rlo_n, gap.print());
-			gap.trim_front();
-			// eprn("trim ok\n{}", gap.print());
-
-			qlo_n = qlo - (gap.end_a - gap.start_a);
-			rlo_n = rlo - (gap.end_b - gap.start_b);
-			aln.prepend_cigar(gap.cigar);
-			aln.a = qstr.substr(qlo_n, qlo - qlo_n) + aln.a;
-			aln.b = rstr.substr(rlo_n, rlo - rlo_n) + aln.b;
-			aln.start_a = qlo = qlo_n; 
-			aln.start_b = rlo = rlo_n;	
-		}
-
-		int qhi_n = min(qhi + side, (int)qstr.size());
-		int rhi_n = min(rhi + side, (int)rstr.size());
-		if (qhi_n - qhi && rhi_n - rhi) {
-			auto gap = align(
-				qstr.substr(qhi, qhi_n - qhi), 
-				rstr.substr(rhi, rhi_n - rhi), 
-				5, -4, 40, 1
-			);
-			gap.trim_back();
-			qhi_n = qhi + gap.end_a;
-			rhi_n = rhi + gap.end_b;
-			aln.append_cigar(gap.cigar);
-			aln.a += qstr.substr(qhi, qhi_n - qhi);
-			aln.b += rstr.substr(rhi, rhi_n - rhi);
-			aln.end_a = qhi = qhi_n;
-			aln.end_b = rhi = rhi_n;
+			break;
 		}
 	}
 
-	assert(qlo >= 0);
-	assert(rlo >= 0);
-	assert(qhi <= qstr.size());
-	assert(rhi <= rstr.size());
-	assert(aln.a == qstr.substr(qlo, qhi - qlo));
-	assert(aln.b == rstr.substr(rlo, rhi - rlo));
-
-	// eprn("alohaaaa2");
-
-	aln = aln.trim();
-	aln.error = aln.calculate_error();
-
-	// eprn("final {}", aln.cigar_string());
-	// eprn("{}", aln.print());
-	// cin.get();
-
-	return aln;
+	populate_nice_alignment();
 }
 
 void Alignment::trim_front() // ABCD -> --CD
@@ -416,18 +279,18 @@ void Alignment::trim_front() // ABCD -> --CD
 	int score = 0;
 	for (int i = alignment.size() - 1; i >= 0; i--) {
 		if (alignment[i] == '|') {
-			score += 5;
+			score += MATCH;
 		} else {
 			if (align_a[i] != '-' && align_b[i] != '-') {
-				score -= 4;
+				score += MISMATCH;
 			} else {
 				if (i == alignment.size() - 1 || 
 						(align_a[i] == '-' && align_a[i + 1] != '-') || 
 						(align_b[i] == '-' && align_b[i + 1] != '-')) 
 				{
-					score -= 40;
+					score += GAP_OPEN;
 				}
-				score -= 1;
+				score += GAP_EXTEND;
 			}
 		}
 		if (score >= max_score) {
@@ -473,18 +336,18 @@ void Alignment::trim_back() // ABCD -> AB--
 	int score = 0;
 	for (int i = 0; i < alignment.size(); i++) {
 		if (alignment[i] == '|') {
-			score += 5;
+			score += MATCH;
 		} else {
 			if (align_a[i] != '-' && align_b[i] != '-') {
-				score -= 4;
+				score += MISMATCH;
 			} else {
 				if (i == 0 || 
 						(align_a[i] == '-' && align_a[i - 1] != '-') || 
 						(align_b[i] == '-' && align_b[i - 1] != '-')) 
 				{
-					score -= 40;
+					score += GAP_EXTEND;
 				}
-				score -= 1;
+				score += GAP_OPEN;
 			}
 		}
 		if (score >= max_score) {
@@ -521,53 +384,253 @@ void Alignment::trim_back() // ABCD -> AB--
 	populate_nice_alignment();
 }
 
+void Alignment::prepend_cigar(const deque<pair<char, int>> &app)
+{
+	assert(app.size());
+	if (cigar.size() && cigar.front().first == app.back().first) {
+		cigar.front().second += app.back().second;
+		cigar.insert(cigar.begin(), app.begin(), app.end() - 1);
+	} else {
+		cigar.insert(cigar.begin(), app.begin(), app.end());
+	}
+}
+
+void Alignment::append_cigar(const deque<pair<char, int>> &app)
+{
+	assert(app.size());
+	if (cigar.size() && cigar.back().first == app.front().first) {
+		cigar.back().second += app.front().second;
+		cigar.insert(cigar.end(), next(app.begin()), app.end());
+	} else {
+		cigar.insert(cigar.end(), app.begin(), app.end());
+	}
+}
+
+void Alignment::cigar_from_alignment() 
+{
+	cigar.clear();
+	int sz = 0;
+	char op = 0, top;
+	for (int i = 0; i < alignment.size(); i++) {
+		if (align_a[i] == '-') {
+			top = 'I';
+		} else if (align_b[i] == '-') {
+			top = 'D';
+		} else {
+			top = 'M';
+		}
+
+		if (op != top) {
+			if (op) cigar.push_back(make_pair(op, sz));
+			op = top, sz = 0;
+		}
+		sz++;
+	}
+	cigar.push_back(make_pair(op, sz));
+}
 
 /******************************************************************************/
 
-Alignment align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
+void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 {
-	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
+	assert(cur.start_a < end_a || cur.start_b < end_b);
+	// eprn("merging... {}..{} to {}..{}", start_a, end_a, start_b, end_b);
+	// eprn("         . {}..{} to {}..{}", cur.start_a, cur.end_a, cur.start_b, cur.end_b);
 
-	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
-	int8_t mat[25] = { 
-		a, b, b, b, 0, 
-		b, a, b, b, 0, 
-		b, b, a, b, 0, 
-		b, b, b, a, 0, 
-		0, 0, 0, 0, 0 
-	};
-	deque<pair<char, int>> cigar;
-	for (int SP = 0; SP < min(tseq.size(), qseq.size()); SP += STEP) {
-		ksw_extz_t ez;
-		ksw_extz2_sse(0, 
-			min(STEP, (int)(qseq.size() - SP)), (const uint8_t*)(qseq.c_str() + SP), 
-			min(STEP, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
-			5, mat, // M; MxM matrix
-			gapo, gape, 
-			bandwidth, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
-			0, &ez);
-		for (int i = 0; i < ez.n_cigar; i++) {
-			cigar.push_back({"MDI"[ez.cigar[i] & 0xf], ez.cigar[i] >> 4});
-		}
-		free(ez.cigar);
+	assert(end_a <= cur.end_a);
+	assert(end_b <= cur.end_b);
+	
+	int trim = end_a - cur.start_a;
+	// eprn("trim q: {}", trim);
+	int q = 0, r = 0, i = 0;
+	for (i = alignment.size() - 1; i >= 0 && q < trim; i--) {
+		if (align_a[i] != '-') q++;
+		if (align_b[i] != '-') r++;
 	}
-	return Alignment{ 
-		"A", 0, (int)qseq.size(), 
-		"B", 0, (int)tseq.size(), 
-		qseq, tseq, "", "", "", cigar 
-	};
+	// eprn("i={}", i);
+	align_a = align_a.substr(0, i+1);
+	alignment = alignment.substr(0, i+1);
+	align_b = align_b.substr(0, i+1);
+	end_a = start_a + a.size() - q;
+	end_b = start_b + b.size() - r;
+	a = a.substr(0, a.size() - q);
+	b = b.substr(0, b.size() - r);
+	string X;
+	// X="";for (auto c: align_a) if (c!='-')X+=c; assert(X==a); 
+	// assert(a==qstr.substr(start_a, end_a-start_a));
+	// X="";for (auto c: align_b) if (c!='-')X+=c; assert(X==b);
+	// assert(b==rstr.substr(start_b, end_b-start_b));
+
+
+	q = 0, r = 0, i = 0;
+	for (i = 0; i < cur.alignment.size() && q < trim; i++) {
+		if (cur.align_a[i] != '-') q++;
+		if (cur.align_b[i] != '-') r++;
+	}
+	cur.align_a = cur.align_a.substr(i);
+	cur.alignment = cur.alignment.substr(i);
+	cur.align_b = cur.align_b.substr(i);
+	cur.start_a += q;
+	cur.start_b += r;
+	cur.a = cur.a.substr(q);
+	cur.b = cur.b.substr(r);
+	// X="";for (auto c: cur.align_a) if (c!='-')X+=c; assert(X==cur.a);
+		// assert(cur.a==qstr.substr(cur.start_a, cur.end_a-cur.start_a));
+	// X="";for (auto c: cur.align_b) if (c!='-')X+=c; assert(X==cur.b);
+		// assert(cur.b==rstr.substr(cur.start_b, cur.end_b-cur.start_b));
+
+
+	trim = end_b - cur.start_b;
+	// eprn("trim r: {}", trim);
+	q = 0, r = 0, i = 0;
+	for (i = alignment.size() - 1; i >= 0 && r < trim; i--) {
+		if (align_a[i] != '-') q++;
+		if (align_b[i] != '-') r++;
+	}
+	align_a = align_a.substr(0, i+1);
+	alignment = alignment.substr(0, i+1);
+	align_b = align_b.substr(0, i+1);
+	end_a = start_a + a.size() - q;
+	end_b = start_b + b.size() - r;
+	a = a.substr(0, a.size() - q);
+	b = b.substr(0, b.size() - r);
+	// X="";for (auto c: align_a) if (c!='-')X+=c; assert(X==a);
+	// assert(a==qstr.substr(start_a, end_a-start_a));
+	// X="";for (auto c: align_b) if (c!='-')X+=c; assert(X==b);
+	// assert(b==rstr.substr(start_b, end_b-start_b));
+
+
+
+	q = 0, r = 0, i;
+	for (i = 0; i < cur.alignment.size() && r < trim; i++) {
+		if (cur.align_a[i] != '-') q++;
+		if (cur.align_b[i] != '-') r++;
+	}
+	cur.align_a = cur.align_a.substr(i);
+	cur.alignment = cur.alignment.substr(i);
+	cur.align_b = cur.align_b.substr(i);
+	cur.start_a += q;
+	cur.start_b += r;
+	cur.a = cur.a.substr(q);
+	cur.b = cur.b.substr(r);
+	// X="";for (auto c: cur.align_a) if (c!='-')X+=c; assert(X==cur.a);
+		// assert(cur.a==qstr.substr(cur.start_a, cur.end_a-cur.start_a));
+	// X="";for (auto c: cur.align_b) if (c!='-')X+=c; assert(X==cur.b);
+		// assert(cur.b==rstr.substr(cur.start_b, cur.end_b-cur.start_b));
+	
+	cigar_from_alignment();
+	// eprn("")
+	// eprn
+	// eprn("{}\n{}", align_a, align_b);
+		// eprn("{}", print(70));
+
+	cur.cigar_from_alignment();
+		// eprn("{}", cur.print(70));
+
+
+	// eprn("postfix... {}..{} to {}..{}", start_a, end_a, start_b, end_b);
+	// eprn("         . {}..{} to {}..{}", cur.start_a, cur.end_a, cur.start_b, cur.end_b);
+
+	assert(start_a <= cur.start_a);
+	assert(start_b <= cur.start_b);
+	assert(end_a <= cur.start_a);
+	assert(end_b <= cur.start_b);
+	int qgap = cur.start_a - end_a;
+	int rgap = cur.start_b - end_b;
+	// eprn("aligning {}..{} to {}..{}", end_a, end_a+qgap, end_b, end_b+rgap);
+	// eprn("aligning {}..{} to {}..{}", end_a, end_a+qgap, end_b, end_b+rgap);
+	if (qgap && rgap) {
+		// eprn("aligning len {} -> {}", qgap, rgap);
+		if (qgap <= 1000 && rgap <= 1000) { // "close" hits
+			Alignment gap(qstr.substr(end_a, qgap), rstr.substr(end_b, rgap));
+			append_cigar(gap.cigar);
+		} else { // assume only one part is the gap
+			int ma = max(qgap, rgap); // gap 
+			int mi = min(qgap, rgap); // mismatch
+			// eprn("2xaligning len {}", mi);
+			Alignment ma1(qstr.substr(end_a, mi), rstr.substr(end_b, mi));
+			ma1.cigar.push_back({qgap == mi ? 'I' : 'D', ma - mi});
+			Alignment ma2(qstr.substr(cur.start_a - mi, mi), rstr.substr(cur.start_b - mi, mi));
+			ma2.cigar.push_front({qgap == mi ? 'I' : 'D', ma - mi});
+			append_cigar(ma2.total_error() < ma2.total_error() ? ma2.cigar : ma1.cigar);
+		}
+	} else if (qgap) {
+		append_cigar({{'D', qgap}});
+	} else if (rgap) {
+		append_cigar({{'I', rgap}});	
+	} 
+
+
+	// eprn("done");
+	a += qstr.substr(end_a, qgap) + cur.a; 
+	b += rstr.substr(end_b, rgap) + cur.b; 
+	assert(cur.end_a >= end_a);
+	assert(cur.end_b >= end_b);
+	end_a = cur.end_a;
+	end_b = cur.end_b;
+	append_cigar(cur.cigar);
+	populate_nice_alignment();
+	// eprn("{}", print(70));
+	// eprn("became... {}..{} to {}..{} --> {}", start_a, end_a, start_b, end_b, cigar_string());
+
+	// X="";for (auto c: align_a) if (c!='-')X+=c; assert(X==a); 
+	// assert(a==qstr.substr(start_a, end_a-start_a));
+	// X="";for (auto c: align_b) if (c!='-')X+=c; assert(X==b);
+	// assert(b==rstr.substr(start_b, end_b-start_b));
 }
 
-Alignment align(const string &fa, const string &fb, int match, int mismatch, int gap_open, int gap_extend, int bandwidth)
+/******************************************************************************/
+
+string Alignment::cigar_string() const
 {
-	string xa = fa, xb = fb;
+	string res;
+	for (auto &p: cigar) {
+		res += fmt::format("{}{}", p.second, p.first);
+	}
+	return res;
+}
 
-	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
-	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
+string Alignment::print(int width, bool only_alignment) const
+{
+	assert(alignment.size());
 
-	auto a = align_helper(fa, fb, match, mismatch, gap_open, gap_extend, bandwidth);
-	a.a = fa, a.b = fb;
-	a.populate_nice_alignment();
-	a.error = a.calculate_error();
-	return a;
+	string res;
+	int qa = start_a, sa = 0;
+	int qb = start_b, sb = 0;
+
+	if (width == -1) { 
+		width = alignment.size();
+	}
+
+	if (!only_alignment) {
+		res += fmt::format(
+			"       A: {:>9}..{:<9} (len {:7})    Gaps:       {:5} = {:.0f}% ({})\n"
+			"       B: {:>9}..{:<9} (len {:7})    Mismatches: {:5} = {:.0f}%\n"
+			"   CIGAR: {}\n",
+			start_a, end_a, end_a - start_a, 
+			error.gap_bases, gap_error(), error.gaps,
+			start_b, end_b, end_b - start_b,
+			error.mismatches, mismatch_error(),
+			cigar_string()
+		);
+	}
+	for (int i = 0; i < alignment.size(); i += width) {
+		if (only_alignment) {
+			res += fmt::format(
+				"{}\n{}\n{}\n\n", 
+				align_a.substr(i, width),  
+				alignment.substr(i, width),
+				align_b.substr(i, width)
+			);
+		} else {
+			res += fmt::format(
+				"   {:10}: {} {}\n   {:10}  {} {}\n   {:10}: {} {}\n", 
+				qa, align_a.substr(i, width),   sa,  
+				"", alignment.substr(i, width), i+align_a.substr(i, width).size(),
+				qb, align_b.substr(i, width), sb);
+		}
+		for (auto c: align_a.substr(i, width)) if (c != '-') qa++, sa++;
+		for (auto c: align_b.substr(i, width)) if (c != '-') qb++, sb++;
+	}
+	return res;
 }
