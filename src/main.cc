@@ -60,6 +60,13 @@ int main(int argc, char **argv)
 	}
 
 	eprnn("🍁  🐚    SEDEF {}; arguments: ", string(GITVER) == "" ? "vpc" : GITVER);
+	#ifdef __SSE4_1__
+		eprnn(" (SSE4.1)");
+	#elif defined __SSE2__
+		eprnn(" (SSE2)");
+	#else
+		eprnn(" (No SSE)");
+	#endif
 	for (int i = 0; i < argc; i++) 
 		eprnn(" {}", argv[i]);
 	eprn("");

@@ -88,7 +88,7 @@ vector<Anchor> generate_anchors(const string &query, const string &ref,
 					}
 					if (toupper(query[q + len]) != toupper(ref[r + len]))
 						break;
-					has_u |= (isupper(query[q + len]) || isupper(ref[r + len]));
+					has_u += bool(isupper(query[q + len]) || isupper(ref[r + len]));
 				}
 				if (len >= kmer_size) {
 					if (anchors.size() >= (1<<20) && anchors.size() == anchors.capacity()) {
@@ -163,7 +163,8 @@ auto chain_anchors(vector<Anchor> &anchors)
 				deactivate_bound++;
 			}
 
-			int w = MATCH_CHAIN_SCORE * a.l;
+			assert(a.has_u <= a.l);
+			int w = MATCH_CHAIN_SCORE * a.has_u + (MATCH_CHAIN_SCORE/2) * (a.l - a.has_u);
 			int j = tree.rmq({a.r - MAX_CHAIN_GAP, 0}, 
 				             {a.r - 1, anchors.size()});
 			if (j != -1 && ys[j].score != SegmentTree<Coor>::MIN) {
@@ -251,16 +252,17 @@ vector<Hit> fast_align(const string &query, const string &ref,
 		Hit a { query_ptr, qlo, qhi, ref_ptr, rlo, rhi };
 		guides.push_back(vector<int>());
 		for (int bi = be - 1; bi >= bs; bi--) {
-			guides.back().push_back(chain[bi]);
+			guides.back().emplace_back(chain[bi]);
 		}
 		hits.push_back(a);
 	}
 	dprn(":: elapsed/dp = {}s", elapsed(T)); T=cur_time();
 	
 	/// 3. Perform the full alignment
-	for (auto &hit: hits) {
-		hit.aln = Alignment(query, ref, anchors, guides[&hit - &hits[0]]);
-		update_from_alignment(hit);
+	vector<Hit> new_hits;
+	for (auto &h: hits) {
+		h.aln = Alignment(query, ref, anchors, guides[&h - &hits[0]]);
+		update_from_alignment(h);
 	}
 	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
 
@@ -310,12 +312,13 @@ void test2()
 		);
 	}
 	eprn("done in {} s", elapsed(TT));
+	cin.get();
 }
 
 void test(int, char** argv)
 {
-	test2();
-	exit(0);
+	// test2();
+	// exit(0);
 
 	FastaReference fr("data/hg19/hg19.fa");
 	string s, s2, sl;
@@ -327,7 +330,7 @@ void test(int, char** argv)
 	while (getline(MISS, sl)) {
 		auto TT = cur_time();
 		auto ssl = vector<string>{"miss", sl}; // split(sl, ' ');
-		if (ssl[1] != "align_both/0021/both107733") continue;
+		// if (ssl[1] != "align_both/0001/both007597") continue;
 		// align_both/0017/both087945
 		// align_both/0020/both102222
 

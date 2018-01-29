@@ -19,7 +19,7 @@ const double REFINE_GAP = 0.5;
 const double REFINE_GAPOPEN = 100;
 
 const int REFINE_MIN_READ = 900;
-const int REFINE_SIDE_ALIGN = 250;
+const int REFINE_SIDE_ALIGN = 500;
 const int REFINE_MAX_GAP = 10000;
 
 /******************************************************************************/
@@ -52,7 +52,6 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq,
 	vector<int> prev(anchors.size(), -1);
 	set<pair<int, int>, greater<pair<int, int>>> maxes;
 	for (int ai = 0; ai < anchors.size(); ai++) {
-
 		if (same_chr) {
 			auto &c = anchors[ai];
 			int qlo = c.query_start, qhi = c.query_end;
@@ -60,7 +59,10 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq,
 			int qo = max(0, 
 					min(orig.query_start + qhi, orig.ref_start + rhi) - 
 				 	max(orig.query_start + qlo, orig.ref_start + rlo));
-			if (qo >= 1) { // no gap between 
+			if ((rhi-rlo)-qo < REFINE_SIDE_ALIGN && (qhi-qlo)-qo<REFINE_SIDE_ALIGN) { // no gap between 
+				// eprn("REJECTED {}..{} --> {}..{}",
+					// c.query_start+orig.query_start, c.query_end+orig.query_start,
+					// c.ref_start+orig.ref_start, c.ref_end+orig.ref_start);
 				continue;
 			}
 		}
@@ -143,33 +145,42 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq,
 			max(anchors[paths.back()[i]].query_start - anchors[paths.back()[i-1]].query_end,
 				anchors[paths.back()[i]].ref_start - anchors[paths.back()[i-1]].ref_end);
 		}
-		dprn("-- chain: (est:{}, size:{}) {}..{} --> {}..{} dp={}", est_size, 
+		dprn("-- chain: (est:{}, size:{}) {}..{} --> {}..{}  ## {}..{} --> {}..{} ", est_size, 
 			paths.back().size(), 
-			qlo, qhi, rlo, rhi, dp[m.second]);
+			qlo, qhi, rlo, rhi, //dp[m.second],
+			qlo+orig.query_start, qhi+orig.query_start, rlo+orig.ref_start, rhi+orig.ref_start);
 		for (auto p: paths.back()) {
 			auto &y = anchors[p];
 			dprn("    {}..{}->{}..{}", y.query_start, y.query_end, y.ref_start, y.ref_end);
 		}
 
-		if (est_size < REFINE_MIN_READ - REFINE_SIDE_ALIGN)
+		if (est_size < REFINE_MIN_READ - REFINE_SIDE_ALIGN) {
+			dprn("est size failed");
 			continue;
-
-
-		if (same_chr) {
-			// assert(orig.query->is_rc == 0);
-			int qo = max(0, 
-						min(orig.query_start + qhi, orig.ref_start + rhi) - 
-					 	max(orig.query_start + qlo, orig.ref_start + rlo));
-			if (pct(qo, rhi - rlo) >= .3 || pct(qo, qhi - qlo)) {
-				continue;
-			}
 		}
+
+
+		// if (same_chr) {
+		// 	// assert(orig.query->is_rc == 0);
+		// 	int qo = max(0, 
+		// 				min(orig.query_start + qhi, orig.ref_start + rhi) - 
+		// 			 	max(orig.query_start + qlo, orig.ref_start + rlo));
+		// 	if (pct(qo, rhi - rlo) || pct(qo, qhi - qlo)) {
+		// 		dprn("overlap in genome failed");
+
+		// 		// attempt to fix it
+		// 		if 
+
+		// 		continue;
+		// 	}
+		// }
 		bool overlap = 0;
 		for (auto &h: hits) {
 			int qo = max(0, min(qhi, h.query_end) - max(qlo, h.query_start));
 			int ro = max(0, min(rhi, h.ref_end) - max(rlo, h.ref_start));
 
-			if (pct(qo, qhi-qlo) >= .9 && pct(ro, rhi-rlo) >= .9) {
+			if (qhi-qlo-qo < REFINE_SIDE_ALIGN && rhi-rlo-ro < REFINE_SIDE_ALIGN) {
+				dprn("between overlap failed");
 				overlap = 1;
 				break;
 			}		
@@ -196,11 +207,14 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq,
 		}
 		guide.push_back(*prev);
 
-		hit.aln = Alignment(hit.query->seq, hit.ref->seq, guide, REFINE_SIDE_ALIGN); 
+		hit.aln = Alignment(hit.query->seq, hit.ref->seq, guide, REFINE_SIDE_ALIGN);
 		update_from_alignment(hit);
-		// eprn("aln: {} {}", hit.aln.cigar_string(), hit.aln.alignment.size());		
+		// eprn("aln: {} {}", hit.aln.cigar_string(), hit.aln.span());		
 		if (hit.aln.span() >= REFINE_MIN_READ) {
+			dprn("IN!");
 			hits.push_back(hit);
+		} else {
+			dprn("failed final size ");
 		}
 	}
 

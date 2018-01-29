@@ -19,7 +19,7 @@ struct Hit;
 
 struct Anchor {
 	int q, r, l;
-	char has_u;
+	int has_u;
 };
 
 
