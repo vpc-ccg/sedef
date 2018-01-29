@@ -23,6 +23,12 @@ using namespace std;
 
 /******************************************************************************/
 
+inline bool ceq(char a, char b) {
+	if (a == '-' || b == '-') return false;
+	if (a == 'N' || b == 'N') return false;
+	return (toupper(a) == toupper(b));
+}
+
 auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
 	// #ifdef __SSE4_1__
@@ -333,7 +339,7 @@ void Alignment::populate_nice_alignment()
 		for (int i = 0; i < c.second; i++) {
 			assert(c.first != 'M' || ia < a.size());
 			assert(c.first != 'M' || ib < b.size());
-			if (c.first == 'M' && toupper(a[ia]) == toupper(b[ib])) {
+			if (c.first == 'M' && ceq(a[ia], b[ib])) {
 				alignment += "|";
 			} else {
 				alignment += "*";
@@ -354,7 +360,7 @@ void Alignment::populate_nice_alignment()
 	}
 	for (int i = 0; i < alignment.size(); i++) {
 		if (align_a[i] != '-' && align_b[i] != '-') {
-			if (toupper(align_a[i]) == toupper(align_b[i])) {
+			if (ceq(align_a[i], align_b[i])) {
 				error.matches++;
 			} else {
 				error.mismatches++;
