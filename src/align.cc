@@ -201,6 +201,7 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 			// dprn("-> bfr trim/b {}", gap.cigar_string());
 			gap.trim_back();
 			// dprn("after trim/b {}", gap.cigar_string());
+			// dprn("{} {} {} {} ", qhi, rhi, gap.end_a, gap.end_b);
 
 			qhi_n = qhi + gap.end_a;
 			rhi_n = rhi + gap.end_b;
@@ -487,8 +488,8 @@ void Alignment::trim_back() // ABCD -> AB--
 	}
 	if (max_i == -1) {
 		a = ""; b = "";
-		start_a = end_a;
-		start_b = end_b;
+		end_a = start_a;
+		end_b = start_b;
 		cigar.clear();
 		return;
 	}

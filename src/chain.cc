@@ -285,10 +285,8 @@ void test2()
 	FastaReference fr("data/hg19/hg19.fa");
 
 	auto TT = cur_time();
-	Hit h = Hit::from_bed(
-		"chr1	150560058	150573195	chr1	150560740	150574028			+	+	13288	0			OK;;;"
-		// "chr1	148809955	148872806	chr16	33014378	33077660		+	+	63282	0			OK;;;"
-	);
+	string s ="chr1	0	201653	chr16	90029664	90318193	w	0	+	-	288529	0";
+	Hit h = Hit::from_bed(s);
 	eprn("{}{} {}...", "+-"[h.query->is_rc], "+-"[h.ref->is_rc], h.to_bed(false).substr(0, 50));
 
 	auto q = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
@@ -296,7 +294,9 @@ void test2()
 	if (h.ref->is_rc) r = rc(r);
 	assert(r.size() == h.ref_end - h.ref_start);
 	assert(q.size() == h.query_end - h.query_start);
+	eprn("{}",q.substr(177410,20));
 
+// 1	87113	177917	1	177417	227417	500
 	eprn("{} {}", string(60, '*'), k);
 	auto T = cur_time();
 	auto hits = fast_align(q, r, h, k);
@@ -310,15 +310,17 @@ void test2()
 			hit.aln.total_error(), hit.aln.gap_error(), hit.aln.mismatch_error(),
 			hit.comment
 		);
+		eprn("{} {} \n {}", 
+			h.query_start+hit.query_start, h.query_start+hit.query_end,
+			hit.aln.print(70).substr(hit.aln.print(70).size()-500));
 	}
 	eprn("done in {} s", elapsed(TT));
-	cin.get();
 }
 
 void test(int, char** argv)
 {
-	// test2();
-	// exit(0);
+	test2();
+	exit(0);
 
 	FastaReference fr("data/hg19/hg19.fa");
 	string s, s2, sl;
