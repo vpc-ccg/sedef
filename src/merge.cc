@@ -106,3 +106,39 @@ vector<Hit> merge(vector<Hit> &hits, const int merge_dist)
 		results.push_back(it.second);
 	return results;
 }
+
+/******************************************************************************/
+
+void merge_main(int argc, char **argv)
+{
+	if (argc < 1) {
+		throw fmt::format("Not enough arguments to merge");
+	}
+
+	string file = argv[0];
+
+	vector<Hit> hits;
+	ifstream fin(file.c_str());
+	if (!fin.is_open()) {
+		throw fmt::format("BED file {} does not exist", file);
+	}
+
+	string s;
+	while (getline(fin, s)) {
+		Hit h = Hit::from_bed(s);
+		hits.push_back(h);
+	}
+	eprn("Read total {} alignments", hits.size());
+	// hits = merge(hits, 0);
+	eprn("After merging remaining {} alignments", hits.size());
+
+	sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
+	return 
+		tie(a.ref->is_rc, a.query->name, a.ref->name, a.query_start, a.ref_start) <
+		tie(b.ref->is_rc, b.query->name, b.ref->name, b.query_start, b.ref_start);
+	});
+
+	for (auto &h: hits) {
+		prn("{}", h.to_bed(false));
+	}
+}

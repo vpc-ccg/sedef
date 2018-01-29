@@ -55,8 +55,8 @@ public:
 
 private: // Internal functions (modify)
 	void populate_nice_alignment();
-
 	void trim();
+
 	void trim_front();
 	void trim_back();
 	

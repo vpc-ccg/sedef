@@ -162,7 +162,7 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 
 			// eprn("{}", h.to_bed(0));
 
-			auto alns = fast_align(fa, fb, kmer_size);
+			auto alns = fast_align(fa, fb, h, kmer_size);
 			for (auto &hh: alns) {
 				hh.query_start += h.query_start;
 				hh.query_end += h.query_start;
@@ -179,7 +179,7 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 				hh.ref->name = h.ref->name;
 				hh.ref->name = h.ref->name;
 				total_written++;
-				prn("{}", hh.to_bed(false));
+				prn("{}\t{}", hh.to_bed(false), h.to_bed(0));
 			}
 			// eprn("{}", h.to_bed(false));
 		}

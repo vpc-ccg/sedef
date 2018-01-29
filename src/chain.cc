@@ -21,7 +21,9 @@ const int MATCH_CHAIN_SCORE = 4;
 
 /******************************************************************************/
 
-vector<Anchor> generate_anchors(const string &query, const string &ref, const int kmer_size)
+vector<Anchor> generate_anchors(const string &query, const string &ref, 
+	const Hit &orig,
+	const int kmer_size)
 {
 	const uint32_t MASK = (1 << (2 * kmer_size)) - 1;
 
@@ -50,6 +52,8 @@ vector<Anchor> generate_anchors(const string &query, const string &ref, const in
 	// eprn("{}", qq.back());qq.pop_back();
 	// eprn("{}", qq.back());
 
+	bool same_chr = orig.query->name == orig.ref->name && orig.query->is_rc == orig.ref->is_rc;
+
 	last_n = -kmer_size, h = 0;
 	int w = 0;
 	for (int i = 0; i < query.size(); i++) {
@@ -68,6 +72,8 @@ vector<Anchor> generate_anchors(const string &query, const string &ref, const in
 		int q = i - kmer_size + 1;
 		int off = query.size();
 		for (int r: it->second) {
+			if (same_chr && abs(orig.ref_start + r - (orig.query_start + q)) <= kmer_size)
+				continue;
 			int d = off + r - q;
 			assert(d >= 0 && d < slide.size());
 			if (q >= slide[d]) {
@@ -206,7 +212,8 @@ auto chain_anchors(vector<Anchor> &anchors)
 
 /******************************************************************************/
 
-vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
+vector<Hit> fast_align(const string &query, const string &ref, 
+	const Hit &orig, int kmer_size)
 {
 	auto T = cur_time();
 	dprn("-- aligning query {:n} --> ref {:n}", query.size(), ref.size());
@@ -214,7 +221,7 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 	auto ref_ptr = make_shared<Sequence>("REF", ref);
 
 	/// 1. Generate the list of hits (small anchors) inside the dot graph	
-	auto anchors = generate_anchors(query, ref, kmer_size);
+	auto anchors = generate_anchors(query, ref, orig, kmer_size);
 	dprn("-- got {} anchors in {} s", anchors.size(), elapsed(T)); T=cur_time();
 
 	/// 2. Run DP on the anchors and collect all different anchors
@@ -258,7 +265,7 @@ vector<Hit> fast_align(const string &query, const string &ref, int kmer_size)
 	dprn(":: elapsed/alignment = {}s", elapsed(T)); T=cur_time();
 
 	/// 3. Refine these chains
-	refine_chains(hits, query, ref);
+	refine_chains(hits, query, ref, orig);
 	dprn(":: elapsed/refinement = {}s", elapsed(T)); T=cur_time();
 
 	return hits;
@@ -277,7 +284,8 @@ void test2()
 
 	auto TT = cur_time();
 	Hit h = Hit::from_bed(
-		"chrX	35014	3024029	chrY	0	2984783			+	+	2989015	0	;;"
+		"chr1	150560058	150573195	chr1	150560740	150574028			+	+	13288	0			OK;;;"
+		// "chr1	148809955	148872806	chr16	33014378	33077660		+	+	63282	0			OK;;;"
 	);
 	eprn("{}{} {}...", "+-"[h.query->is_rc], "+-"[h.ref->is_rc], h.to_bed(false).substr(0, 50));
 
@@ -289,7 +297,7 @@ void test2()
 
 	eprn("{} {}", string(60, '*'), k);
 	auto T = cur_time();
-	auto hits = fast_align(q, r, k);
+	auto hits = fast_align(q, r, h, k);
 	sort(hits.begin(), hits.end(), [](Hit a, Hit b){ return a.query_start < b.query_start; });
 	eprn("{} {}", string(60, '*'), k);
 	for (auto &hit: hits) {
@@ -306,27 +314,13 @@ void test2()
 
 void test(int, char** argv)
 {
-	// test2();
-	// exit(0);
-	// auto x = align(
-	// 	"CAAGAGAATTAAATGGGTTATTGATTAAAAA",
-	// 	"TTTTTTCAAGAGAATTAAATCATTTCTTGATTA"
-	// );
-	// eprn("{}", x.print());
-	// x.trim_back();
-	// eprn("{}", x.print());
-	// x.trim_front();
-	// eprn("{}", x.print());
-	// exit(0);
+	test2();
+	exit(0);
 
 	FastaReference fr("data/hg19/hg19.fa");
 	string s, s2, sl;
 	const int k = 11;
 
-	   // -- missed http://humanparalogy.gs.washington.edu/build37/align_both/0021/both107733
-      // wgac: chrY    1,264,234..  2,018,238 -> chrX    1,314,234..  2,068,238 ... + ... len   754,004 ->
-   // -- missed http://humanparalogy.gs.washington.edu/build37/align_both/0021/both107778
-      // wgac: chrY    2,068,238..  2,649,520 -> chrX    2,118,238..  2,699,520 ... + ... len   581,282 ->
 
 	ifstream MISS("out/misses.txt");
 	int line = 0;
@@ -437,7 +431,7 @@ void test(int, char** argv)
 		vector<int> oqcov(oqe - oqs, 0), 
 					orcov(ore - ors, 0);
 		auto T = cur_time();
-		auto hits = fast_align(q, r, k);
+		auto hits = fast_align(q, r, h, k);
 		sort(hits.begin(), hits.end(), [](Hit a, Hit b){ return a.query_start < b.query_start; });
 		eprn("{} {}", string(60, '*'), k);
 		for (auto &hit: hits) {

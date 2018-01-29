@@ -44,6 +44,7 @@ void stats(const string &ref_path, const string &bed_path)
 		}
 		assert(cigar.size());
 		h.aln = Alignment(fa, fb, cigar);
+		h.aln.trim();
 		// hits.push_back(h);
 	// }
 	// eprn("Loaded {} hits", hits.size());
@@ -72,9 +73,9 @@ void stats(const string &ref_path, const string &bed_path)
 			indel_a += a == '-';
 			indel_b += b == '-';
 			matchB += a != '-' && a == b;
+			lowercaseA += (h.aln.align_a[i] != '-' && islower(h.aln.align_a[i]));
+			lowercaseB += (h.aln.align_b[i] != '-' && islower(h.aln.align_b[i]));
 			if (a != '-' && b != '-') {
-				lowercaseA += (bool)islower(h.aln.align_a[i]);
-				lowercaseB += (bool)islower(h.aln.align_b[i]);
 				alignB += 1;
 				if (a != b) {
 					mismatchB += 1;
@@ -105,9 +106,11 @@ void stats(const string &ref_path, const string &bed_path)
 			h.to_bed(false), 
 			align_length, indel_a, indel_b, alignB, matchB, mismatchB,
 			transitionsB, transversionsB, fracMatch, fracMatchIndel, jcK, k2K,
-			lowercaseA, lowercaseB);
+			lowercaseA, lowercaseB,
+			h.aln.gaps()
+			);
 		eprnn("\rProcessed hit {:n}", ++hit_count);
-		exit(0);
+		// exit(0);
 	}
 	eprn("\nDone!");
 }

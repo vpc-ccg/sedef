@@ -20,4 +20,5 @@ using namespace std;
 
 /******************************************************************************/
 
-std::vector<Hit> fast_align(const std::string &query, const std::string &ref, int kmer_size = 12);
+std::vector<Hit> fast_align(const std::string &query, const std::string &ref, 
+	const Hit &orig, int kmer_size = 12);

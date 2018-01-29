@@ -24,12 +24,14 @@ const int REFINE_MAX_GAP = 10000;
 
 /******************************************************************************/
 
-void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
+void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq,
+	const Hit &orig)
 {
 	dprn(":: taking {} anchors for refinement", anchors.size());
 
 	sort(anchors.begin(), anchors.end());
 
+	bool same_chr = orig.query->name == orig.ref->name && orig.query->is_rc == orig.ref->is_rc;
 	vector<int> score;	
 	for (auto &a: anchors) {
 		score.push_back(
@@ -37,6 +39,7 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			- REFINE_MISMATCH * a.aln.mismatches()
 			- REFINE_GAP * a.aln.gap_bases()
 		);
+
 		// dprn("-- init {}: (len:{}) {}..{} --> {}..{} ; score = {} cigar = {}", 
 		// 	&a-&anchors[0],
 		// 	abs(a.query_start- a.query_end), 
@@ -44,10 +47,24 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 		// 	a.aln.cigar_string());
 	}
 
+
 	vector<int> dp(anchors.size(), 0);
 	vector<int> prev(anchors.size(), -1);
 	set<pair<int, int>, greater<pair<int, int>>> maxes;
 	for (int ai = 0; ai < anchors.size(); ai++) {
+
+		if (same_chr) {
+			auto &c = anchors[ai];
+			int qlo = c.query_start, qhi = c.query_end;
+			int rlo = c.ref_start, rhi = c.ref_end;
+			int qo = max(0, 
+					min(orig.query_start + qhi, orig.ref_start + rhi) - 
+				 	max(orig.query_start + qlo, orig.ref_start + rlo));
+			if (qo >= 1) { // no gap between 
+				continue;
+			}
+		}
+
 		dp[ai] = score[ai];
 		for (int aj = ai - 1; aj >= 0; aj--) {
 			auto &c = anchors[ai];
@@ -72,6 +89,17 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 
 			if (ma >= REFINE_MAX_GAP)
 				continue;
+
+			if (same_chr) {
+				int qlo = p.query_end, qhi = cqs;
+				int rlo = p.ref_end, rhi = crs;
+				int qo = max(0, 
+						min(orig.query_start + qhi, orig.ref_start + rhi) - 
+					 	max(orig.query_start + qlo, orig.ref_start + rlo));
+				if (qo >= 1) { // no gap between 
+					continue;
+				}
+			}
 
 			int mis = REFINE_MISMATCH * mi, 
 				gap = REFINE_GAPOPEN + REFINE_GAP * (ma - mi);
@@ -122,13 +150,38 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq)
 			auto &y = anchors[p];
 			dprn("    {}..{}->{}..{}", y.query_start, y.query_end, y.ref_start, y.ref_end);
 		}
+
+		if (est_size < REFINE_MIN_READ - REFINE_SIDE_ALIGN)
+			continue;
+
+
+		if (same_chr) {
+			// assert(orig.query->is_rc == 0);
+			int qo = max(0, 
+						min(orig.query_start + qhi, orig.ref_start + rhi) - 
+					 	max(orig.query_start + qlo, orig.ref_start + rlo));
+			if (pct(qo, rhi - rlo) >= .3 || pct(qo, qhi - qlo)) {
+				continue;
+			}
+		}
+		bool overlap = 0;
+		for (auto &h: hits) {
+			int qo = max(0, min(qhi, h.query_end) - max(qlo, h.query_start));
+			int ro = max(0, min(rhi, h.ref_end) - max(rlo, h.ref_start));
+
+			if (pct(qo, qhi-qlo) >= .9 && pct(ro, rhi-rlo) >= .9) {
+				overlap = 1;
+				break;
+			}		
+		}
+		if (overlap)
+			continue;
+
 		auto hit = Hit {
 			anchors.front().query, qlo, qhi,
 			anchors.front().ref, rlo, rhi
 		};
 
-		if (est_size < REFINE_MIN_READ - REFINE_SIDE_ALIGN)
-			continue;
 		vector<Hit> guide;
 		Hit *prev = &anchors[paths.back()[0]];
 		for (int pi = 1; pi < paths.back().size(); pi++) {
