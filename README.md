@@ -66,11 +66,12 @@ for j in out/bins/bucket_???? ; do
 	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
 done | time parallel --will-cite -j 80 --eta
 >> 5:06
-
+503
 grep Finished out/log/bins/*.log | wc -l
 >> 1000
 grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
 >> 16919.4 (4.70)
+17086
 grep Memory out/log/bins/*.log | awk '{if($3>m)m=$3}END{print m}'
 >> 4993.0
 ```
@@ -84,7 +85,8 @@ cat out/bins/*.bed > out.final.bed
 wc -l out.*bed
 >>  1656305 out/out.bed
 >>  1558896 out/out.init.bed
->>   953709 out/out.final.bed
+>>   231472 out/out.final.bed
+>>	  71204 out.hg19.bed
 ```
 
 Then analyse:
@@ -96,7 +98,7 @@ for i in out/out.bed out/out.init.bed out/out.final.bed ; do
 done
 
 ~/mesa ./sedef stats hg19.fa out.final.bed > out.hg19.bed
->> 0m 57s (7.4G)
+>> 0m 58s (7.5G)
 ```
 
 
