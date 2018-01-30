@@ -151,7 +151,7 @@ void stats(const string &ref_path, const string &bed_path)
 					uppercaseA, uppercaseB,
 					h.aln.matches(), h.aln.mismatches(), h.aln.gaps(), h.aln.gap_bases()
 				);
-				if (out_count > 10) exit(0);
+				// if (out_count > 10) exit(0);
 			}
 			prev = l;
 		}
