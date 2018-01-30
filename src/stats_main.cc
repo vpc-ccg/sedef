@@ -134,7 +134,7 @@ void stats(const string &ref_path, const string &bed_path)
 		double errorScaled = (h.aln.gaps() + h.aln.mismatches()) / 
 			double(h.aln.gaps() + h.aln.mismatches() + h.aln.matches());
 
-		if (uppercaseA >= 100 && uppercaseB >= 100 && !too_big_overlap) {
+		if (uppercaseA >= 100 && uppercaseB >= 100 && !too_big_overlap && errorScaled <= .5) {
 			string l = h.to_bed(false);
 			
 			if (l != prev) {
