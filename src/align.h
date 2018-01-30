@@ -80,7 +80,7 @@ public:
 		return error.matches;
 	}
 	int mismatches() const {
-		return error.matches;
+		return error.mismatches;
 	}
 	int gap_bases() const {
 		return error.gap_bases;

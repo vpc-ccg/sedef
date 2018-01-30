@@ -65,12 +65,12 @@ for j in out/bins/bucket_???? ; do
 	k=$(basename $j);
 	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
 done | time parallel --will-cite -j 80 --eta
->> 9m 32s
+>> 5:06
 
 grep Finished out/log/bins/*.log | wc -l
 >> 1000
 grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 20715.4 (5.75 h)  
+>> 16919.4 (4.70)
 grep Memory out/log/bins/*.log | awk '{if($3>m)m=$3}END{print m}'
 >> 4993.0
 ```
@@ -95,8 +95,8 @@ for i in out/out.bed out/out.init.bed out/out.final.bed ; do
 	mesa python scratch/check-overlap.py $i > ${i}.log  ; 
 done
 
-mesa ./sedef stats data/hg19/hg19.fa out/out.final.bed > out/out.finished.bed
->> 1m 43s (1.9G)
+~/mesa ./sedef stats hg19.fa out.final.bed > out.hg19.bed
+>> 0m 57s (7.4G)
 ```
 
 

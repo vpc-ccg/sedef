@@ -131,18 +131,27 @@ void stats(const string &ref_path, const string &bed_path)
 		too_big_overlap &= same_chr;
 		// too_big_overlap = 0;
 
+		double errorScaled = (h.aln.gaps() + h.aln.mismatches()) / 
+			double(h.aln.gaps() + h.aln.mismatches() + h.aln.matches());
+
 		if (uppercaseA >= 100 && uppercaseB >= 100 && !too_big_overlap) {
 			string l = h.to_bed(false);
 			
 			if (l != prev) {
 				h.name = fmt::format("S{:05}", ++out_count);
-				prn("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
+				prn("{}\t"
+					"{}\t{}\t{}\t{}\t{}\t{}\t"
+					"{}\t{}\t{}\t{}\t{}\t{}\t"
+					"{}\t{}\t{}\t"
+					"{}\t{}\t{}\t{}", 
 					h.to_bed(false), 
 					align_length, indel_a, indel_b, alignB, matchB, mismatchB,
 					transitionsB, transversionsB, fracMatch, fracMatchIndel, jcK, k2K,
 					h.aln.gaps(),
-					uppercaseA, uppercaseB
+					uppercaseA, uppercaseB,
+					h.aln.matches(), h.aln.mismatches(), h.aln.gaps(), h.aln.gap_bases()
 				);
+				if (out_count > 10) exit(0);
 			}
 			prev = l;
 		}
