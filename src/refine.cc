@@ -124,8 +124,10 @@ void refine_chains(vector<Hit> &anchors, const string &qseq, const string &rseq,
 		if (used[maxi])
 			continue;
 		paths.push_back(deque<int>());
+		int hasu = 0;
 		while (maxi != -1 && (!used[maxi])) {
 			paths.back().push_front(maxi);
+			hasu += anchors[maxi].jaccard;
 			used[maxi] = true;
 			maxi = prev[maxi];
 		}

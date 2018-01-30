@@ -40,7 +40,7 @@ double overlap(int sa, int ea, int sb, int eb)
 vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac, string chr = "")
 {
 	eprnn("Loading reference... ");
-	FastaReference fr(ref_path);
+	// FastaReference fr(ref_path);
 	map<pair<string, bool>, shared_ptr<Sequence>> ref;
 
 	string s;
@@ -69,21 +69,21 @@ vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac, string chr
 
 		if (chrq.size() > 5 || chrr.size() > 5)
 			continue;
-		if (chr != "" && (chrq != chr || chrr != chr))
-			continue;
+		// if (chr != "" && (chrq != chr || chrr != chr))
+		// 	continue;
 
-		if (ref.find({chrq, false}) == ref.end()) 
-			ref[{chrq, false}] = make_shared<Sequence>(chrq, fr.get_sequence(chrq));
-		if (ref.find({chrr, rc}) == ref.end()) 
-			ref[{chrr, rc}] = make_shared<Sequence>(chrr, fr.get_sequence(chrr), rc);
-		hit.query = ref[{chrq, false}];
-		hit.ref = ref[{chrr, rc}];
+		// if (ref.find({chrq, false}) == ref.end()) 
+		// 	ref[{chrq, false}] = make_shared<Sequence>(chrq, fr.get_sequence(chrq));
+		// if (ref.find({chrr, rc}) == ref.end()) 
+		// 	ref[{chrr, rc}] = make_shared<Sequence>(chrr, fr.get_sequence(chrr), rc);
+		// hit.query = ref[{chrq, false}];
+		// hit.ref = ref[{chrr, rc}];
 
-		if (hit.ref->is_rc) {
-			swap(hit.ref_start, hit.ref_end);
-			hit.ref_start = hit.ref->seq.size() - hit.ref_start;
-			hit.ref_end = hit.ref->seq.size() - hit.ref_end;
-		}
+		// if (hit.ref->is_rc) {
+		// 	swap(hit.ref_start, hit.ref_end);
+		// 	hit.ref_start = hit.ref->seq.size() - hit.ref_start;
+		// 	hit.ref_end = hit.ref->seq.size() - hit.ref_end;
+		// }
 		if (!is_wgac || seen.find(hit.name) == seen.end()) {
 			seen.insert(hit.name);
 			hits.push_back(hit);
@@ -100,17 +100,33 @@ vector<Hit> read_wgac(string ref_path, string tab_path, bool is_wgac, string chr
 // 12517691
 void align_wgac(string ref_path, string tab_path)
 {
-	// auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true, "chr1");
-		
-	// #pragma omp parallel for
-	// for (int si = 0; si < hits.size(); si++) {
-	// 	auto &hit = hits[si];
-	// 	// if (hit.name != "align_both/0015/both077002") continue;
-	// 	// eprn("{}\n{}", string(100, '*'), hit.to_bed());
+	// for (int i = 0; i < 24; i++)
+	auto hits = read_wgac(ref_path, tab_path, /*is_wgac*/ true);
+	FastaReference fr(ref_path);
 
-	// 	auto refq = hit.query->seq.substr(hit.query_start, hit.query_end - hit.query_start);
-	// 	auto refr = hit.ref->seq.substr(hit.ref_start, hit.ref_end - hit.ref_start);
-	// 	// auto hits = fast_align(refq, refr);
+	// #pragma omp parallel for
+	for (int si = 0; si < hits.size(); si++) {
+		auto &h = hits[si];
+		// if (hit.name != "align_both/0015/both077002") continue;
+		// eprn("{}\n{}", string(100, '*'), hit.to_bed());
+
+		// auto refq = hit.query->seq.substr(hit.query_start, hit.query_end - hit.query_start);
+		// auto refr = hit.ref->seq.substr(hit.ref_start, hit.ref_end - hit.ref_start);
+		// auto hits = fast_align(refq, refr);
+		auto refq = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
+		auto refr = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
+		if (h.ref->is_rc) refr = rc(refr);
+
+		// span
+		int qup=0; for (auto c: refq) if (isupper(c)&&c!='N') qup++;
+		int rup=0; for (auto c: refr) if (isupper(c)&&c!='N') rup++;
+		prn("{}..{} {}..{} {} {} {} {} {} ",
+			refq.substr(0,10), refq.substr(refq.size()-10),
+			refr.substr(0,10), refr.substr(refr.size()-10), 
+			h.name, 
+			refq.size(), refr.size(),
+			qup, rup);
+	}
 
 	// 	#pragma omp critical
 	// 	{
@@ -164,12 +180,16 @@ void check_wgac(string ref_path, string bed_path)
 	int total = 0, pass = 0, total_fails = 0;
 
 	// #pragma omp parallel for
-	for (int si = 0; si < 10 /*hits.size()*/; si++) {
+	for (int si = 0; si < hits.size(); si++) {
 		auto &hit = hits[si];
 		string out;
 
 		auto refq = hit.query->seq.substr(hit.query_start, hit.query_end - hit.query_start);
 		auto refr = hit.ref->seq.substr(hit.ref_start, hit.ref_end - hit.ref_start);
+
+
+		continue;
+
 		throw "please don't";
 		//hit.aln = Alignment::from_cigar(refq, refr, CIGAR__);
 		

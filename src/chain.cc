@@ -196,10 +196,10 @@ auto chain_anchors(vector<Anchor> &anchors)
 		int maxi = m.second;
 		if (used[maxi])
 			continue;
-		bool has_u = 0;
+		int has_u = 0;
 		while (maxi != -1 && !used[maxi]) {
 			path.push_back(maxi);
-			has_u |= anchors[maxi].has_u;
+			has_u += anchors[maxi].has_u;
 			used[maxi] = true;
 			maxi = prev[maxi];
 		}
@@ -235,6 +235,7 @@ vector<Hit> fast_align(const string &query, const string &ref,
 		bool has_u = bounds[bi].second;
 		int be = bounds[bi].first;
 		int bs = bounds[bi - 1].first;
+		int up = bounds[bi].second;
 
 		int qlo = anchors[chain[be - 1]].q,
 			qhi = anchors[chain[bs]].q + anchors[chain[bs]].l;
@@ -249,7 +250,7 @@ vector<Hit> fast_align(const string &query, const string &ref,
 		assert(qhi <= query.size());
 		assert(rhi <= ref.size());
 
-		Hit a { query_ptr, qlo, qhi, ref_ptr, rlo, rhi };
+		Hit a { query_ptr, qlo, qhi, ref_ptr, rlo, rhi, up };
 		guides.push_back(vector<int>());
 		for (int bi = be - 1; bi >= bs; bi--) {
 			guides.back().emplace_back(chain[bi]);
@@ -285,7 +286,7 @@ void test2()
 	FastaReference fr("data/hg19/hg19.fa");
 
 	auto TT = cur_time();
-	string s ="chr1	0	201653	chr16	90029664	90318193	w	0	+	-	288529	0";
+	string s ="chr1	173293326	173301987	chr4	167977314	167985993	0	0	+	+	8679	0";
 	Hit h = Hit::from_bed(s);
 	eprn("{}{} {}...", "+-"[h.query->is_rc], "+-"[h.ref->is_rc], h.to_bed(false).substr(0, 50));
 
@@ -294,7 +295,7 @@ void test2()
 	if (h.ref->is_rc) r = rc(r);
 	assert(r.size() == h.ref_end - h.ref_start);
 	assert(q.size() == h.query_end - h.query_start);
-	eprn("{}",q.substr(177410,20));
+	// eprn("{}",q.substr(177410,20));
 
 // 1	87113	177917	1	177417	227417	500
 	eprn("{} {}", string(60, '*'), k);

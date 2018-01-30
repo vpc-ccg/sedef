@@ -72,6 +72,7 @@ with open(path + '_temp.bed', 'w') as f:
         hits[r.alignfile] = list()
         name_to_coor[r.alignfile] = r #(r.chromStart, r.chromEnd, r.otherStart, r.otherEnd)
 
+print ':: Total {} WGAC hits to consider'.format(len(hits))
 
 def overlap(sa, ea, sb, eb):
     return max(0, min(ea, eb) - max(sa, sb))
