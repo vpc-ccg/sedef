@@ -11,6 +11,8 @@
 #include <bitset>
 #include <unordered_set>
 
+#include <boost/dynamic_bitset.hpp>
+
 #include "align.h"
 #include "common.h"
 #include "fasta.h"
@@ -166,36 +168,35 @@ void stats(const string &ref_path, const string &bed_path)
 
 /******************************************************************************/
 
-#include <boost/dynamic_bitset.hpp>
-
-void get_differences()
+void get_differences(const string &ref_path, const string &bed_path,
+	const string &wgac_path)
 {
 	map<string, boost::dynamic_bitset<>> sedef;
 	map<string, boost::dynamic_bitset<>> wgac;
 
 	string s;
-	ifstream fin("results/out.hg19.bed", ifstream::in);
+	ifstream fin(bed_path);
 	while (getline(fin, s)) {
 		string cigar;
 		Hit h = Hit::from_bed(s, &cigar);
 
-		auto c1 = fmt::format("{}{}", h.query->name, "+-"[h.query->is_rc]);
-		auto c2 = fmt::format("{}{}", h.ref->name, "+-"[h.ref->is_rc]);
+		auto c1 = fmt::format("{}", h.query->name, "+-"[h.query->is_rc]);
+		auto c2 = fmt::format("{}", h.ref->name, "+-"[h.ref->is_rc]);
 		if (sedef.find(c1)==sedef.end()) sedef[c1]=boost::dynamic_bitset<>(250000000);
 		if (sedef.find(c2)==sedef.end()) sedef[c2]=boost::dynamic_bitset<>(250000000);
 		for (int i = h.query_start; i < h.query_end; i++) sedef[c1].set(i);
 		for (int i = h.ref_start; i < h.ref_end; i++) sedef[c2].set(i);
 	}
 
-	eprn("sedef done");
+	eprn("SEDEF reading done!");
 
-	ifstream fiw("data/GRCh37GenomicSuperDup.tab");
+	ifstream fiw(wgac_path);
 	getline(fiw, s);
 	unordered_set<string> seen;
 	while (getline(fiw, s)) {
 		Hit h = Hit::from_wgac(s);
-		auto c1 = fmt::format("{}{}", h.query->name, "+-"[h.query->is_rc]);
-		auto c2 = fmt::format("{}{}", h.ref->name, "+-"[h.ref->is_rc]);		
+		auto c1 = fmt::format("{}", h.query->name, "+-"[h.query->is_rc]);
+		auto c2 = fmt::format("{}", h.ref->name, "+-"[h.ref->is_rc]);		
 		if (c1.size() > 6 || c2.size() > 6)
 			continue;
 		
@@ -208,9 +209,9 @@ void get_differences()
 		}
 	}
 
-	eprn("wgac done");
+	eprn("WGAC reading done!");
 
-	FastaReference fr("data/hg19/hg19.fa");
+	FastaReference fr(ref_path);
 
 	int intersect = 0, wgac_only = 0, wgac_span = 0, sedef_only = 0, sedef_span = 0;
 
@@ -221,7 +222,7 @@ void get_differences()
 		auto &s = p.second;
 		auto &w = wgac[p.first];
 
-		auto seq = fr.get_sequence(p.first.substr(0, p.first.size()-1));
+		auto seq = fr.get_sequence(p.first);
 
 		for (int i = 0; i < seq.size(); i++) {
 			if ((s[i] & (~w[i])) && isupper(seq[i]) && seq[i] != 'N') {
@@ -239,13 +240,15 @@ void get_differences()
 		wgac_span += w.count();
 	}
 	
-	eprn("SEDEF: span {:12n}\n"
-		 "       only {:12n}\n"
-		 "       on/u {:12n}\n"
-		 "       miss {:12n}\n"
-		 "       mi/u {:12n}\n"
-		 "WGAC:  span {:12n}\n"
-		 "       intr {:12n}", sedef_span, sedef_only, sedef_extra_upper, wgac_only, miss_upper, wgac_span, intersect);
+	eprn("SEDEF: spans              {:12n}\n"
+		 "       unique             {:12n}\n"
+		 "       unique (uppercase) {:12n}\n"
+		 "       misses             {:12n}\n"
+		 "       misses (uppercase) {:12n}\n"
+		 "WGAC:  spans              {:12n}\n"
+		 "       intersects         {:12n}", 
+		 sedef_span, sedef_only, sedef_extra_upper, wgac_only, 
+		 miss_upper, wgac_span, intersect);
 }
 
 /******************************************************************************/
@@ -260,7 +263,7 @@ void stats_main(int argc, char **argv)
 	if (command == "generate") {
 		stats(argv[1], argv[2]);
 	} else if (command == "diff") {
-		get_differences(); //(argv[1], argv[2], atoi(argv[3]));
+		get_differences(argv[1], argv[2], argv[3]);
 	} else {
 		throw fmt::format("Unknown stats command");
 	}
