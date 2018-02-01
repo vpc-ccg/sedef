@@ -1,5 +1,11 @@
 # SEDEF: SEgmental Duplication Evaluation Framework
 
+SEDEF is a tool to find all segmental duplications in the genome.
+
+## Paper Results
+
+[Please find here](results/out.hg19.bed) the calls for hg19.
+
 ## How to compile
 
 Simple! Use
