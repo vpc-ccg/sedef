@@ -1,8 +1,12 @@
 # SEDEF: SEgmental Duplication Evaluation Framework
 
-# UNDER CONSTRUCTION
+SEDEF is a tool to find all segmental duplications in the genome.
 
-## Compile
+## Paper Results
+
+[Please find here](results/out.hg19.bed) the calls for hg19.
+
+## How to compile
 
 Simple! Use
 
@@ -18,22 +22,27 @@ By default, SEDEF uses Intel C++ compiler. If you are using g++, build with:
 make -j release CXX=g++
 ```
 
-## Run
+SEDEF requires Boost libraries in order to compile. In case you have non-standard Boost installation, you can still compile as follows:
 
-Suppose that our genome is in `hg19.fa` file.
-
-First index the file:
-
+```bash
+CPATH={path_to_boost} make -j release
 ```
+
+## How to run
+
+> The nice wrapper for all these steps will be coming in next couple of days. Stay tuned.
+
+Suppose that our genome is in `hg19.fa` file (we used UCSC hg19 with "normal" 24 chromosomes without patches (unGl) or random strains (chrXX_random). First make sure to index the file:
+
+```bash
 samtools faidx hg19.fa
 ```
 
-Then run the `sedef-search` in parallel to get the initial hits:
-
+Then run the `sedef-search` in parallel (in this example, we use GNU parallel) to get the initial SD seeds:
 ```bash
-# VPC
-#echo "qsub -cwd -V -b y -N \"S_${i}_${j}_${m}\" -l h_vmem=10G -l h_rt=24:00:00 -l h_stack=8M " \
-#	"python2.7 mesa sedef/sedef search single fasta/hg19.fa chr$i chr$j $m"
+mkdir -p out # For the output
+mkdir -p out/log # For the logs
+
 for i in `seq 1 22` X Y; do 
 for j in `seq 1 22` X Y; do  
 	SI=`awk '$1=="chr'$i'" {print $2}' hg19.fa.fai`; 
@@ -41,65 +50,79 @@ for j in `seq 1 22` X Y; do
 	if [ "$SI" -le "$SJ" ] ; 
 	then 
 		for m in y n ; do
-		echo "~/mesa ./sedef search single hg19.fa chr$i chr$j $m >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
+		echo "sedef search single hg19.fa chr$i chr$j $m >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
 		done; 
 	fi
 done
 done | time parallel --will-cite -j 80 --eta
->> 10m 11s
+# Running time in our case: 10m 11s
 
+# Now make sure that all runs completed successfully 
 grep Total out/log/*.log | wc -l
->> 600s
+# You should see here 600 (or n(n+1) if you have n chromosomes in your file)
+
+# Get the single-core running time
 grep Wall out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 43414.7 (12.06 h)
+# In our case we get 43414.7 (12.06 h)
+
+# Get the maximum meory usage as well
 grep Memory out/log/*.log | awk '{if($3>m)m=$3}END{print m}'
->> 4889.0
+# We got 4889.0
 ```
 
 Then use `sedef-align` to bucket the files for the optimal parallel alignment, and
 afterwards run the whole alignment:
-
 ```bash
-~/mesa ./sedef align bucket out out/bins 1000
->> 36s (5.2G)
+# First bucket the reads into 1000 bins
+mkdir -p out/bins
+mkdir -p out/log/bins
+time sedef align bucket out out/bins 1000
+# Takes 36s (uses 5.2G of memory)
 
+# Now run the alignment
 for j in out/bins/bucket_???? ; do
 	k=$(basename $j);
-	echo "~/mesa ./sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
+	echo "sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
 done | time parallel --will-cite -j 80 --eta
->> 5:06
-503
+# It took 5m 06s
+
+# Make sure that all runs finished nicely
 grep Finished out/log/bins/*.log | wc -l
->> 1000
+# Should be number of bins (in our case, 1000)
+
+# Get again the total running time
 grep Wall out/log/bins/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
->> 16919.4 (4.70)
-17086
+# We have 17086 (4.74h)
+
+# And the memory
 grep Memory out/log/bins/*.log | awk '{if($3>m)m=$3}END{print m}'
->> 4993.0
+# We got 5017.5
 ```
 
 Finally, run `sedef-stats` to produce the final output:
-
 ```bash
-cat out/*.bed > out.bed
-cat out/bins/bucket_???? > out.init.bed
-cat out/bins/*.bed > out.final.bed
+# Concatenate the files 
+cat out/*.bed > out.bed # seed SDs
+cat out/bins/bucket_???? > out.init.bed # potential SD regions
+cat out/bins/*.bed > out.final.bed # final chains
+
+# Count the number of SDs in each stage
 wc -l out.*bed
->>  1656305 out/out.bed
->>  1558896 out/out.init.bed
->>   231472 out/out.final.bed
->>	  67467 out.hg19.bed
+#  1656305 out/out.bed
+#  1558896 out/out.init.bed
+#   231472 out/out.final.bed
+
+# Now get the final calls
+sedef stats generate hg19.fa out.final.bed > out.hg19.bed
+# Took 0m 58s (7.5G)
 ```
 
-Then analyse:
+Final calls will be in `out.hg19.bed`.
 
-```bash
-rsync -Pva meganode:/local-scratch/ibrahim/sedef/out.*bed  out/
-for i in out/out.bed out/out.init.bed out/out.final.bed ; do 
-	mesa python scratch/check-overlap.py $i > ${i}.log  ; 
-done
+## Notes ... 
 
-~/mesa ./sedef stats hg19.fa out.final.bed > out.hg19.bed
->> 0m 58s (7.5G)
+```# VPC
+#echo "qsub -cwd -V -b y -N \"S_${i}_${j}_${m}\" -l h_vmem=10G -l h_rt=24:00:00 -l h_stack=8M " \
+#	"python2.7 mesa sedef/sedef search single fasta/hg19.fa chr$i chr$j $m"
 ```
 
