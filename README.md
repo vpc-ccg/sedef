@@ -47,6 +47,8 @@ For example, to run hg19.fa on 80 cores type:
 You can add `-f` if `sedef_hg19` already exists (it will overwrite its content though). The final results will be
 located in `sedef_hg19/final.bed`.
 
+Please note that `sedef.sh` requires SAMtools and GNU Parallel.
+
 ### Manual transmission
 
 First make sure to index the file:
