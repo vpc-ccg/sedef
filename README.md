@@ -30,9 +30,26 @@ CPATH={path_to_boost} make -j release
 
 ## How to run
 
-> The nice wrapper for all these steps will be coming in next couple of days. Stay tuned.
+Suppose that our genome is in `hg19.fa` file (we used UCSC hg19 with "normal" 24 chromosomes without patches (unGl) or random strains (chrXX_random).
 
-Suppose that our genome is in `hg19.fa` file (we used UCSC hg19 with "normal" 24 chromosomes without patches (unGl) or random strains (chrXX_random). First make sure to index the file:
+### Automatic transmission
+
+Just go to `sedef` directory and run
+```bash
+./sedef.sh -o <output> -j <jobs> <genome> 
+```
+
+For example, to run hg19.fa on 80 cores type:
+```bash
+./sedef.sh -o sedef_hg19 -j 80 hg19.fa 
+```
+
+You can add `-f` if `sedef_hg19` already exists (it will overwrite its content though). The final results will be
+located in `sedef_hg19/final.bed`.
+
+### Manual transmission
+
+First make sure to index the file:
 
 ```bash
 samtools faidx hg19.fa
