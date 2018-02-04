@@ -10,12 +10,12 @@ fi
 PATH="${PATH}:"`pwd`
 
 if ! command -v "samtools" >/dev/null 2>&1 ; then
-	echo "Samtools not found in \$PATH"
+	echo "SAMtools not found in \$PATH (${PATH})"
 	exit 1
 fi
 
 if ! command -v "parallel" >/dev/null 2>&1 ; then
-	echo "GNU Parallel not found in \$PATH"
+	echo "GNU Parallel not found in \$PATH (${PATH})"
 	exit 1
 fi
 
@@ -38,7 +38,8 @@ force="n"
 while true; do
 	case "$1" in
 		-h|--help)
-			show_help
+			echo "Usage: sedef.sh -o <output directory> -j <max. processes> [-f] <genome.fa>"
+			echo "-f removes output directory if it exists; -h shows this message"
 			exit 0
 			;;
 		-f|--force)
