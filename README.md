@@ -28,6 +28,8 @@ SEDEF requires Boost libraries in order to compile. In case you have non-standar
 CPATH={path_to_boost} make -j release
 ```
 
+> **Warning:** Only Linux is currently supported; macOS support is planned later on.
+
 ## How to run
 
 Suppose that our genome is in `hg19.fa` file (we used UCSC hg19 with "normal" 24 chromosomes without patches (unGl) or random strains (chrXX_random).
