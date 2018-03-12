@@ -19,8 +19,8 @@ using namespace std;
 
 /******************************************************************************/
 
-extern char _binary_patterns_bin_start;
-extern char _binary_patterns_bin_size;
+// extern char _binary_patterns_bin_start;
+// extern char _binary_patterns_bin_size;
 
 /******************************************************************************/
 
@@ -40,6 +40,8 @@ void AHOAutomata::Trie::insert_pattern (const string &s, int level, int id)
 AHOAutomata::AHOAutomata():
 	trie(make_shared<Trie>())
 {
+	throw string("Not implemented");
+
 	patterns.reserve(5000000);
 
 	size_t dest_sz = 20 * 1000 * 1000;
@@ -52,6 +54,9 @@ AHOAutomata::AHOAutomata():
 	// );
 	// fwrite(destination.data(), 1, dest_sz, stdout);
 	// exit(0);
+
+	// TODO should be extern!
+	char _binary_patterns_bin_start, _binary_patterns_bin_size;
 
 	int c = uncompress(
 		destination.data(), &dest_sz,

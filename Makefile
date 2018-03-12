@@ -1,10 +1,10 @@
 CXX=icpc
 CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color -march=native
-LDFLAGS=-lrt -lz -fopenmp
+LDFLAGS=-lz -fopenmp
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
 SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 
-OBJECTS:=$(SOURCES:.cc=.o) patterns.o
+OBJECTS:=$(SOURCES:.cc=.o)
 DEP := $(OBJECTS:.o=.d)
 
 CPPFLAGS += -MMD -MP -I.
@@ -66,6 +66,3 @@ $(EXECUTABLE): $(OBJECTS)
 
 clean:
 	rm -rf $(EXECUTABLE) $(TESTEXE) $(OBJECTS) $(DEP)
-
-patterns.o:
-	ld -r -b binary -o patterns.o patterns.bin
