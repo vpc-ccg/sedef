@@ -647,7 +647,7 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 
 
 
-	q = 0, r = 0, i;
+	q = 0, r = 0;
 	for (i = 0; i < cur.alignment.size() && r < trim; i++) {
 		if (cur.align_a[i] != '-') q++;
 		if (cur.align_b[i] != '-') r++;

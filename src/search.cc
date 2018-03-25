@@ -21,6 +21,10 @@ using namespace std;
 
 /******************************************************************************/
 
+extern bool do_uppercase_seeds;
+
+/******************************************************************************/
+
 /* extern */ int64_t TOTAL_ATTEMPTED = 0;
 /* extern */ int64_t JACCARD_FAILED = 0;
 /* extern */ int64_t INTERVAL_FAILED = 0;
@@ -198,7 +202,7 @@ Hit extend(SlidingMap &winnow,
 	ref_start = ref_winnow_start ? ref_hash->minimizers[ref_winnow_start - 1].loc + 1 : 0;
 	ref_end = ref_winnow_end < ref_hash->minimizers.size() ? ref_hash->minimizers[ref_winnow_end].loc : ref_hash->seq->seq.size();
 
-	for (int i = 0, j = winnow.jaccard(), cur_undo = 0; ;) {
+	for (; ;) {
 		int max_match = min(MAX_MATCH, same_genome 
 			? int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)) 
 			: MAX_MATCH);
@@ -234,34 +238,6 @@ Hit extend(SlidingMap &winnow,
 		ref_hash->seq, ref_start, ref_end, 
 		winnow.jaccard(), "", "OK", {}
 	};
-
-	// Move right
-	// auto best_winnow = winnow;
-	// int best_ref_start = ref_start, 
-	//     best_ref_end = ref_end;
-	// int best_ref_winnow_start = ref_winnow_start, 
-	//     best_ref_winnow_end = ref_winnow_end;
-	// while (query_end < query_hash->seq->seq.size() && ref_end < ref_hash->seq->seq.size()) {
-	// 	if (ref_winnow_start < ref_hash->minimizers.size() && ref_hash->minimizers[ref_winnow_start].loc < ref_start + 1) {
-	// 		winnow.remove_from_reference(ref_hash->minimizers[ref_winnow_start++].hash);
-	// 	}
-	// 	if (ref_winnow_end < ref_hash->minimizers.size() && ref_hash->minimizers[ref_winnow_end].loc == ref_end) {
-	// 		winnow.add_to_reference(ref_hash->minimizers[ref_winnow_end++].hash);
-	// 	}
-	// 	if (winnow.jaccard() > best_winnow.jaccard()) {
-	// 		best_ref_start = ref_start;
-	// 		best_ref_end = ref_end;
-	// 		best_ref_winnow_start = ref_winnow_start;
-	// 		best_ref_winnow_end = ref_winnow_end;
-	// 		best_winnow = winnow;
-	// 	}
-	// 	ref_start++, ref_end++;
-	// 	if (ref_end == ref_hash->seq->seq.size()) 
-	// 		break;
-	// }
-	// for (int i = 0; ; i++) {
-
-	// }
 }
 
 /******************************************************************************/
@@ -271,11 +247,13 @@ vector<Hit> search_in_reference_interval (
 	shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash,
 	Tree &tree, 
 	bool same_genome, int init_len, bool allow_extend, bool report_fails,
-	SlidingMap winnow, int t_start, int t_end)
+	const SlidingMap &winnowy, int t_start, int t_end)
 {
-	if (t_start <= t_end);
+	assert(t_start <= t_end);
 	assert(t_start >= 0);
-	assert(winnow.query_size > 0);
+	assert(winnowy.query_size > 0);
+
+	SlidingMap winnow = SlidingMap::fromMap(winnowy);
 
 	// #pragma omp atomic
 	TOTAL_ATTEMPTED++; 
@@ -343,8 +321,10 @@ vector<Hit> search_in_reference_interval (
 		if (!is_overlap(tree, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
 			auto f = filter(query_hash->seq->seq, query_start, query_start + init_len, ref_hash->seq->seq, ref_start, ref_end);
 			if (!f.first) {
+				// dprn(" >> extend/filter");
 				if (report_fails) hits.push_back({query_hash->seq, query_start, query_start + init_len, ref_hash->seq, ref_start, ref_end, 0, "", f.second, {} });
 			} else {
+				// dprn(" >> extend/extend");
 				Hit h = extend(best_winnow,
 					query_hash, query_start, query_start + init_len, query_winnow_start, query_winnow_end,
 					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
@@ -418,8 +398,10 @@ vector<Hit> search (int query_winnow_start,
 	{ 
 		auto &h = query_hash->minimizers[query_winnow_end].hash;
 		init_winnow.add_to_query(h);
-		if (h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
+		if (do_uppercase_seeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
 			continue; 
+		if (!do_uppercase_seeds && h.status == Hash::Status::HAS_N)
+			continue;
 		
 		auto ptr = ref_hash->index.find(h);
 		if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
@@ -450,6 +432,8 @@ vector<Hit> search (int query_winnow_start,
 			}
 		}
 	}
+
+	// dprn("T size: {}", T.size());
 
 	vector<Hit> hits;
 	for (auto &t: T) {

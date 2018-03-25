@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <chrono>
 
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 #include "aho.h"
 #include "common.h"
@@ -37,6 +39,13 @@ const bool ATTAINER_bool = false;
 
 /******************************************************************************/
 
+bool do_uppercase = 1;
+bool do_uppercase_seeds = 1;
+bool do_qgram = 1;
+bool do_core = 0;
+
+/******************************************************************************/
+
 template<typename T>
 int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, bool is_same_genome, 
 	T print_function, bool show_progress=true)
@@ -48,8 +57,11 @@ int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, boo
 		auto &qm = query_hash->minimizers[qi];
 		if (qm.loc < next_to_attain)
 			continue;
-		if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
-			continue; // ignore N or lowercase hashes
+
+		if (do_uppercase_seeds  && qm.hash.status != Hash::Status::HAS_UPPERCASE)
+			continue;
+		if (!do_uppercase_seeds && qm.hash.status == Hash::Status::HAS_N)
+			continue;
 
 		if (show_progress && qm.loc / 10000 != track) {
 			eprnn("\r |>{}<| {:.1f}% (loci={:n} hits={:n})", 
@@ -78,7 +90,9 @@ void search_parallel(const string &ref_path)
 {
 	FastaReference fr(ref_path);
 
+	#ifdef _OPENMP
 	eprn("Using {} threads\n", omp_get_max_threads());
+	#endif
 
 	auto T = cur_time();
 
@@ -233,6 +247,10 @@ void search_single(const string &ref_path, const string &query_chr, const string
 
 void search_main(int argc, char **argv)
 {
+	do_uppercase = 1;
+	do_uppercase_seeds = 1;
+	do_qgram = 1;
+
 	if (argc < 2) {
 		throw fmt::format("Not enough arguments to search");
 	}

@@ -7,14 +7,14 @@ SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc)
 OBJECTS:=$(SOURCES:.cc=.o)
 DEP := $(OBJECTS:.o=.d)
 
-CPPFLAGS += -MMD -MP -I.
+CPPFLAGS += -MMD -MP -I. -O2
 
 .PHONY: all clean
 
 EXECUTABLE=sedef
 EXE=sedef
 
-all: CPPFLAGS+=-g -O2
+all: CPPFLAGS+=-g 
 all: $(SOURCES) $(EXECUTABLE)
 
 sanitize: CXX=g++

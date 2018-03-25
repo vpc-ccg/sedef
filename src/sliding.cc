@@ -47,7 +47,11 @@ bool SlidingMap::add(const Hash &h, int BIT, int FULL) // bit: var with only one
 		if (inserted) {
 			intersection -= (boundary->second == FULL);
 			assert(boundary != this->begin()); // |S| >= 1!
+		// eprn("1");
+		// eprn(">1> sz: {}..{}", this->size(), distance(this->begin(),boundary));
 			boundary--;
+		// eprn("<1< sz: {}..{}", this->size(), distance(this->begin(),boundary));
+
 		}
 	}
 	return true;
@@ -63,20 +67,37 @@ bool SlidingMap::remove(const Hash &h, int BIT, int FULL) // bit: var with only 
 	if (query_size && it->first <= boundary->first) {
 		intersection -= (it->second == FULL);
 		if (it->second == BIT) {
+		// eprn("2");
+		// eprn(">2> sz: {}..{}", this->size(), distance(this->begin(),boundary));
 			boundary++;
+		// eprn("<2< sz: {}..{}", this->size(), distance(this->begin(),boundary));
 			assert(boundary != this->end());
 			intersection += (boundary->second == FULL);
 		}
 	}
 
 	assert(it != this->end());
-	assert(it != boundary);
 	if (it->second == BIT) {
+		assert(it != boundary);
 		this->erase(it);
 	} else {
 		it->second &= ~BIT;
 	}
 	return true;
+}
+
+//// AFTER COPY
+SlidingMap SlidingMap::fromMap(const SlidingMap &m)
+{
+	int dist = distance<SlidingMap::const_iterator>(m.begin(), m.boundary);
+	SlidingMap s(m.kmer_size);
+	s=m;
+	s.boundary = s.begin();
+	advance(s.boundary, dist);
+	assert(m.boundary != m.end());
+	assert(m.boundary->first == s.boundary->first);
+	assert(m.boundary->second == s.boundary->second);
+	return s;
 }
 
 void SlidingMap::add_to_query(const Hash &h) 
@@ -89,7 +110,13 @@ void SlidingMap::add_to_query(const Hash &h)
 	if (boundary == this->end()) {
 		boundary = this->begin();
 	} else {
+		// eprn("3");
+		// eprn(">3> sz: {}..{}", this->size(), distance(this->begin(),boundary));
+		assert(boundary != this->end());
 		boundary++;
+		// eprn("<3< sz: {}..{}", this->size(), distance(this->begin(),boundary));
+
+		// eprn("wooo");
 	}
 	assert(boundary != this->end());
 	intersection += (boundary->second == 3);
@@ -106,7 +133,10 @@ void SlidingMap::remove_from_query(const Hash &h)
 	if (boundary == this->begin()) {
 		boundary = this->end();
 	} else { 
+		// eprn("4");
+		// eprn(">4> sz: {}..{}", this->size(), distance(this->begin(),boundary));
 		boundary--;
+		// eprn("<4< sz: {}..{}", this->size(), distance(this->begin(),boundary));
 	}
 }
 

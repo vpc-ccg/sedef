@@ -9,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <thread>
+#include <array>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -279,10 +280,102 @@ void check_wgac(string ref_path, string bed_path)
 
 /******************************************************************************/
 
+void check_manually_(const string &ref_path, const Hit &hit, const string &qq) 
+{	
+	eprn(" <-> {}", hit.to_bed());
+
+	int q=0; for (auto c: hit.query->seq) q+=(bool)isupper(c);
+	int r=0; for (auto c: hit.ref->seq) r+=(bool)isupper(c);
+	
+
+	auto query_hash = make_shared<Index>(hit.query), 
+	     ref_hash = make_shared<Index>(hit.ref);
+	
+	array<int,4> p;
+	for (int DX = 0; DX < 2; DX++) {
+		for (int DY = 0; DY < 2; DY++) {
+			do_uppercase_seeds = DX;
+			do_uppercase = DY;
+
+			vector<Hit> mappings;
+			Tree tree;
+			for (int i = 0; i < ref_hash->minimizers.size(); i++) {
+				auto &qm = ref_hash->minimizers[i];
+				if (do_uppercase_seeds  && qm.hash.status != Hash::Status::HAS_UPPERCASE)
+					continue;
+				if (!do_uppercase_seeds && qm.hash.status == Hash::Status::HAS_N)
+					continue;
+				auto m = search(i, query_hash, ref_hash, tree, 
+					/*same_genome=*/ false, 
+					MIN_READ_SIZE, true, 
+					/*report fails*/ false);
+				mappings.insert(mappings.end(), m.begin(), m.end());
+			}
+			p[DX*2+DY] = mappings.size();
+			// eprn("{}", mappings.size());
+			// for (auto &h: mappings) {
+			// 	eprn("   {}", h.to_bed());
+			// }
+		}
+	}
+	eprnn("-> {} {} {} {} {} {}", 
+		(q*100)/hit.query->seq.size(),
+		(r*100)/hit.ref->seq.size(),
+		q, hit.query->seq.size(), 
+		r, hit.ref->seq.size());
+	for (int i = 0; i < 4; i++)
+		eprnn(" {}.{} {}", i/2,i%2, p[i]);
+	eprn(" {}", qq);
+
+}
+
+void check_manually(const string &ref_path, int argc, char **argv) 
+{
+	eprn("        Parameters: READ_SIZE      = {}\n"
+	     "                    MAX_ERROR      = {:.2f} ({:.2f} EDIT + {:.2f} GAP; GAPFREQ={:.3f})",
+		MIN_READ_SIZE, 
+		MAX_ERROR, MAX_EDIT_ERROR, MAX_GAP_ERROR, GAP_FREQUENCY);
+	eprn("k-mer size:         {}", KMER_SIZE);
+	eprn("Window size:        {}", WINDOW_SIZE);
+	eprn("Filters:            U={},Q={}", do_uppercase, do_qgram);
+
+	FastaReference fr(ref_path);
+	const int off = 0;
+
+	int x; //= atoi(argv[2]) + off;
+	// auto saa = fr.get_sequence(argv[0], atoi(argv[1]) - off, &x);
+	// x = atoi(argv[5]) + off;
+	// auto sbb = fr.get_sequence(argv[3], atoi(argv[4]) - off, &x);
+	// string sa = saa, sb = sbb;
+
+	string s;
+	while (getline(cin, s)) {
+		auto argv = split(s, ' ');
+		// for (auto &ww: argv) eprn("-> {}",ww);
+
+		x = atoi(argv[2].c_str()) + off;
+		auto sa = fr.get_sequence(argv[0], atoi(argv[1].c_str()) - off, &x);
+		x = atoi(argv[5].c_str()) + off;
+		auto sb = fr.get_sequence(argv[3], atoi(argv[4].c_str()) - off, &x);
+		if (argv[6][0] == '_') sb = rc(sb);
+		auto seq_a = make_shared<Sequence>("A", sa);
+		auto seq_b = make_shared<Sequence>("B", sb);
+		Hit hit { 
+			seq_a, 0, (int)seq_a->seq.size(),
+			seq_b, 0, (int)seq_b->seq.size()
+		};	
+		auto w = fmt::format("{} {} {} -> {} {} {} {}", argv[0], argv[1], argv[2],
+			argv[3], argv[4], argv[5], argv[6]);
+		eprnn(":: {} || ", w);
+		check_manually_(ref_path, hit, w);
+		eprn("{}", string(60, '-'));
+	}
+}
+
+/******************************************************************************/
+
 void wgac_main (int argc, char **argv)
 {
-	// aho = make_shared<AHOAutomata>();
-
 	if (argc < 3) {
 		throw fmt::format("Not enough arguments to wgac");
 	}
@@ -292,6 +385,8 @@ void wgac_main (int argc, char **argv)
 		align_wgac(argv[1], argv[2]);
 	} else if (command == "check") {
 		check_wgac(argv[1], argv[2]);
+	} else if (command == "manual") {
+		check_manually(argv[1], argc - 2, argv + 2);
 	} else {
 		throw fmt::format("Unknown wgac command");
 	}

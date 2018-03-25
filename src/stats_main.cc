@@ -421,10 +421,16 @@ void get_differences(const string &ref_path, const string &bed_path,
 
 		auto c1 = fmt::format("{}", h.query->name, "+-"[h.query->is_rc]);
 		auto c2 = fmt::format("{}", h.ref->name, "+-"[h.ref->is_rc]);
-		if (sedef.find(c1)==sedef.end()) sedef[c1]=boost::dynamic_bitset<>(250000000);
-		if (sedef.find(c2)==sedef.end()) sedef[c2]=boost::dynamic_bitset<>(250000000);
-		for (int i = h.query_start; i < h.query_end; i++) sedef[c1].set(i);
-		for (int i = h.ref_start; i < h.ref_end; i++) sedef[c2].set(i);
+		if (sedef.find(c1) == sedef.end()) {
+			sedef[c1] = boost::dynamic_bitset<>(250 * MB);
+		}
+		if (sedef.find(c2) == sedef.end()) {
+			sedef[c2] = boost::dynamic_bitset<>(250 * MB);
+		}
+		for (int i = h.query_start; i < h.query_end; i++) 
+			sedef[c1].set(i);
+		for (int i = h.ref_start; i < h.ref_end; i++) 
+			sedef[c2].set(i);
 	}
 
 	eprn("SEDEF reading done!");
@@ -434,6 +440,17 @@ void get_differences(const string &ref_path, const string &bed_path,
 	unordered_set<string> seen;
 	while (getline(fiw, s)) {
 		Hit h = Hit::from_wgac(s);
+		// auto ss = split(s, '\t');
+		// Hit h = {
+		// 	make_shared<Sequence>(ss[0], "", false), 
+		// 	atoi(ss[1].c_str()), 
+		// 	atoi(ss[2].c_str()),
+		// 	make_shared<Sequence>(ss[4], "", false), 
+		// 	atoi(ss[5].c_str()), 
+		// 	atoi(ss[6].c_str()),
+		// 	0, 
+		// 	""
+		// };
 		auto c1 = fmt::format("{}", h.query->name, "+-"[h.query->is_rc]);
 		auto c2 = fmt::format("{}", h.ref->name, "+-"[h.ref->is_rc]);		
 		if (c1.size() > 6 || c2.size() > 6)
@@ -441,10 +458,16 @@ void get_differences(const string &ref_path, const string &bed_path,
 		
 		if (seen.find(h.name) == seen.end()) {
 			seen.insert(h.name);
-			if (wgac.find(c1)==wgac.end()) wgac[c1]=boost::dynamic_bitset<>(250000000);
-			if (wgac.find(c2)==wgac.end()) wgac[c2]=boost::dynamic_bitset<>(250000000);
-			for (int i = h.query_start; i < h.query_end; i++) wgac[c1].set(i);
-			for (int i = h.ref_start; i < h.ref_end; i++) wgac[c2].set(i);
+			if (wgac.find(c1) == wgac.end()) {
+				wgac[c1] = boost::dynamic_bitset<>(250 * MB);
+			}
+			if (wgac.find(c2) == wgac.end()) {
+				wgac[c2] = boost::dynamic_bitset<>(250 * MB);
+			}
+			for (int i = h.query_start; i < h.query_end; i++) 
+				wgac[c1].set(i);
+			for (int i = h.ref_start; i < h.ref_end; i++) 
+				wgac[c2].set(i);
 		}
 	}
 

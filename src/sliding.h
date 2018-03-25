@@ -26,6 +26,8 @@ struct SlidingMap: public std::map<Hash, char> {
 	SlidingMap(int kmer_size);
 
 	int jaccard();
+	
+	static SlidingMap fromMap(const SlidingMap &m);
 
 	// when adding, if same hash is found: try to match earliest one if added by another set (i.e. try increase jaccard)
 	// when removing, if same hash is found: try to remove the latest one (try to preserve jaccard)

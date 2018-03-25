@@ -20,6 +20,12 @@ const int MIN_UPPERCASE = 250;
 
 /******************************************************************************/
 
+extern bool do_uppercase;
+extern bool do_core;
+extern bool do_qgram;
+
+/******************************************************************************/
+
 /* extern */ int64_t QGRAM_NORMAL_FAILED = 0;
 /* extern */ int64_t OTHER_FAILED = 0;
 /* extern */ int64_t CORE_FAILED = 0;
@@ -108,14 +114,20 @@ pair<bool, string> core_filter(const string &q, int q_pos, int q_len, const stri
 
 pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r, int r_pos, int r_end) 
 {	
-	auto f = uppercase_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
-	if (!f.first) return f;
+	if (do_uppercase) {
+		auto f = uppercase_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
+		if (!f.first) return f;
+	}
 
-	// f = core_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
-	// if (!f.first) return f;
+	// if (do_core) {
+		// auto f = core_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
+		// if (!f.first) return f;
+	// }
 
-	f = qgram_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
-	if (!f.first) return f;
+	if (do_qgram) {
+		auto f = qgram_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
+		if (!f.first) return f;
+	}
 
 	return {true, ""};
 }

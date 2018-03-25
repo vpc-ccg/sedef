@@ -47,6 +47,17 @@ const double MAX_GAP_ERROR  = MAX_EDIT_ERROR * ERROR_RATIO;
 const double GAP_FREQUENCY  = 0.005;
 const int    MIN_READ_SIZE  = 1000 * (1 - MAX_ERROR);
 
+const size_t KB = 1024;
+const size_t MB = 1024 * KB;
+const size_t GB = 1024 * MB;
+
+/******************************************************************************/
+
+extern bool do_uppercase;
+extern bool do_uppercase_seeds;
+extern bool do_qgram;
+extern bool do_core;
+
 /******************************************************************************/
 
 struct DNA {

@@ -12,6 +12,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <array>
 
 #include "common.h"
 #include "search.h"
@@ -22,7 +23,7 @@ using namespace std;
 
 class AHOAutomata {
 	struct Trie {
-		array<shared_ptr<Trie>, 4> child;
+		std::array<shared_ptr<Trie>, 4> child;
 		Trie *fail, *next_to_output;
 		int output;
 

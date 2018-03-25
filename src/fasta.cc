@@ -4,7 +4,8 @@
 
 /******************************************************************************/
 
-#include <bits/stdc++.h>
+#include <string>
+#include <fstream>
 #include <sys/stat.h>
 #include <sys/mman.h>
 
