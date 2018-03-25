@@ -114,7 +114,7 @@ if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
 			SI=`awk '$1=="'$i'" {print $2}' "${input}.fai"`
 			SJ=`awk '$1=="'$j'" {print $2}' "${input}.fai"` 
 			if [ "$SI" -le "$SJ" ] ; then 
-				for m in n ; do
+				for m in n y ; do
 					echo "/usr/bin/time -f'TIMING: %e %M' sedef search single ${input} $i $j $m >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
 				done
 			fi
