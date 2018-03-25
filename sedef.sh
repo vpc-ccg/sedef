@@ -24,8 +24,8 @@ if ! command -v "sedef" >/dev/null 2>&1 ; then
 	exit 1
 fi
 
-OPTIONS=hj:o:f
-LONGOPTIONS=help,jobs,output,force
+OPTIONS=hj:o:w:f
+LONGOPTIONS=help,jobs,output,wgac,force
 PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTIONS --name "$0" -- "$@")
 if [[ $? -ne 0 ]]; then
 	exit 2
