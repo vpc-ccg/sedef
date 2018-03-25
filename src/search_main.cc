@@ -25,7 +25,6 @@ extern int64_t TOTAL_ATTEMPTED;
 extern int64_t JACCARD_FAILED;
 extern int64_t QGRAM_NORMAL_FAILED;
 extern int64_t OTHER_FAILED;
-extern int64_t CORE_FAILED;
 extern int64_t INTERVAL_FAILED;
 
 /******************************************************************************/
@@ -199,14 +198,12 @@ void search_parallel(const string &ref_path)
 	     "       Jaccard   = {:10n}\n"
 	     "       interval  = {:10n}\n"
 	     "       lowercase = {:10n}\n"
-	     "       q-grams   = {:10n}\n"
-	     "       cores     = {:10n}",
+	     "       q-grams   = {:10n}\n",
 	     TOTAL_ATTEMPTED, 
 	     JACCARD_FAILED, 
 	     INTERVAL_FAILED, 
 	     OTHER_FAILED,
-	     QGRAM_NORMAL_FAILED, 
-	     CORE_FAILED
+	     QGRAM_NORMAL_FAILED
 	);
 }
 
@@ -249,7 +246,7 @@ void search_single(const string &ref_path, const string &query_chr, const string
 	     "       Jaccard   = {:10n}\n"
 	     "       interval  = {:10n}\n"
 	     "       lowercase = {:10n}\n"
-	     "       q-grams   = {:10n},"
+	     "       q-grams   = {:10n}",
 	     TOTAL_ATTEMPTED, 
 	     JACCARD_FAILED, 
 	     INTERVAL_FAILED, 
