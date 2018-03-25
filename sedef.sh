@@ -35,6 +35,7 @@ eval set -- "$PARSED"
 output="sedef_out"
 jobs=4
 force="n"
+wgac=""
 while true; do
 	case "$1" in
 		-h|--help)
@@ -45,6 +46,10 @@ while true; do
 		-f|--force)
 			force="y"
 			shift
+			;;
+		-w|--wgac)
+			wgac="$2"
+			shift 2
 			;;
 		-o|--output)
 			output="$2"
@@ -192,12 +197,14 @@ fi
 
 echo "************************************************************************"
 
-
-/usr/bin/time -f'Python time: %E' python scratch/check-overlap.py \
-	data/mm8chr1.wgac-tab ${output}/final.bed | \
-	tee ${output}/final-python.log | grep '::' -A1
-/usr/bin/time -f'diff time: %E' sedef stats diff ${input} \
-	${output}/final.bed data/mm8chr1.wgac-tab
+if [ -f "${wgac}" ]; then
+	echo "Running SD checking..."
+	/usr/bin/time -f'Python time: %E' python scratch/check-overlap.py \
+		${wgac} ${output}/final.bed | \
+		tee ${output}/final-python.log | grep '::' -A1
+	/usr/bin/time -f'diff time: %E' sedef stats diff ${input} \
+		${output}/final.bed ${wgac}
+fi
 
 echo "************************************************************************"
 echo "SEDEF done! Final SDs available in ${output}/final.bed"
