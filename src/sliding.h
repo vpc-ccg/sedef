@@ -16,18 +16,29 @@
 
 /******************************************************************************/
 
-struct SlidingMap: public std::map<Hash, char> {
-	typename SlidingMap::iterator boundary; // this is inclusive!
+struct SlidingMap {
+	std::map<Hash, char> storage;
+	typename std::map<Hash, char>::iterator boundary; // this is inclusive!
 	int query_size;
 	int intersection;
 	double limit;
 	int kmer_size;
 
-	SlidingMap(int kmer_size);
+private:
+	SlidingMap() = default;
 
+public:
+	SlidingMap(int kmer_size);
+	SlidingMap(const SlidingMap &other);
+	SlidingMap(SlidingMap&& other);
+	SlidingMap& operator=(SlidingMap other);
+
+
+public:
 	int jaccard();
 	
-	static SlidingMap fromMap(const SlidingMap &m);
+	//static SlidingMap fromMap(const SlidingMap &m);
+	std::string print_it(const std::map<Hash, char>::iterator &boundary) const;
 
 	// when adding, if same hash is found: try to match earliest one if added by another set (i.e. try increase jaccard)
 	// when removing, if same hash is found: try to remove the latest one (try to preserve jaccard)
@@ -39,4 +50,17 @@ struct SlidingMap: public std::map<Hash, char> {
 	void remove_from_query(const Hash &h);
 	void add_to_reference(const Hash &h);
 	void remove_from_reference(const Hash &h);
+
+
+	friend void swap(SlidingMap& first, SlidingMap& second) // nothrow
+	{
+		using std::swap;
+
+		swap(first.storage, second.storage);
+		swap(first.boundary, second.boundary);
+		swap(first.query_size, second.query_size);
+		swap(first.intersection, second.intersection);
+		swap(first.limit, second.limit);
+		swap(first.kmer_size, second.kmer_size);
+	}
 };

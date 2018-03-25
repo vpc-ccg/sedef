@@ -247,13 +247,11 @@ vector<Hit> search_in_reference_interval (
 	shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash,
 	Tree &tree, 
 	bool same_genome, int init_len, bool allow_extend, bool report_fails,
-	const SlidingMap &winnowy, int t_start, int t_end)
+	SlidingMap winnow, int t_start, int t_end)
 {
 	assert(t_start <= t_end);
 	assert(t_start >= 0);
-	assert(winnowy.query_size > 0);
-
-	SlidingMap winnow = SlidingMap::fromMap(winnowy);
+	assert(winnow.query_size > 0);
 
 	// #pragma omp atomic
 	TOTAL_ATTEMPTED++; 
@@ -276,7 +274,7 @@ vector<Hit> search_in_reference_interval (
 
 	// Roll until we find best inital match
 	// TODO: optimize
-	auto best_winnow = winnow;
+	SlidingMap best_winnow(winnow);
 	int best_ref_start = ref_start, 
 	    best_ref_end = ref_end;
 	int best_ref_winnow_start = ref_winnow_start, 

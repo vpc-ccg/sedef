@@ -1,6 +1,12 @@
 CXX=g++
 CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color -march=native
-LDFLAGS=-lz -fopenmp
+LDFLAGS=-lz -fopenmp  
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+	CXX=clang++
+	LDFLAGS+= -L /usr/local/opt/llvm/lib
+endif
 
 GIT_VERSION:=$(shell git describe --dirty --always --tags)
 SOURCES:=$(wildcard src/*.cc) $(wildcard extern/*.cc) 
@@ -17,17 +23,8 @@ EXE=sedef
 all: CPPFLAGS+=-g 
 all: $(SOURCES) $(EXECUTABLE)
 
-sanitize: CXX=g++
-sanitize: CPPFLAGS+= -g -O1 -fno-omit-frame-pointer -fsanitize=address
-sanitize: LDFLAGS+=-fno-omit-frame-pointer -fsanitize=address
-sanitize: $(SOURCES) $(EXECUTABLE)
-
 release: CPPFLAGS+=-g -O3 -DNDEBUG 
 release: $(SOURCES) $(EXECUTABLE)
-
-release2: CPPFLAGS+=-g -O3 -DNDEBUG -DATTAINER
-release2: EXE=sedef2
-release2: $(SOURCES) $(EXECUTABLE)
 
 debug: CPPFLAGS+=-g
 debug: $(SOURCES) $(EXECUTABLE)
@@ -43,6 +40,11 @@ gprofile: CXX=g++
 gprofile: LDFLAGS=-Wl,--no-as-needed,-lprofiler,--as-needed -ltcmalloc -lrt -lz -fopenmp
 gprofile: CPPFLAGS+=-g -O2
 gprofile: $(SOURCES) $(EXECUTABLE)
+
+sanitize: CXX=g++
+sanitize: CPPFLAGS+= -g -O1 -fno-omit-frame-pointer -fsanitize=address
+sanitize: LDFLAGS+=-fno-omit-frame-pointer -fsanitize=address
+sanitize: $(SOURCES) $(EXECUTABLE)
 
 LIB = libsedef
 

@@ -13,10 +13,49 @@ using namespace std;
 /******************************************************************************/
 
 SlidingMap::SlidingMap(int kmer_size): 
-	query_size(0), intersection(0), limit(0), kmer_size(kmer_size)
+	query_size(0), intersection(0), limit(0), kmer_size(kmer_size), storage()
 { 
-	boundary = this->end();
-} 
+	boundary = storage.end();
+	// dprn("> Constructor:{:5} > boundary is at the end", storage.size());
+}
+
+SlidingMap::SlidingMap(const SlidingMap &other):
+	query_size(other.query_size), intersection(other.intersection), 
+	limit(other.limit), kmer_size(other.kmer_size),
+	storage(other.storage)
+{
+	if (other.boundary == other.storage.end()) {
+		boundary = storage.end();
+	} else {
+		// dprn("> Copy:{:5} > boundary {} in orig is at position {}", 
+		// 	other.storage.size(), other.print_it(other.boundary), 
+		// 	distance<map<Hash, char>::const_iterator>(other.storage.begin(), other.boundary));
+
+		boundary = storage.begin();
+		int dist = distance<map<Hash, char>::const_iterator>(other.storage.begin(), other.boundary);
+		advance(boundary, dist);
+		assert(boundary != storage.end());
+		assert(boundary->first == other.boundary->first);
+		assert(boundary->second == other.boundary->second);
+
+		// dprn("> Copy:{:5} > boundary {} in new is at position {}", 
+		// 	storage.size(), print_it(boundary), 
+		// 	distance(storage.begin(), boundary));
+	}
+}
+
+SlidingMap::SlidingMap(SlidingMap&& other): SlidingMap()
+{
+	swap(*this, other);
+}
+
+SlidingMap& SlidingMap::operator=(SlidingMap other)
+{
+	swap(*this, other);
+	return *this;
+}
+
+/******************************************************************************/
 
 int SlidingMap::jaccard() 
 {
@@ -27,31 +66,38 @@ int SlidingMap::jaccard()
 	}
 }
 
+string SlidingMap::print_it(const map<Hash,char>::iterator &b) const
+{
+	if (b == storage.end()) {
+		return "END";
+	} else {
+		return fmt::format("{}:{}", b->first, b->second);
+	}
+}
+
 bool SlidingMap::add(const Hash &h, int BIT, int FULL) // bit: var with only one bit set
 {
-	auto it = this->lower_bound(h);
+	auto it = storage.lower_bound(h);
 	
 	bool inserted = false;
-	if (it != this->end() && it->first == h) { 
+	if (it != storage.end() && it->first == h) { 
 		if (it->second & BIT) return false; 
 		it->second |= BIT;
 	} else {
-		it = this->insert({h, BIT}).first;
+		it = storage.insert({h, BIT}).first;
 		inserted = true;
 	}
 
-	assert(it != this->end());
-	assert(boundary != this->end() || !query_size);
+	assert(it != storage.end());
+	assert(boundary != storage.end() || !query_size);
+	// dprn("> Add:{:5} > boundary {} is at position {}", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
 	if (query_size && it->first < boundary->first) {
 		intersection += (it->second == FULL);
 		if (inserted) {
 			intersection -= (boundary->second == FULL);
-			assert(boundary != this->begin()); // |S| >= 1!
-		// eprn("1");
-		// eprn(">1> sz: {}..{}", this->size(), distance(this->begin(),boundary));
+			assert(boundary != storage.begin()); // |S| >= 1!
 			boundary--;
-		// eprn("<1< sz: {}..{}", this->size(), distance(this->begin(),boundary));
-
+			// dprn("> Add:{:5} > boundary {} is at position {} after--", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
 		}
 	}
 	return true;
@@ -59,45 +105,31 @@ bool SlidingMap::add(const Hash &h, int BIT, int FULL) // bit: var with only one
 
 bool SlidingMap::remove(const Hash &h, int BIT, int FULL) // bit: var with only one bit set
 {	
-	auto it = this->lower_bound(h); 
+	auto it = storage.lower_bound(h); 
 	if (it->first != h || !(it->second & BIT)) 
 		return false;
 
-	assert(boundary != this->end() || !query_size);
+	assert(boundary != storage.end() || !query_size);
+	// dprn("> Remove:{:5} > boundary {} is at position {}", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
 	if (query_size && it->first <= boundary->first) {
 		intersection -= (it->second == FULL);
 		if (it->second == BIT) {
-		// eprn("2");
-		// eprn(">2> sz: {}..{}", this->size(), distance(this->begin(),boundary));
 			boundary++;
-		// eprn("<2< sz: {}..{}", this->size(), distance(this->begin(),boundary));
-			assert(boundary != this->end());
-			intersection += (boundary->second == FULL);
+			// dprn("> Remove:{:5} > boundary {} is at position {} after++", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
+			// assert(boundary != storage.end());
+			if (boundary != storage.end())
+				intersection += (boundary->second == FULL);
 		}
 	}
 
-	assert(it != this->end());
+	assert(it != storage.end());
 	if (it->second == BIT) {
 		assert(it != boundary);
-		this->erase(it);
+		storage.erase(it);
 	} else {
 		it->second &= ~BIT;
 	}
 	return true;
-}
-
-//// AFTER COPY
-SlidingMap SlidingMap::fromMap(const SlidingMap &m)
-{
-	int dist = distance<SlidingMap::const_iterator>(m.begin(), m.boundary);
-	SlidingMap s(m.kmer_size);
-	s=m;
-	s.boundary = s.begin();
-	advance(s.boundary, dist);
-	assert(m.boundary != m.end());
-	assert(m.boundary->first == s.boundary->first);
-	assert(m.boundary->second == s.boundary->second);
-	return s;
 }
 
 void SlidingMap::add_to_query(const Hash &h) 
@@ -106,19 +138,17 @@ void SlidingMap::add_to_query(const Hash &h)
 		return;
 
 	limit = relaxed_jaccard_estimate(++query_size, kmer_size) ;
-	assert(boundary != this->end() || (query_size == 1));
-	if (boundary == this->end()) {
-		boundary = this->begin();
+	assert(boundary != storage.end() || (query_size == 1));
+	// dprn("> AddQuery:{:5} > boundary {} is at position {}", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
+	if (boundary == storage.end()) {
+		boundary = storage.begin();
 	} else {
-		// eprn("3");
-		// eprn(">3> sz: {}..{}", this->size(), distance(this->begin(),boundary));
-		assert(boundary != this->end());
+		assert(boundary != storage.end());
 		boundary++;
-		// eprn("<3< sz: {}..{}", this->size(), distance(this->begin(),boundary));
-
-		// eprn("wooo");
 	}
-	assert(boundary != this->end());
+	// dprn("> AddQuery:{:5} > boundary {} is at position {} after++", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
+	
+	assert(boundary != storage.end());
 	intersection += (boundary->second == 3);
 }
 
@@ -128,16 +158,16 @@ void SlidingMap::remove_from_query(const Hash &h)
 		return;
 	
 	limit = relaxed_jaccard_estimate(--query_size, kmer_size) ;
-	assert(boundary != this->begin() || !query_size);
-	intersection -= (boundary->second == 3);
-	if (boundary == this->begin()) {
-		boundary = this->end();
+	assert(boundary != storage.begin() || !query_size);
+	// dprn("> RemoveQuery:{:5} > boundary {} is at position {}", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
+	if (boundary != storage.end())
+		intersection -= (boundary->second == 3);
+	if (boundary == storage.begin()) {
+		boundary = storage.end();
 	} else { 
-		// eprn("4");
-		// eprn(">4> sz: {}..{}", this->size(), distance(this->begin(),boundary));
 		boundary--;
-		// eprn("<4< sz: {}..{}", this->size(), distance(this->begin(),boundary));
 	}
+	// dprn("> RemoveQuery:{:5} > boundary {} is at position {} after--", storage.size(), print_it(boundary), distance(storage.begin(), boundary));
 }
 
 void SlidingMap::add_to_reference(const Hash &h) 
