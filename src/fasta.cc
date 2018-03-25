@@ -6,6 +6,7 @@
 
 #include <string>
 #include <fstream>
+#include <algorithm>
 #include <sys/stat.h>
 #include <sys/mman.h>
 
@@ -128,8 +129,8 @@ string FastaReference::get_sequence(string seqname, int start, int *end)
 	seq[seqlen] = '\0';
 	char* pbegin = seq;
 	char* pend = seq + (seqlen / sizeof(char));
-	pend = remove(pbegin, pend, '\n');
-	pend = remove(pbegin, pend, '\0');
+	pend = std::remove(pbegin, pend, '\n');
+	pend = std::remove(pbegin, pend, '\0');
 	string s = seq;
 	free(seq);
 	s.resize((pend - pbegin) / sizeof(char));
