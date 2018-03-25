@@ -44,8 +44,13 @@ inline int min_qgram(int l, int q)
 
 pair<bool, string> uppercase_filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
 {
-	int q_up = 0; for (int i = 0; i < q_len; i++) q_up += isupper(q[q_pos + i]); 
-	int r_up = 0; for (int i = 0; i < r_len; i++) r_up += isupper(r[r_pos + i]);
+	// dprn(":: up {}", q.substr(q_pos, q_len));
+	// dprn(":: up {}", q.substr(r_pos, r_len));
+	int q_up = 0; for (int i = 0; i < q_len; i++) 
+		q_up += (bool)isupper(q[q_pos + i]); 
+	int r_up = 0; for (int i = 0; i < r_len; i++) 
+		r_up += (bool)isupper(r[r_pos + i]);
+	// dprn(":: up === {} {}", q_up, r_up);
 
 	if (q_up < MIN_UPPERCASE || r_up < MIN_UPPERCASE) {
 		// #pragma omp atomic
@@ -116,6 +121,7 @@ pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r
 {	
 	if (do_uppercase) {
 		auto f = uppercase_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
+		// dprn(":: up {} {}", f.first, f.second);
 		if (!f.first) return f;
 	}
 
@@ -126,6 +132,7 @@ pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r
 
 	if (do_qgram) {
 		auto f = qgram_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
+		// dprn(":: qg {} {}", f.first, f.second);
 		if (!f.first) return f;
 	}
 

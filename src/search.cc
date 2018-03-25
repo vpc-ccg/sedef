@@ -261,9 +261,9 @@ vector<Hit> search_in_reference_interval (
 	int ref_winnow_start = ref_hash->find_minimizers(ref_start);
 	assert(ref_winnow_start < ref_hash->minimizers.size());
 
-	// dprn("looking for: {} ^{} -> [{}..{}]", query_start,
-	// 	query_hash->minimizers[query_winnow_start].hash,
-	//  	ref_start, ref_end);
+	// dprn("::looking for: {} ^{} -> [{}..{}]", query_start,
+		// query_hash->minimizers[query_winnow_start].hash,
+	 // 	ref_start, ref_end);
 
 	int ref_winnow_end = ref_winnow_start; // winnow is W(query) ; extend it to W(query) | W(ref)
 	for (; ref_winnow_end < ref_hash->minimizers.size() 
@@ -300,15 +300,17 @@ vector<Hit> search_in_reference_interval (
 	}
 	// END TODO
 
-	// dprn(" - best matches: {} vs {} @ {}--{} ^{}", best_winnow.intersection, best_winnow.limit,
-	// 	best_ref_start, best_ref_end,
-	// 	ref_hash->minimizers[best_ref_winnow_start].hash);
+	// dprn(":: best matches: {} vs {} @ {}--{} ^{}", best_winnow.intersection, best_winnow.limit,
+		// best_ref_start, best_ref_end,
+		// ref_hash->minimizers[best_ref_winnow_start].hash);
 
 	// if (query_start > 10596454) exit(0);
 
 	vector<Hit> hits;
+
 	if (best_winnow.jaccard() < 0) {
 		// #pragma omp atomic
+		// dprn(":: >> jaccard/fail");
 		JACCARD_FAILED++;
 		if (report_fails) hits.push_back({
 			query_hash->seq, query_start, query_start + init_len, 
@@ -319,10 +321,10 @@ vector<Hit> search_in_reference_interval (
 		if (!is_overlap(tree, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
 			auto f = filter(query_hash->seq->seq, query_start, query_start + init_len, ref_hash->seq->seq, ref_start, ref_end);
 			if (!f.first) {
-				// dprn(" >> extend/filter");
+				// dprn(":: >> extend/filter");
 				if (report_fails) hits.push_back({query_hash->seq, query_start, query_start + init_len, ref_hash->seq, ref_start, ref_end, 0, "", f.second, {} });
 			} else {
-				// dprn(" >> extend/extend");
+				// dprn(":: >> extend/extend");
 				Hit h = extend(best_winnow,
 					query_hash, query_start, query_start + init_len, query_winnow_start, query_winnow_end,
 					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
@@ -335,6 +337,7 @@ vector<Hit> search_in_reference_interval (
 						hits.push_back(h);
 					}
 				} else {
+					// dprn(":: push");
 					hits.push_back(h);
 					// auto hh = fast_align(
 					// 	query_hash->seq->seq.substr(h.query_start, h.query_end - h.query_start),
@@ -431,7 +434,7 @@ vector<Hit> search (int query_winnow_start,
 		}
 	}
 
-	// dprn("T size: {}", T.size());
+	// dprn("::T size: {}", T.size());
 
 	vector<Hit> hits;
 	for (auto &t: T) {
