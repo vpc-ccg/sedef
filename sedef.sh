@@ -188,7 +188,7 @@ if [ ! -f "${output}/report.joblog.okq" ] || [ "${force}" == "y" ]; then
 	cat "${output}/align/"*.aligned.bed > "${output}/aligned.bed"  # final chains
 
 	# Now get the final calls
-	/usr/bin/time -f'Report time: %E' sedef stats generate "${input}" "${output}/aligned.bed" > "${output}/final.bed"
+	/usr/bin/time -f'Report time: %E (%M MB)' sedef stats generate "${input}" "${output}/aligned.bed" > "${output}/final.bed"
 
 	wc -l "${output}/"*.bed
 
@@ -199,10 +199,10 @@ echo "************************************************************************"
 
 if [ -f "${wgac}" ]; then
 	echo "Running SD checking..."
-	/usr/bin/time -f'Python time: %E' python scratch/check-overlap.py \
+	/usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
 		${wgac} ${output}/final.bed | \
 		tee ${output}/final-python.log | grep '::' -A1
-	/usr/bin/time -f'diff time: %E' sedef stats diff ${input} \
+	/usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
 		${output}/final.bed ${wgac}
 fi
 
