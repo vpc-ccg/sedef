@@ -117,7 +117,7 @@ Hit Hit::from_wgac(const string &bed)
 
 /******************************************************************************/
 
-string Hit::to_bed(bool do_rc) const
+string Hit::to_bed(bool do_rc, bool with_cigar) const
 {
 	assert(!query->is_rc);
 	return fmt::format(
@@ -126,7 +126,7 @@ string Hit::to_bed(bool do_rc) const
 		"{}\t{}\t"     // NAME 6 SCORE 7
 		"{}\t{}\t"     // STRAND 8 STRAND 9
 		"{}\t{}\t"     // MAXLEN 10 ALNLEN 11 
-		"{}\t{}",      // CIGAR 12 COMMENT 13
+		"{}{}",        // CIGAR 12 COMMENT 13
 		query->name, query_start, query_end, 
 		ref->name, 
 		do_rc && ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
@@ -143,10 +143,10 @@ string Hit::to_bed(bool do_rc) const
 		// - Reason
 		max(query_end - query_start, ref_end - ref_start),
 		aln.span(),
-		aln.cigar_string(),
-		fmt::format("{}\t{}", 
-			aln.span() ? fmt::format("m={:.1f}\tg={:.1f}", aln.mismatch_error(), aln.gap_error()) : "",
-			comment.size() ? comment + ";" : ""
+		with_cigar ? aln.cigar_string() + "\t" : "",
+		fmt::format("{}{}", 
+			aln.span() ? fmt::format("m={:.1f};g={:.1f}", aln.mismatch_error(), aln.gap_error()) : "",
+			comment.size() ? ";" + comment : ""
 		)
 	);
 }

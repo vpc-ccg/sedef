@@ -45,6 +45,12 @@ private:
 	} error;
 
 public:
+
+	friend std::vector<Hit> split_alignment(Hit h);
+	friend std::vector<Hit> gap_split(Hit h);
+	friend bool subhit(const Hit& h, int start, int end, Hit &ho);
+
+
 	Alignment();
 	Alignment(const std::string &fa, const std::string &fb);
 	Alignment(const std::string &fa, const std::string &fb, const std::string &cigar);
@@ -63,6 +69,8 @@ private: // Internal functions (modify)
 	void prepend_cigar(const std::deque<std::pair<char, int>> &app);
 	void append_cigar(const std::deque<std::pair<char, int>> &app);
 	void cigar_from_alignment();
+
+	void swap();
 	
 public: // External functions (modify)
 	void merge(Alignment &cur, const string &qstr, const string &rstr);

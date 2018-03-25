@@ -67,7 +67,7 @@ vector<Minimizer> get_minimizers(const string &s, int kmer_size,
 	int last_n = - kmer_size - window_size;
 	int last_u = last_n;
 	for (int i = 0; i < s.size(); i++) {
-		if (s[i] == 'N') {
+		if (toupper(s[i]) == 'N') {
 			last_n = i;
 		} else if (isupper(s[i])) {
 			last_u = i;

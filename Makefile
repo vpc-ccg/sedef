@@ -1,4 +1,4 @@
-CXX=icpc
+CXX=g++
 CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color -march=native
 LDFLAGS=-lz -fopenmp
 

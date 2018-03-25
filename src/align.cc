@@ -21,13 +21,14 @@ using namespace std;
 
 /******************************************************************************/
 
-/******************************************************************************/
-
-inline bool ceq(char a, char b) {
+inline bool ceq(char a, char b) 
+{
 	if (a == '-' || b == '-') return false;
-	if (a == 'N' || b == 'N') return false;
+	if (toupper(a) == 'N' || toupper(b) == 'N') return false;
 	return (toupper(a) == toupper(b));
 }
+
+/******************************************************************************/
 
 auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
@@ -336,8 +337,12 @@ void Alignment::populate_nice_alignment()
 	align_b = "";
 	alignment = "";
 	int ia = 0, ib = 0;
+	// eprn(" {} - {} ; {}" , a.size(), b.size(), cigar_string());
 	for (auto &c: cigar) {
 		for (int i = 0; i < c.second; i++) {
+			// if(c.first == 'M' && (ia >= a.size() || ib >= b.size()))
+				// eprnn(" - {}{} {} - {}/{} {}/{} - ", c.first, c.second, i, ia, a.size(), ib,b.size());
+
 			assert(c.first != 'M' || ia < a.size());
 			assert(c.first != 'M' || ib < b.size());
 			if (c.first == 'M' && ceq(a[ia], b[ib])) {
@@ -729,6 +734,19 @@ string Alignment::cigar_string() const
 		res += fmt::format("{}{}", p.second, p.first);
 	}
 	return res;
+}
+
+void Alignment::swap()
+{
+	std::swap(a, b);
+	std::swap(chr_a, chr_b);
+	std::swap(start_a, start_b);
+	std::swap(end_a, end_b);
+	for (auto &p: cigar) if (p.second) {
+		if (p.first == 'I') p.first = 'D';
+		else if (p.first == 'D') p.first = 'I';
+	}
+	populate_nice_alignment();
 }
 
 string Alignment::print(int width, bool only_alignment) const

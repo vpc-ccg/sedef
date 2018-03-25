@@ -5,52 +5,20 @@ import numpy as np
 import subprocess as sp
 import sys, re, os, glob
 from collections import *
-#from kswpython import kswalign, FastaReference
 
 def system(x):
     return sp.check_output(x, shell=True, executable="/bin/bash").strip()
 
-def process(a, b, cigar):
-    cigar = [s for s in re.split('([MID;])', cigar) if s not in [';', '']]
-    cigar = [(cigar[i + 1], int(cigar[i])) for i in xrange(0, len(cigar), 2)]
-    sa, sb, gp = '', '', ''
-    for op, sz in cigar:
-        if op == 'I':  
-            sa += '-' * sz
-            gp += ' ' * sz
-        elif op == 'D':   
-            sb += '-' * sz
-            gp += ' ' * sz    
-        else:
-            gp += ''.join(' |'[a[i].lower() == b[i].lower()] for i in xrange(sz))
-        if op != 'D': 
-            sb += b[:sz]
-            b = b[sz:]
-        if op != 'I':
-            sa += a[:sz]
-            a = a[sz:]
-    return sa, sb, gp
-
-#----------------------------------------------------------------------------------------
-
-path = sys.argv[1]
-if len(sys.argv) > 2:
-    chrom1 = sys.argv[2]
-    chrom2 = sys.argv[3]
-    strand = sys.argv[4]
+tab_file = sys.argv[1]
+path = sys.argv[2]
+if len(sys.argv) > 3:
+    chrom1 = sys.argv[3]
+    chrom2 = sys.argv[4]
+    strand = sys.argv[5]
     strand = '_' if strand == 'y' else '+'
 else:
     chrom1 = ''
-#path = '{}_{}_{}.bed'.format(chrom1, chrom2, strand)
 
-# sizes = {}
-# with open('data/hg19/hg19.fa.fai') as f:
-#     for l in f:
-#         l = l.strip().split()
-#         sizes[l[0]] = l[1]
-
-tab_file = "data/GRCh37GenomicSuperDup.tab"
-# tab_file = "data/mm8WGAC.tab"
 df = pd.read_table(tab_file)
 if chrom1 != '':
     if chrom1 != chrom2 or strand == '_':
@@ -99,21 +67,23 @@ def process_path(path, pnew):
         with open(path) as f:
             for l in f:
                 l = l.strip().split('\t')
+
                 s1, e1, s2, e2 = map(int, l[1:3] + l[4:6])
-                o = max(e1 - s1, e2 - s2) * 1
+                w = max(e1 - s1, e2 - s2) * 1
+                o = min(15000, w * 5)
                 l[1:3] = [max(1, s1 - o), e1 + o]
                 l[4:6] = [max(1, s2 - o), e2 + o]
                 print >>fw, '\t'.join(map(str, l))
 
-pnew = path #+ "____"
-# process_path(path, pnew)
-if True or not os.path.exists(pnew + '_temp_diff.bed'):
+# path = path + "____"
+process_path(path, path + '#')
+if True or not os.path.exists(path + '_temp_diff.bed'):
     print ':: Running Bedtools...'
-    system("bedtools pairtopair -a {0}_temp.bed -b {0} -type both > {0}_temp_diff.bed".format(pnew))
-# os.unlink(pnew)
-print ':: After bedtools we have {} hits to process'.format(system("wc -l {}_temp_diff.bed".format(pnew)))
+    system("bedtools pairtopair -a {0}_temp.bed -b {0}# -type both > {0}_temp_diff.bed".format(path))
+# os.unlink(path)
+print ':: After bedtools we have {} hits to process'.format(system("wc -l {}_temp_diff.bed".format(path)))
 
-with open(pnew + '_temp_diff.bed') as f:
+with open(path + '_temp_diff.bed') as f:
     for l in f:
         l = l.strip().split()
         q = 0

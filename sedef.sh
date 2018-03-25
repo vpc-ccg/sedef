@@ -84,8 +84,8 @@ if [ -e "${output}" ]; then
     	echo " Removing it."
     	rm -rf "${output}"
     else
-    	echo " Please delete ${output} or run with -f/--force to proceed."
-    	exit 1
+    	echo " Please delete ${output} or run with -f/--force if you want to start anew."
+    	# exit 1
     fi
 fi
 mkdir -p "${output}"
@@ -100,81 +100,104 @@ mkdir -p "${output}/seeds"
 mkdir -p "${output}/log/seeds"
 
 echo "************************************************************************"
-echo "Running SD seeding..."
-for i in `cut -f1 "${input}.fai"`; do 
-	for j in `cut -f1 "${input}.fai"`; do  
-		SI=`awk '$1=="'$i'" {print $2}' "${input}.fai"`
-		SJ=`awk '$1=="'$j'" {print $2}' "${input}.fai"` 
-		if [ "$SI" -le "$SJ" ] ; then 
-			for m in y n ; do
-				echo "/usr/bin/time -f'TIMING: %e %M' sedef search single ${input} $i $j $m >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
-			done
-		fi
-	done
-done | tee "${output}/seeds.comm" | /usr/bin/time -f'Seeding time: %E' parallel --will-cite -j ${jobs} --eta
+if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
+	rm -f "${output}/seeds.joblog.ok"
+	echo "Running SD seeding..."
 
-proc=`cat "${output}/seeds.comm" | wc -l`
-echo "SD seeding done: done running ${proc} jobs!"
+	for i in `cut -f1 "${input}.fai"`; do 
+		for j in `cut -f1 "${input}.fai"`; do  
+			SI=`awk '$1=="'$i'" {print $2}' "${input}.fai"`
+			SJ=`awk '$1=="'$j'" {print $2}' "${input}.fai"` 
+			if [ "$SI" -le "$SJ" ] ; then 
+				for m in n ; do
+					echo "/usr/bin/time -f'TIMING: %e %M' sedef search single ${input} $i $j $m >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
+				done
+			fi
+		done
+	done | tee "${output}/seeds.comm" | /usr/bin/time -f'Seeding time: %E' parallel --will-cite -j ${jobs} --bar --joblog "${output}/seeds.joblog"
 
-proc_ok=`grep Total ${output}/log/seeds/*.log | wc -l`
-if [ "${proc}" != "${proc_ok}" ]; then
-	echo "Error: launched ${proc} jobs but completed only ${proc_ok} jobs; exiting..."
-	exit 2
+	proc=`cat "${output}/seeds.comm" | wc -l`
+	echo "SD seeding done: done running ${proc} jobs!"
+
+	proc_ok=`grep Total ${output}/log/seeds/*.log | wc -l`
+	if [ "${proc}" != "${proc_ok}" ]; then
+		echo "Error: launched ${proc} jobs but completed only ${proc_ok} jobs; exiting..."
+		exit 2
+	fi
+
+	# Get the single-core running time
+	sc_time=`grep TIMING ${output}/log/seeds/*.log | awk '{s+=$2}END{print s}'`
+	sc_time_h=`echo "${sc_time} / 3600" | bc`
+	echo "Single-core running time: ${sc_time_h} hours (${sc_time} seconds)"
+
+	sc_mem=`grep TIMING ${output}/log/seeds/*.log | awk '{if($3>m)m=$3}END{print m}'`
+	sc_mem_k=`echo "${sc_mem} / 1024" | bc`
+	echo "Memory used: ${sc_mem_k} MB"
+
+	touch "${output}/seeds.joblog.ok"
 fi
 
-# Get the single-core running time
-sc_time=`grep TIMING ${output}/log/seeds/*.log | awk '{s+=$2}END{print s}'`
-sc_time_h=`echo "${sc_time} / 3600" | bc`
-echo "Single-core running time: ${sc_time_h} hours (${sc_time} seconds)"
-
-sc_mem=`grep TIMING ${output}/log/seeds/*.log | awk '{if($3>m)m=$3}END{print m}'`
-sc_mem_k=`echo "${sc_mem} / 1024" | bc`
-echo "Memory used: ${sc_mem_k} MB"
-
-
 echo "************************************************************************"
-echo "Running SD alignment..."
+if [ ! -f "${output}/align.joblog.ok" ] || [ "${force}" == "y" ]; then
+	rm -f "${output}/align.joblog.ok"
+	echo "Running SD alignment..."
 
-mkdir -p "${output}/align"
-mkdir -p "${output}/log/align"
-/usr/bin/time -f'Bucketing time: %E' sedef align bucket "${output}/seeds" "${output}/align" 1000 2>"${output}/log/bucket.log"
+	mkdir -p "${output}/align"
+	mkdir -p "${output}/log/align"
+	/usr/bin/time -f'Bucketing time: %E' sedef align bucket "${output}/seeds" "${output}/align" 1000 2>"${output}/log/bucket.log"
 
-# Now run the alignment
-for j in "${output}/align/bucket_"???? ; do
-	k=$(basename $j);
-	echo "/usr/bin/time -f'TIMING: %e %M' sedef align generate \"${input}\" $j 11 >${j}.aligned.bed 2>${output}/log/align/${k}.log"
-done | tee "${output}/align.comm" | /usr/bin/time -f'Aligning time: %E' parallel --will-cite -j "${jobs}" --eta
+	# Now run the alignment
+	for j in "${output}/align/bucket_"???? ; do
+		k=$(basename $j);
+		echo "/usr/bin/time -f'TIMING: %e %M' sedef align generate \"${input}\" $j 11 >${j}.aligned.bed 2>${output}/log/align/${k}.log"
+	done | tee "${output}/align.comm" | /usr/bin/time -f'Aligning time: %E' parallel --will-cite -j "${jobs}" --bar --joblog "${output}/align.joblog"
 
-proc=`cat "${output}/align.comm" | wc -l`
-echo "SD alignment done: finished ${proc} jobs!"
+	proc=`cat "${output}/align.comm" | wc -l`
+	echo "SD alignment done: finished ${proc} jobs!"
 
-proc_ok=`grep Finished ${output}/log/align/*.log | wc -l`
-if [ "${proc}" != "${proc_ok}" ]; then
-	echo "Error: launched ${proc} jobs but completed only ${proc_ok} jobs; exiting..."
-	exit 2
+	proc_ok=`grep Finished ${output}/log/align/*.log | wc -l`
+	if [ "${proc}" != "${proc_ok}" ]; then
+		echo "Error: launched ${proc} jobs but completed only ${proc_ok} jobs; exiting..."
+		exit 2
+	fi
+
+	# Get the single-core running time
+	sc_time=`grep TIMING ${output}/log/align/*.log | awk '{s+=$2}END{print s}'`
+	sc_time_h=`echo "${sc_time} / 3600" | bc`
+	echo "Single-core running time: ${sc_time_h} hours (${sc_time} seconds)"
+
+	sc_mem=`grep TIMING ${output}/log/align/*.log | awk '{if($3>m)m=$3}END{print m}'`
+	sc_mem_k=`echo "${sc_mem} / 1024" | bc`
+	echo "Memory used: ${sc_mem_k} MB"
+
+	touch "${output}/align.joblog.ok"
 fi
 
-# Get the single-core running time
-sc_time=`grep TIMING ${output}/log/align/*.log | awk '{s+=$2}END{print s}'`
-sc_time_h=`echo "${sc_time} / 3600" | bc`
-echo "Single-core running time: ${sc_time_h} hours (${sc_time} seconds)"
+echo "************************************************************************"
+if [ ! -f "${output}/report.joblog.okq" ] || [ "${force}" == "y" ]; then
+	rm -f "${output}/report.joblog.ok"
+	echo "Running SD reporting..."
 
-sc_mem=`grep TIMING ${output}/log/align/*.log | awk '{if($3>m)m=$3}END{print m}'`
-sc_mem_k=`echo "${sc_mem} / 1024" | bc`
-echo "Memory used: ${sc_mem_k} MB"
+	cat "${output}/seeds/"*.bed > "${output}/seeds.bed" # seed SDs
+	cat "${output}/align/bucket_"???? > "${output}/potentials.bed" # potential SD regions
+	cat "${output}/align/"*.aligned.bed > "${output}/aligned.bed"  # final chains
 
+	# Now get the final calls
+	/usr/bin/time -f'Report time: %E' sedef stats generate "${input}" "${output}/aligned.bed" > "${output}/final.bed"
+
+	wc -l "${output}/"*.bed
+
+	touch "${output}/report.joblog.ok"
+fi
 
 echo "************************************************************************"
-echo "Running SD reporting..."
 
-cat "${output}/seeds/"*.bed > "${output}/seeds.bed" # seed SDs
-cat "${output}/align/bucket_"???? > "${output}/potentials.bed" # potential SD regions
-cat "${output}/align/"*.aligned.bed > "${output}/aligned.bed"  # final chains
 
-wc -l "${output}/"*.bed
-
-# Now get the final calls
-/usr/bin/time -f'Report time: %E' sedef stats generate "${input}" "${output}/aligned.bed" > "${output}/final.bed"
+/usr/bin/time -f'Python time: %E' python scratch/check-overlap.py \
+	data/mm8chr1.wgac-tab ${output}/final.bed | \
+	tee ${output}/final-python.log | grep '::' -A1
+/usr/bin/time -f'diff time: %E' sedef stats diff ${input} \
+	${output}/final.bed data/mm8chr1.wgac-tab
 
 echo "************************************************************************"
 echo "SEDEF done! Final SDs available in ${output}/final.bed"

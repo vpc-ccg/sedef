@@ -31,7 +31,7 @@ vector<Anchor> generate_anchors(const string &query, const string &ref,
 	int last_n = - kmer_size;
 	uint32_t h = 0;
 	for (int i = 0; i < ref.size(); i++) {
-		if (ref[i] == 'N') 
+		if (toupper(ref[i]) == 'N') 
 			last_n = i;
 		h = ((h << 2) | hash_dna(ref[i])) & MASK; 
 		if (i < kmer_size - 1) 
@@ -57,7 +57,7 @@ vector<Anchor> generate_anchors(const string &query, const string &ref,
 	last_n = -kmer_size, h = 0;
 	int w = 0;
 	for (int i = 0; i < query.size(); i++) {
-		if (query[i] == 'N') 
+		if (toupper(query[i]) == 'N') 
 			last_n = i;
 		h = ((h << 2) | hash_dna(query[i])) & MASK; 
 		if (i < kmer_size - 1) 
@@ -75,6 +75,7 @@ vector<Anchor> generate_anchors(const string &query, const string &ref,
 			if (same_chr && abs(orig.ref_start + r - (orig.query_start + q)) <= kmer_size)
 				continue;
 			int d = off + r - q;
+			// eprn(">> {} - {} ; {} {}", d, slide[d], q, kmer_size);
 			assert(d >= 0 && d < slide.size());
 			if (q >= slide[d]) {
 				assert(r >= d - off + slide[d]);
@@ -82,12 +83,13 @@ vector<Anchor> generate_anchors(const string &query, const string &ref,
 				bool has_u = 0;
 				int len;
 				for (len = 0; q + len < query.size() && r + len < ref.size(); len++) {
-					if (query[q + len] == 'N' || ref[r + len] == 'N') {
+					if (toupper(query[q + len]) == 'N' || toupper(ref[r + len]) == 'N') {
 						assert(len >= kmer_size);
 						break;
 					}
-					if (toupper(query[q + len]) != toupper(ref[r + len]))
+					if (toupper(query[q + len]) != toupper(ref[r + len])) {
 						break;
+					}
 					has_u += bool(isupper(query[q + len]) || isupper(ref[r + len]));
 				}
 				if (len >= kmer_size) {
@@ -98,7 +100,10 @@ vector<Anchor> generate_anchors(const string &query, const string &ref,
 					slide[d] = q + len;
 				}
 			} else {
-				assert(slide[d] >= q + kmer_size);
+				// if (slide[d] < q + kmer_size) {
+					// for (int x=0;x<kmer_size;x++)eprnn("{}", query[q+x]); eprn("");
+				// }
+				assert(slide[d] >= q + kmer_size); // subset unless it has N!!!
 				assert(d - off + slide[d] >= r + kmer_size);
 			}
 		}

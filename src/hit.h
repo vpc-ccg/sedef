@@ -33,7 +33,7 @@ public:
 	static Hit from_wgac(const string &bed);
 
 public:
-	std::string to_bed(bool do_rc=true) const;
+	std::string to_bed(bool do_rc=true, bool with_cigar=true) const;
 	bool operator<(const Hit &h) const {
 		return 
 			tie(query_start, query_end, ref_start, ref_end) < 

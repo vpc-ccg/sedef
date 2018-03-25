@@ -118,8 +118,8 @@ void align_wgac(string ref_path, string tab_path)
 		if (h.ref->is_rc) refr = rc(refr);
 
 		// span
-		int qup=0; for (auto c: refq) if (isupper(c)&&c!='N') qup++;
-		int rup=0; for (auto c: refr) if (isupper(c)&&c!='N') rup++;
+		int qup=0; for (auto c: refq) if (isupper(c)&&c!='N') qup++;// TODO lowercase Ns
+		int rup=0; for (auto c: refr) if (isupper(c)&&c!='N') rup++;// TODO lowercase Ns
 		prn("{}..{} {}..{} {} {} {} {} {} ",
 			refq.substr(0,10), refq.substr(refq.size()-10),
 			refr.substr(0,10), refr.substr(refr.size()-10), 
