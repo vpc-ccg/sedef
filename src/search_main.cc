@@ -13,7 +13,6 @@
 #include <omp.h>
 #endif
 
-#include "aho.h"
 #include "common.h"
 #include "search.h"
 #include "search_main.h"
@@ -29,20 +28,11 @@ extern int64_t OTHER_FAILED;
 extern int64_t CORE_FAILED;
 extern int64_t INTERVAL_FAILED;
 
-extern shared_ptr<AHOAutomata> aho;
-
-#ifdef ATTAINER
-const bool ATTAINER_bool = true;
-#else
-const bool ATTAINER_bool = false;
-#endif
-
 /******************************************************************************/
 
 bool do_uppercase = 1;
 bool do_uppercase_seeds = 1;
 bool do_qgram = 1;
-bool do_core = 0;
 
 /******************************************************************************/
 
@@ -249,7 +239,6 @@ void search_single(const string &ref_path, const string &query_chr, const string
 	eprn("Building index took {:.1f}s", elapsed(T)), T = cur_time();
 
 
-	// aho = make_shared<AHOAutomata>();
 	int total = initial_search(query_hash, ref_hash, is_same_genome, [](Hit &h) {
 		prn("{}", h.to_bed());
 	});
@@ -260,14 +249,12 @@ void search_single(const string &ref_path, const string &query_chr, const string
 	     "       Jaccard   = {:10n}\n"
 	     "       interval  = {:10n}\n"
 	     "       lowercase = {:10n}\n"
-	     "       q-grams   = {:10n}\n"
-	     "       cores     = {:10n}",
+	     "       q-grams   = {:10n},"
 	     TOTAL_ATTEMPTED, 
 	     JACCARD_FAILED, 
 	     INTERVAL_FAILED, 
 	     OTHER_FAILED,
-	     QGRAM_NORMAL_FAILED, 
-	     CORE_FAILED
+	     QGRAM_NORMAL_FAILED
 	);
 
 	exit(0);

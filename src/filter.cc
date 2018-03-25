@@ -10,13 +10,12 @@
 
 #include "common.h"
 #include "filter.h"
-#include "aho.h"
 
 using namespace std;
 
 /******************************************************************************/
 
-const int MIN_UPPERCASE = 250;
+const int MIN_UPPERCASE = 200;
 
 /******************************************************************************/
 
@@ -28,10 +27,6 @@ extern bool do_qgram;
 
 /* extern */ int64_t QGRAM_NORMAL_FAILED = 0;
 /* extern */ int64_t OTHER_FAILED = 0;
-/* extern */ int64_t CORE_FAILED = 0;
-
-// Must be initialized thread-safe
-/* extern */ shared_ptr<AHOAutomata> aho = NULL;
 
 /******************************************************************************/
 
@@ -97,24 +92,6 @@ pair<bool, string> qgram_filter(const string &q, int q_pos, int q_len, const str
 	return {true, ""};
 }
 
-pair<bool, string> core_filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
-{
-	map<int, int> hits;
-	int common = 0;
-	aho->search(q.c_str() + q_pos, q_len, hits, 1);
-	aho->search(r.c_str() + r_pos, r_len, hits, 2);
-	for (auto &h: hits) if (h.second == 3) common++;
-
-	int maxlen = max(q_len, r_len);
-	double boundary = (1.0/2.5) * (maxlen / 50.0);
-	if (common < int(boundary)) {
-		// #pragma omp atomic
-		CORE_FAILED++;
-		return {false, fmt::format("cores {} < {}", common, boundary)};
-	}
-	return {true, ""};
-}
-
 /******************************************************************************/
 
 pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r, int r_pos, int r_end) 
@@ -124,11 +101,6 @@ pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r
 		// dprn(":: up {} {}", f.first, f.second);
 		if (!f.first) return f;
 	}
-
-	// if (do_core) {
-		// auto f = core_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
-		// if (!f.first) return f;
-	// }
 
 	if (do_qgram) {
 		auto f = qgram_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);

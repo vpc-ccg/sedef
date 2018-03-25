@@ -18,7 +18,6 @@
 #include "fasta.h"
 #include "filter.h"
 #include "align.h"
-#include "aho.h"
 #include "sliding.h"
 #include "chain.h"
 
