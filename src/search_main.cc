@@ -253,10 +253,6 @@ void search_single(const string &ref_path, const string &query_chr, const string
 
 void search_main(int argc, char **argv)
 {
-	do_uppercase = 1;
-	do_uppercase_seeds = 1;
-	do_qgram = 1;
-
 	if (argc < 2) {
 		throw fmt::format("Not enough arguments to search");
 	}

@@ -26,12 +26,12 @@ extern bool do_uppercase_seeds;
 /******************************************************************************/
 
 /* extern */ int64_t TOTAL_ATTEMPTED = 0;
-/* extern */ int64_t JACCARD_FAILED = 0;
+/* extern */ int64_t JACCARD_FAILED  = 0;
 /* extern */ int64_t INTERVAL_FAILED = 0;
 
 /******************************************************************************/
 
-const int MAX_MATCH = 1 * 1000 * 1000;   /// 1MB at most
+const int MAX_MATCH = 1 * MB;   /// 1MB at most
 
 /******************************************************************************/
 
@@ -399,19 +399,31 @@ vector<Hit> search (int query_winnow_start,
 	{ 
 		auto &h = query_hash->minimizers[query_winnow_end].hash;
 		init_winnow.add_to_query(h);
-		if (do_uppercase_seeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
-			continue; 
-		if (!do_uppercase_seeds && h.status == Hash::Status::HAS_N)
+
+		do_uppercase_seeds=0;
+		// if (do_uppercase_seeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
+		// 	continue; 
+		if (h.status == Hash::Status::HAS_N)
 			continue;
 		
-		auto ptr = ref_hash->index.find(h);
-		if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
-			continue;
-		} else for (auto pos: ptr->second) {
-			if (!same_genome || pos >= query_start + init_len) { // Make sure to have at least read_len spacing if reference = query
-				auto pf = tree.find(query_hash->minimizers[query_winnow_end].loc);
-				if (pf == tree.end() || pf->second.find(pos) == pf->second.end()) {
-					candidates_prel.insert(pos);
+		// nadji i upper i lower
+		Hash hh[2] = { h, Hash { h.hash, 
+			h.status != Hash::Status::HAS_UPPERCASE 
+				? Hash::Status::HAS_UPPERCASE
+				: Hash::Status::ALL_LOWERCASE } 
+		};
+		auto pf = tree.find(query_hash->minimizers[query_winnow_end].loc);
+		for (int hi = 0; hi < 2; hi++) {
+			if (h.status == Hash::Status::ALL_LOWERCASE && hh[hi].status == Hash::Status::ALL_LOWERCASE)
+				continue;
+			auto ptr = ref_hash->index.find(hh[hi]);
+			if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
+				continue;
+			} else for (auto pos: ptr->second) {
+				if (!same_genome || pos >= query_start + init_len) { // Make sure to have at least read_len spacing if reference = query
+					if (pf == tree.end() || pf->second.find(pos) == pf->second.end()) {
+						candidates_prel.insert(pos);
+					}
 				}
 			}
 		}
