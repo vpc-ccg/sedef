@@ -199,8 +199,9 @@ echo "************************************************************************"
 
 if [ -f "${wgac}" ]; then
 	echo "Running SD checking..."
+	cut -f1-15 ${output}/final.bed > ${output}/final_cut.bed
 	/usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
-		${wgac} ${output}/final.bed | \
+		${wgac} ${output}/final_cut.bed | \
 		tee ${output}/final-python.log | grep '::' -A1
 	/usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
 		${output}/final.bed ${wgac}
