@@ -9,10 +9,6 @@
 #include <algorithm>
 #include <chrono>
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include "common.h"
 #include "search.h"
 #include "search_main.h"
@@ -108,10 +104,6 @@ int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, boo
 void search_parallel(const string &ref_path)
 {
 	FastaReference fr(ref_path);
-
-	#ifdef _OPENMP
-	eprn("Using {} threads\n", omp_get_max_threads());
-	#endif
 
 	auto T = cur_time();
 
