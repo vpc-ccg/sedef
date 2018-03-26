@@ -400,11 +400,11 @@ vector<Hit> search (int query_winnow_start,
 		auto &h = query_hash->minimizers[query_winnow_end].hash;
 		init_winnow.add_to_query(h);
 
-		do_uppercase_seeds=0;
-		// if (do_uppercase_seeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
-		// 	continue; 
-		if (h.status == Hash::Status::HAS_N)
-			continue;
+		// do_uppercase_seeds=0;
+		if (do_uppercase_seeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
+			continue; 
+		// if (h.status == Hash::Status::HAS_N)
+			// continue;
 		
 		// nadji i upper i lower
 		Hash hh[2] = { h, Hash { h.hash, 
@@ -413,9 +413,9 @@ vector<Hit> search (int query_winnow_start,
 				: Hash::Status::ALL_LOWERCASE } 
 		};
 		auto pf = tree.find(query_hash->minimizers[query_winnow_end].loc);
-		for (int hi = 0; hi < 2; hi++) {
-			if (h.status == Hash::Status::ALL_LOWERCASE && hh[hi].status == Hash::Status::ALL_LOWERCASE)
-				continue;
+		for (int hi = 0; hi < 1; hi++) {
+			// if (h.status == Hash::Status::ALL_LOWERCASE && hh[hi].status == Hash::Status::ALL_LOWERCASE)
+				// continue;
 			auto ptr = ref_hash->index.find(hh[hi]);
 			if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
 				continue;
