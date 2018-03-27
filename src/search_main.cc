@@ -31,27 +31,6 @@ bool do_qgram = 1;
 
 /******************************************************************************/
 
-void pp(shared_ptr<Index> query_hash)
-{
-	prn("::{} {} {}", query_hash->window_size, query_hash->kmer_size, query_hash->threshold);
-	prn("::{} {} {}", query_hash->seq->is_rc, query_hash->seq->name, query_hash->seq->seq.substr(0,10));
-	int64_t sum1=0,sum2=0,sum3=0;
-	for (auto &m: query_hash->minimizers) {
-		sum1+=m.hash.hash;
-		sum2+=m.hash.status;
-		sum3+=m.loc;
-	}
-	prn("::{} {} {}", sum1, sum2, sum3);
-	sum1=sum2=sum3=0;
-	for (auto &m: query_hash->index) {
-		sum1+=m.first.hash;
-		sum2+=m.first.status;
-		for (auto x: m.second)
-			sum3+=x;
-	}
-	prn("::{} {} {}", sum1, sum2, sum3);
-}
-
 template<typename T>
 int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, bool is_same_genome, 
 	T print_function, bool show_progress=true)
@@ -59,9 +38,6 @@ int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, boo
 	Tree tree;
 	int total = 0, track = 0;
 	int next_to_attain = 0;
-
-	// pp(query_hash);
-	// pp(ref_hash);
 
 	for (int qi = 0; qi < query_hash->minimizers.size(); qi++) {
 		auto &qm = query_hash->minimizers[qi];
@@ -79,8 +55,8 @@ int initial_search(shared_ptr<Index> query_hash, shared_ptr<Index> ref_hash, boo
 
 		if (do_uppercase_seeds  && qm.hash.status != Hash::Status::HAS_UPPERCASE)
 			continue;
-		if (!do_uppercase_seeds && qm.hash.status == Hash::Status::HAS_N)
-			continue;
+		// if (!do_uppercase_seeds && qm.hash.status == Hash::Status::HAS_N)
+			// continue;
 
 
 		// Tree tree;

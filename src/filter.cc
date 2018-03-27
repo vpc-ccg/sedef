@@ -20,7 +20,6 @@ const int MIN_UPPERCASE = KMER_SIZE;
 /******************************************************************************/
 
 extern bool do_uppercase;
-extern bool do_core;
 extern bool do_qgram;
 
 /******************************************************************************/

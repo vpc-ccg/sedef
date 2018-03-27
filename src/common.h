@@ -56,7 +56,6 @@ const size_t GB = 1024 * MB;
 extern bool do_uppercase;
 extern bool do_uppercase_seeds;
 extern bool do_qgram;
-extern bool do_core;
 
 /******************************************************************************/
 

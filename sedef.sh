@@ -185,10 +185,12 @@ if [ ! -f "${output}/report.joblog.okq" ] || [ "${force}" == "y" ]; then
 
 	cat "${output}/seeds/"*.bed > "${output}/seeds.bed" # seed SDs
 	cat "${output}/align/bucket_"???? > "${output}/potentials.bed" # potential SD regions
-	cat "${output}/align/"*.aligned.bed > "${output}/aligned.bed"  # final chains
+	cat "${output}/align/"*.aligned.bed |\
+		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n | uniq > "${output}/aligned.bed"  # final chains
 
 	# Now get the final calls
-	/usr/bin/time -f'Report time: %E (%M MB)' sedef stats generate "${input}" "${output}/aligned.bed" > "${output}/final.bed"
+	/usr/bin/time -f'Report time: %E (%M MB)' sedef stats generate "${input}" "${output}/aligned.bed" |\
+		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n | uniq > "${output}/final.bed"
 
 	wc -l "${output}/"*.bed
 
@@ -198,11 +200,18 @@ fi
 echo "************************************************************************"
 
 if [ -f "${wgac}" ]; then
-	echo "Running SD checking..."
+	echo "Running SD/aligned checking..."
+	/usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
+		${wgac} ${output}/aligned.bed ${output}/aligned.misses.txt
+	/usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
+		${output}/aligned.bed ${wgac}
+
+	echo "Running SD/final checking..."
 	/usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
 		${wgac} ${output}/final.bed ${output}/final.misses.txt
 	/usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
 		${output}/final.bed ${wgac}
+
 fi
 
 echo "************************************************************************"

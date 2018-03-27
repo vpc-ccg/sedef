@@ -407,16 +407,16 @@ vector<Hit> search (int query_winnow_start,
 			// continue;
 		
 		// nadji i upper i lower
-		Hash hh[2] = { h, Hash { h.hash, 
-			h.status != Hash::Status::HAS_UPPERCASE 
-				? Hash::Status::HAS_UPPERCASE
-				: Hash::Status::ALL_LOWERCASE } 
-		};
+		// Hash hh[2] = { h, Hash { h.hash, 
+		// 	h.status != Hash::Status::HAS_UPPERCASE 
+		// 		? Hash::Status::HAS_UPPERCASE
+		// 		: Hash::Status::ALL_LOWERCASE } 
+		// };
 		auto pf = tree.find(query_hash->minimizers[query_winnow_end].loc);
-		for (int hi = 0; hi < 1; hi++) {
+		// for (int hi = 0; hi < 1; hi++) {
 			// if (h.status == Hash::Status::ALL_LOWERCASE && hh[hi].status == Hash::Status::ALL_LOWERCASE)
 				// continue;
-			auto ptr = ref_hash->index.find(hh[hi]);
+			auto ptr = ref_hash->index.find(h);
 			if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
 				continue;
 			} else for (auto pos: ptr->second) {
@@ -426,7 +426,7 @@ vector<Hit> search (int query_winnow_start,
 					}
 				}
 			}
-		}
+		// }
 	}
 	if (!init_winnow.query_size)
 		return {};
