@@ -10,6 +10,7 @@
 #include <chrono>
 #include <bitset>
 #include <unordered_set>
+#include <unordered_map>
 
 #include <boost/dynamic_bitset.hpp>
 
@@ -202,6 +203,129 @@ vector<Hit> split_alignment(Hit h)
 	return hits_final;
 }
 
+void process(Hit hs, string cigar, FastaReference &fr)
+{
+	// auto ita = reference.find(hs.query->name);
+	// assert(ita != reference.end());
+	// auto itb = reference.find(hs.ref->name);
+	// assert(itb != reference.end());
+
+	string fa = fr.get_sequence(hs.query->name, hs.query_start, &hs.query_end);
+	string fb = fr.get_sequence(hs.ref->name, hs.ref_start, &hs.ref_end);
+	// if (hs.query_end > ita->second.size()) 
+	// 	hs.query_end = ita->second.size();
+	// string fa = ita->second.substr(hs.query_start, hs.query_end - hs.query_start);
+	// if (hs.ref_end > itb->second.size()) 
+	// 	hs.ref_end = itb->second.size();
+	// string fb = itb->second.substr(hs.ref_start, hs.ref_end - hs.ref_start);
+	assert(!hs.query->is_rc); 
+	if (hs.query->is_rc) {
+		fa = rc(fa);
+	}
+	if (hs.ref->is_rc) {
+		fb = rc(fb);
+	}
+	assert(cigar.size());
+	hs.aln = Alignment(fa, fb, cigar);
+
+	auto hs_split = split_alignment(hs);
+	for (auto &h: hs_split) {
+		int align_length = h.aln.span();
+		int indel_a = 0;
+		int indel_b = 0;
+		int alignB = 0;
+		int matchB = 0;
+		int mismatchB = 0;
+		int transitionsB = 0;
+		int transversionsB = 0;
+
+		int uppercaseA = 0;
+		int uppercaseB = 0;
+		int uppercaseMatches = 0;
+
+		for (int i = 0; i < align_length; i++) {
+			char a = toupper(h.aln.align_a[i]);
+			char b = toupper(h.aln.align_b[i]);
+			indel_a += a == '-';
+			indel_b += b == '-';
+			matchB += a != '-' && a == b;
+			uppercaseA += (h.aln.align_a[i] != '-' && toupper(h.aln.align_a[i]) != 'N' 
+				&& isupper(h.aln.align_a[i]));
+			uppercaseB += (h.aln.align_b[i] != '-' && toupper(h.aln.align_b[i]) != 'N' 
+				&& isupper(h.aln.align_b[i]));
+			if (a != '-' && b != '-') {
+				alignB += 1;
+				if (a != b) {
+					mismatchB += 1;
+					if (a == 'A' || a == 'G') {
+						transitionsB += b == 'A' || b == 'G';
+						transversionsB += !(b == 'A' || b == 'G');
+					} else {
+						transitionsB += b == 'C' || b == 'T';
+						transversionsB += !(b == 'C' || b == 'T');
+					}
+				} else if (isupper(h.aln.align_a[i]) && isupper(h.aln.align_b[i])) {
+					uppercaseMatches++;
+				}
+			}
+		}
+
+		double fracMatch = double(matchB) / (alignB);
+		double fracMatchIndel = double(matchB) / (align_length);
+	
+		double jcp = double(mismatchB) / (alignB);
+		double jcK = -0.75 * log(1.0 - 4.0 / 3 * jcp);
+		
+		double p = double(transitionsB) / (alignB);
+		double q = double(transversionsB) / (alignB);
+		double w1 = 1.0 / (1 - 2.0 * p - q);
+		double w2 = 1.0 / (1 - 2.0 * q);
+		double k2K = 0.5 * log(w1) + 0.25 * log(w2);
+		
+		// TODO handle this smarter
+		bool same_chr = h.query->name == h.ref->name && h.query->is_rc == h.ref->is_rc;
+		int overlap = !same_chr ? 0 : max(0, 
+			min(h.query_end, h.ref_end) - max(h.query_start, h.ref_start));
+		bool too_big_overlap = 
+			(h.query_end - h.query_start - overlap) < 100 ||
+			(h.ref_end - h.ref_start - overlap) < 100;
+		too_big_overlap &= same_chr;
+		// too_big_overlap = 0;
+
+		double errorScaled = (h.aln.gaps() + h.aln.mismatches()) / 
+			double(h.aln.gaps() + h.aln.mismatches() + h.aln.matches());
+
+		// Split large gaps?
+		if (uppercaseA >= 100 && uppercaseB >= 100 && !too_big_overlap && errorScaled <= .50
+		 	&& uppercaseMatches >= 100)
+		{
+			string l = h.to_bed(false);
+			
+			h.name = "S";
+			h.comment = ""; 
+			#pragma omp critical
+			prn("{}\t"
+				"{}\t{}\t{}\t{}\t{}\t{}\t"
+				"{}\t{}\t{}\t{}\t{}\t{}\t"
+				"{}\t{}\t{}\t"
+				"{}\t{}\t{}\t{}\t"
+				"{}\t{}", 
+				h.to_bed(false, false), // 1-13
+				align_length, // 14
+				indel_a, indel_b, // 15-16
+				alignB, matchB, mismatchB, // 17-19
+				transitionsB, transversionsB, // 20-21
+				fracMatch, fracMatchIndel, // 22-23
+				jcK, k2K, // 24-25
+				h.aln.gaps(), // 26
+				uppercaseA, uppercaseB, uppercaseMatches, // 27-29
+				h.aln.matches(), h.aln.mismatches(), h.aln.gaps(), h.aln.gap_bases(), // 30-33
+				h.aln.cigar_string() // 34
+			);
+		}
+	}
+}
+
 void stats(const string &ref_path, const string &bed_path) 
 {
 	FastaReference fr(ref_path);
@@ -261,145 +385,15 @@ void stats(const string &ref_path, const string &bed_path)
 			tie(b.first.ref->is_rc, b.first.query->name, b.first.ref->name, b.first.query_start, b.first.ref_start);
 	});
 
+	eprn("\nRead {:n} hits", hits.size());
 	int hit_count = 0, out_count = 0;
 	string prev;
-	
+
 	#pragma omp parallel for
 	for (auto hsi = 0; hsi < hits.size(); hsi++) {
-		//eprn(">> {}", hs.first.to_bed());
-		auto &hs = hits[hsi].first;
-		auto &cigar = hits[hsi].second;
-
-		string fa, fb;
-		#pragma omp critical
-		{
-			fa = fr.get_sequence(hs.query->name, hs.query_start, &hs.query_end);
-			fb = fr.get_sequence(hs.ref->name, hs.ref_start, &hs.ref_end);
-		}
-		assert(!hs.query->is_rc); 
-		if (hs.query->is_rc) {
-			fa = rc(fa);
-		}
-		if (hs.ref->is_rc) {
-			fb = rc(fb);
-		}
-		assert(cigar.size());
-		hs.aln = Alignment(fa, fb, cigar);
-
-		auto hs_split = split_alignment(hs);
-		for (auto &h: hs_split) {
-			// h.aln.trim();
-			// hits.push_back(h);
-		// }
-		// eprn("Loaded {} hits", hits.size());
-		// // hits = merge(hits, 250);
-		// // eprn("After merging remaining {} hits", hits.size());
-		// // for (auto &h: hits) {
-		// // 	prn("{}", h.to_bed(false));
-		// // }
-		// // exit(0);
-		// for (auto &h: hits) {
-			int align_length = h.aln.span();
-			int indel_a = 0;
-			int indel_b = 0;
-			int alignB = 0;
-			int matchB = 0;
-			int mismatchB = 0;
-			int transitionsB = 0;
-			int transversionsB = 0;
-
-			int uppercaseA = 0;
-			int uppercaseB = 0;
-			int uppercaseMatches = 0;
-
-			for (int i = 0; i < align_length; i++) {
-				char a = toupper(h.aln.align_a[i]);
-				char b = toupper(h.aln.align_b[i]);
-				indel_a += a == '-';
-				indel_b += b == '-';
-				matchB += a != '-' && a == b;
-				uppercaseA += (h.aln.align_a[i] != '-' && toupper(h.aln.align_a[i]) != 'N' 
-					&& isupper(h.aln.align_a[i]));
-				uppercaseB += (h.aln.align_b[i] != '-' && toupper(h.aln.align_b[i]) != 'N' 
-					&& isupper(h.aln.align_b[i]));
-				if (a != '-' && b != '-') {
-					alignB += 1;
-					if (a != b) {
-						mismatchB += 1;
-						if (a == 'A' || a == 'G') {
-							transitionsB += b == 'A' || b == 'G';
-							transversionsB += !(b == 'A' || b == 'G');
-						} else {
-							transitionsB += b == 'C' || b == 'T';
-							transversionsB += !(b == 'C' || b == 'T');
-						}
-					} else if (isupper(h.aln.align_a[i]) && isupper(h.aln.align_b[i])) {
-						uppercaseMatches++;
-					}
-				}
-			}
-
-			double fracMatch = double(matchB) / (alignB);
-			double fracMatchIndel = double(matchB) / (align_length);
-		
-			double jcp = double(mismatchB) / (alignB);
-			double jcK = -0.75 * log(1.0 - 4.0 / 3 * jcp);
-			
-			double p = double(transitionsB) / (alignB);
-			double q = double(transversionsB) / (alignB);
-			double w1 = 1.0 / (1 - 2.0 * p - q);
-			double w2 = 1.0 / (1 - 2.0 * q);
-			double k2K = 0.5 * log(w1) + 0.25 * log(w2);
-			
-			// TODO handle this smarter
-			bool same_chr = h.query->name == h.ref->name && h.query->is_rc == h.ref->is_rc;
-			int overlap = !same_chr ? 0 : max(0, 
-				min(h.query_end, h.ref_end) - max(h.query_start, h.ref_start));
-			bool too_big_overlap = 
-				(h.query_end - h.query_start - overlap) < 100 ||
-				(h.ref_end - h.ref_start - overlap) < 100;
-			too_big_overlap &= same_chr;
-			// too_big_overlap = 0;
-
-			double errorScaled = (h.aln.gaps() + h.aln.mismatches()) / 
-				double(h.aln.gaps() + h.aln.mismatches() + h.aln.matches());
-
-			// Split large gaps?
-			if (uppercaseA >= 100 && uppercaseB >= 100 && !too_big_overlap && errorScaled <= .50 &&
-				uppercaseMatches >= 100) 
-			{
-				string l = h.to_bed(false);
-				
-				if (l != prev) {
-					h.name = fmt::format("S{:05}", out_count);
-					h.comment = ""; 
-					#pragma omp critical
-					prn("{}\t"
-						"{}\t{}\t{}\t{}\t{}\t{}\t"
-						"{}\t{}\t{}\t{}\t{}\t{}\t"
-						"{}\t{}\t{}\t"
-						"{}\t{}\t{}\t{}\t"
-						"{}\t{}", 
-						h.to_bed(false, false), // 1-13
-						align_length, // 14
-						indel_a, indel_b, // 15-16
-						alignB, matchB, mismatchB, // 17-19
-						transitionsB, transversionsB, // 20-21
-						fracMatch, fracMatchIndel, // 22-23
-						jcK, k2K, // 24-25
-						h.aln.gaps(), // 26
-						uppercaseA, uppercaseB, uppercaseMatches, // 27-29
-						h.aln.matches(), h.aln.mismatches(), h.aln.gaps(), h.aln.gap_bases(), // 30-33
-						h.aln.cigar_string() // 34
-					);
-					// if (out_count > 10) exit(0);
-				}
-				// prev = l;
-			}
-		}
+		process(hits[hsi].first, hits[hsi].second, fr);
 		#pragma omp critical
 		eprnn("\rProcessed hit {:n}", ++hit_count);
-		// exit(0);
 	}
 	eprn("\nRead {:n} hits, wrote {:n} SDs", hit_count, out_count);
 	eprn("\nDone!");
@@ -440,17 +434,6 @@ void get_differences(const string &ref_path, const string &bed_path,
 	unordered_set<string> seen;
 	while (getline(fiw, s)) {
 		Hit h = Hit::from_wgac(s);
-		// auto ss = split(s, '\t');
-		// Hit h = {
-		// 	make_shared<Sequence>(ss[0], "", false), 
-		// 	atoi(ss[1].c_str()), 
-		// 	atoi(ss[2].c_str()),
-		// 	make_shared<Sequence>(ss[4], "", false), 
-		// 	atoi(ss[5].c_str()), 
-		// 	atoi(ss[6].c_str()),
-		// 	0, 
-		// 	""
-		// };
 		auto c1 = fmt::format("{}", h.query->name, "+-"[h.query->is_rc]);
 		auto c2 = fmt::format("{}", h.ref->name, "+-"[h.ref->is_rc]);		
 		if (c1.size() > 6 || c2.size() > 6)

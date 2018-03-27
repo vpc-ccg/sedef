@@ -348,27 +348,54 @@ void check_manually(const string &ref_path, int argc, char **argv)
 	// string sa = saa, sb = sbb;
 
 	string s;
+	vector<Hit> hits;
 	while (getline(cin, s)) {
-		auto argv = split(s, ' ');
+		auto argvv = split(s, '\t');
+		if (argvv[0] != "MISS") continue;
+		deque<string> argv(argvv.begin(), argvv.end());
+
 		// for (auto &ww: argv) eprn("-> {}",ww);
 
+		argv.pop_front();
+		// 0 1 2 3
 		x = atoi(argv[2].c_str()) + off;
 		auto sa = fr.get_sequence(argv[0], atoi(argv[1].c_str()) - off, &x);
 		x = atoi(argv[5].c_str()) + off;
 		auto sb = fr.get_sequence(argv[3], atoi(argv[4].c_str()) - off, &x);
-		if (argv[6][0] == '_') sb = rc(sb);
-		auto seq_a = make_shared<Sequence>("A", sa);
-		auto seq_b = make_shared<Sequence>("B", sb);
+		//if (argv[6][0] == '_') sb = rc(sb);
+
+		auto seq_a = make_shared<Sequence>(argv[0], sa);
+		auto seq_b = make_shared<Sequence>(argv[3], sb, argv[6][0] == '_');
 		Hit hit { 
-			seq_a, 0, (int)seq_a->seq.size(),
-			seq_b, 0, (int)seq_b->seq.size()
+			seq_a, atoi(argv[1].c_str()), atoi(argv[1].c_str())+(int)seq_a->seq.size(),
+			seq_b, atoi(argv[4].c_str()), atoi(argv[4].c_str())+(int)seq_b->seq.size()
 		};	
-		auto w = fmt::format("{} {} {} -> {} {} {} {}", argv[0], argv[1], argv[2],
-			argv[3], argv[4], argv[5], argv[6]);
-		eprnn(":: {} || ", w);
-		check_manually_(ref_path, hit, w);
-		eprn("{}", string(60, '-'));
+		hit.name=argvv[10];
+		hits.push_back(hit);
+		// auto w = fmt::format("{} {} {} -> {} {} {} {}", argv[0], argv[1], argv[2],
+		// 	argv[3], argv[4], argv[5], argv[6]);
+		// eprnn(":: {} || ", w);
+		// check_manually_(ref_path, hit, w);
+		// eprn("{}", string(60, '-'));
 	}
+
+	eprn("loaded {:n} hits", hits.size());
+	int j = 0;
+	#pragma omp parallel for
+	for (int i = 0; i < hits.size(); i++) {
+		auto &hit = hits[i];
+		hit.aln = Alignment(hit.query->seq, hit.ref->seq);
+
+		#pragma omp critical
+		prn("{}\t{}..{}\t{}..{}", hit.to_bed(0),
+			hit.query->seq.substr(0, 10), hit.query->seq.substr(hit.query->seq.size()-10),
+			hit.ref->seq.substr(0, 10), hit.ref->seq.substr(hit.ref->seq.size()-10));
+
+		#pragma omp critical
+		eprnn("\r{:n}", ++j);
+		// if (i>4) exit(0);
+	}
+	eprn("");
 }
 
 /******************************************************************************/
