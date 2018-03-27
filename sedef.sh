@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 786
 
+echo "Start: `date`"
+
 getopt --test > /dev/null
 if [[ $? -ne 4 ]]; then
 	echo "I’m sorry, `getopt --test` failed in this environment."
@@ -196,6 +198,8 @@ if [ ! -f "${output}/report.joblog.okq" ] || [ "${force}" == "y" ]; then
 
 	touch "${output}/report.joblog.ok"
 fi
+
+echo "End: `date`"
 
 echo "************************************************************************"
 
