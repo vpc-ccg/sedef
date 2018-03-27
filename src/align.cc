@@ -36,7 +36,7 @@ auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis
 	// eprn(">> >> >> woohoo sse4");
 	// #endif
 
-	const int STEP = 50 * 1000; // Max. alignment size (if larger, split into pieces)
+	const int STEP = 60 * 1000; // Max. alignment size (if larger, split into pieces)
 
 	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
 	int8_t mat[25] = { 

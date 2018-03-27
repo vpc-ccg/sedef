@@ -384,13 +384,16 @@ void check_manually(const string &ref_path, int argc, char **argv)
 	#pragma omp parallel for
 	for (int i = 0; i < hits.size(); i++) {
 		auto &hit = hits[i];
-		hit.aln = Alignment(hit.query->seq, hit.ref->seq);
+		if (hit.query_end-hit.query_start<=60000&&hit.ref_end-hit.ref_start<=60000) {
+			hit.aln = Alignment(hit.query->seq, hit.ref->seq);
 
-		#pragma omp critical
-		prn("{}\t{}..{}\t{}..{}", hit.to_bed(0),
-			hit.query->seq.substr(0, 10), hit.query->seq.substr(hit.query->seq.size()-10),
-			hit.ref->seq.substr(0, 10), hit.ref->seq.substr(hit.ref->seq.size()-10));
-
+			#pragma omp critical
+			prn("{}\t{}..{}\t{}..{}", hit.to_bed(0),
+				hit.query->seq.substr(0, 10), hit.query->seq.substr(hit.query->seq.size()-10),
+				hit.ref->seq.substr(0, 10), hit.ref->seq.substr(hit.ref->seq.size()-10));
+		} else {
+			prn("OOOPS\t{}", hit.to_bed(0,0));
+		}
 		#pragma omp critical
 		eprnn("\r{:n}", ++j);
 		// if (i>4) exit(0);
