@@ -392,7 +392,7 @@ void check_manually(const string &ref_path, int argc, char **argv)
 				hit.query->seq.substr(0, 10), hit.query->seq.substr(hit.query->seq.size()-10),
 				hit.ref->seq.substr(0, 10), hit.ref->seq.substr(hit.ref->seq.size()-10));
 		} else {
-			prn("OOOPS\t{}", hit.to_bed(0,0));
+			// prn("OOOPS\t{}", hit.to_bed(0,0));
 		}
 		#pragma omp critical
 		eprnn("\r{:n}", ++j);

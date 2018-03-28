@@ -24,7 +24,7 @@ using namespace std;
 
 /******************************************************************************/
 
-const int MAX_OK_GAP = 10;
+const int MAX_OK_GAP = 50;
 const int MIN_SPLIT_SIZE = 1000;
 const int MIN_ALIGNMENT_GAP_SIZE = 100;
 
@@ -114,6 +114,7 @@ vector<Hit> gap_split(Hit h)
 	vector<Hit> hits;
 	double gap_score = h.aln.gap_error();
 	for (auto &g: gaps) {
+		break;
 		dprn("--> {} :: a:{} b:{} ... a:{} b:{}", g.len,
 			g.start_a - h.aln.start_a, g.start_b - h.aln.start_b,
 			h.aln.end_a - (g.start_a + g.len_a), h.aln.end_b - (g.start_b + g.len_b));
@@ -127,6 +128,7 @@ vector<Hit> gap_split(Hit h)
 
 		dprn("{} ~ {}", g_score, g.len);
 		if (g_score >= MAX_OK_GAP) {
+			// eprn("gap! {} {} {}", g_score, g.len, h.aln.alignment.size());
 			dprn(":: Found gap of size {} and score {}\n:: {}\n:: {}\n:: {}", g.len, g_score,
 				h.aln.align_a.substr(g.start, g.len),
 				h.aln.alignment.substr(g.start, g.len),
@@ -135,18 +137,68 @@ vector<Hit> gap_split(Hit h)
 			bool x = subhit(h, 0, g.start, hh);
 			assert(x);
 			auto r = gap_split(hh);
-			for (auto &hh: r) hits.push_back(hh);
+			for (auto &hx: r) hits.push_back(hx);
 
 			x = subhit(h, g.start + g.len, h.aln.alignment.size(), hh);
 			assert(x);
 			r = gap_split(hh);
-			for (auto &hh: r) hits.push_back(hh);
+			for (auto &hx: r) hits.push_back(hx);
 
 			return hits;
 		}
 	}
 	if (!hits.size()) hits.push_back(h);
 	return hits;
+}
+
+void trimlower(Hit &h)
+{	
+	int sa = 0, sb = 0, i;
+	for (i = 0; i < h.aln.align_a.size(); i++) {
+		if (isupper(h.aln.align_a[i]) || isupper(h.aln.align_b[i]))
+			break;
+		sa += bool(h.aln.align_a[i] != '-');
+		sb += bool(h.aln.align_b[i] != '-');
+	}
+	// eprn("sa={} sb={} i={}", sa, sb, i);
+
+	int ea = h.aln.end_a, eb = h.aln.end_b, j;
+	for (j = h.aln.align_a.size() - 1; j >= 0; j--) {
+		if (isupper(h.aln.align_a[j]) || isupper(h.aln.align_b[j]))
+			break;
+		ea -= bool(h.aln.align_a[j] != '-');
+		eb -= bool(h.aln.align_b[j] != '-');
+	}
+	j++;
+	// eprn("sa={} sb={} i={}", ea, eb, j);
+
+	h.aln.align_a = h.aln.align_a.substr(i, j - i);
+	h.aln.alignment = h.aln.alignment.substr(i, j - i);
+	h.aln.align_b = h.aln.align_b.substr(i, j - i);
+	
+	h.aln.a = h.aln.a.substr(sa, ea - sa);
+	h.aln.start_a = sa;
+	h.aln.end_a = ea;
+	
+	h.aln.b = h.aln.b.substr(sb, eb - sb);
+	h.aln.start_b = sb;
+	h.aln.end_b = eb;
+	
+	h.aln.cigar_from_alignment();
+	// h.aln.trim_back();
+	// h.aln.trim_front();
+	
+	h.query_start += sa;
+	h.query_end = h.query_start + (ea - sa);
+	assert(!h.query->is_rc);
+	if (h.ref->is_rc) {
+		dprn("applying RC");
+		h.ref_start = h.ref_end - eb;
+		h.ref_end = h.ref_end - sb;
+	} else {
+		h.ref_start += sb;
+		h.ref_end = h.ref_start + (eb - sb);
+	}
 }
 
 vector<Hit> split_alignment(Hit h) 
@@ -188,7 +240,9 @@ vector<Hit> split_alignment(Hit h)
 			prev_bn = 0;
 		}
 	}
-	if (subhit(h, hit_begin, h.aln.alignment.size(), hh))
+	if (!hit_begin)
+		hits.push_back(h);
+	else if (subhit(h, hit_begin, h.aln.alignment.size(), hh))
 		hits.push_back(hh);
 
 	// Find gaps
@@ -230,6 +284,15 @@ void process(Hit hs, string cigar, FastaReference &fr)
 
 	auto hs_split = split_alignment(hs);
 	for (auto &h: hs_split) {
+		// eprn("{}", h.aln.print(80));
+		// trimlower(h);
+		if (h.aln.alignment.size() < 900)
+			continue;
+		// if (!h.aln.alignment.size())
+			// continue;
+		// eprn("alnd");
+		// eprn("{}", h.aln.print(80));
+
 		int align_length = h.aln.span();
 		int indel_a = 0;
 		int indel_b = 0;
@@ -296,8 +359,12 @@ void process(Hit hs, string cigar, FastaReference &fr)
 			double(h.aln.gaps() + h.aln.mismatches() + h.aln.matches());
 
 		// Split large gaps?
-		if (uppercaseA >= 100 && uppercaseB >= 100 && !too_big_overlap && errorScaled <= .50
-		 	&& uppercaseMatches >= 100)
+		if (uppercaseA >= 100 
+			&& uppercaseB >= 100 
+			&& !too_big_overlap 
+			&& errorScaled <= .50
+		 	&& uppercaseMatches >= 100
+		 	)
 		{
 			string l = h.to_bed(false);
 			
@@ -333,7 +400,6 @@ void stats(const string &ref_path, const string &bed_path)
 	if (!fin.is_open()) {
 		throw fmt::format("BED file {} does not exist", bed_path);
 	}
-
 
 	// string sq = "chr7	14840644	14858402	chr7	16454676	16460667	S248049	72.9	+	+	17758	18059	108M1I210M10I76M1I307M1I568M1D45M1D475M1I1677D99M1I106M1D480M2I88M28D61M7D46M7D156M1I41M4D24M17D96M32I43M9D51M4I75M3D21M23I13M13I1M172I57M7D41M1D184M1I23M10D78M1D125M1D133M5D27M1I21M1D17M1I119M7D64M1D139M1I30M1D13M2I61M1D218M1I30M29I10277D352M1I587M1I165M1I16M";
 	// // string sq = "chr17	13718022	13742917	chr17	20899063	20929192	S382400	53.2	+	-	30129	36658	308M1D114M6I179M4D208M1I71M4D9M1I288M2I409M1D103M1D200M3D31M16I149M6I544M1I513M2I254M6D99M2I21M2D2731I166M47D100M1I286M4D51M2I31M1D286M10D42M5I111M7I258M1I125M1I99M4D78M22D136M22I50M1278I97M1I273M3D138M29D368M2I28M1I170M2I1072M3D187M845I158M11I174M1D235M1I488M794D312M25D74M25I6704I42M1D104M1I19M1D686M1I84M1I475M3I158M5135D75M1I241M1D155M5D253M111D26M58D15M151D31M63D27M12I31M4D78M2I75M3I21M1D568M1D1618M1D87M4D988M1I56M1D330M42I154M1D22M2I60M1D22M1I438M1I129M1I172M6I46M1I164M17D492M1D175M1D22M3D25M1D145M1I24M3I322M1D131M2I363M1I124M";

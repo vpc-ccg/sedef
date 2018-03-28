@@ -50,6 +50,7 @@ public:
 	friend std::vector<Hit> gap_split(Hit h);
 	friend bool subhit(const Hit& h, int start, int end, Hit &ho);
 	friend void process(Hit hs, std::string cigar, FastaReference &reference);
+	friend void trimlower(Hit &h);
 
 
 	Alignment();
