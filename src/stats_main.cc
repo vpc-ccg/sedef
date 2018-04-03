@@ -431,6 +431,7 @@ void stats(const string &ref_path, const string &bed_path)
 	while (getline(fin, s)) {
 		string cigar;
 		Hit h = Hit::from_bed(s, &cigar);
+
 		assert(h.ref != nullptr);
 		assert(h.query != nullptr);
 		if (tie(h.query->name, h.query_start, h.query_end) > tie(h.ref->name, h.ref_start, h.ref_end)) {
@@ -473,11 +474,23 @@ void get_differences(const string &ref_path, const string &bed_path,
 	map<string, boost::dynamic_bitset<>> sedef;
 	map<string, boost::dynamic_bitset<>> wgac;
 
+	FastaReference fr(ref_path);
+
+
 	string s;
 	ifstream fin(bed_path);
+	int q = 0, w = 0;
 	while (getline(fin, s)) {
 		string cigar;
 		Hit h = Hit::from_bed(s, &cigar);
+
+		string fa = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
+		string fb = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
+		int qa = 0; for (auto f: fa) if (isupper(f)) qa++;
+		int qb = 0; for (auto f: fb) if (isupper(f)) qb++;
+		if (qa < 100 || qb < 100) { w++; continue; }
+		q++;
+
 
 		auto c1 = fmt::format("{}", h.query->name, "+-"[h.query->is_rc]);
 		auto c2 = fmt::format("{}", h.ref->name, "+-"[h.ref->is_rc]);
@@ -493,7 +506,7 @@ void get_differences(const string &ref_path, const string &bed_path,
 			sedef[c2].set(i);
 	}
 
-	eprn("SEDEF reading done!");
+	eprn("SEDEF reading done (in {:n}, miss {:n})!", q, w);
 
 	ifstream fiw(wgac_path);
 	getline(fiw, s);
@@ -521,8 +534,6 @@ void get_differences(const string &ref_path, const string &bed_path,
 	}
 
 	eprn("WGAC reading done!");
-
-	FastaReference fr(ref_path);
 
 	int intersect = 0, wgac_only = 0, wgac_span = 0, sedef_only = 0, sedef_span = 0;
 
