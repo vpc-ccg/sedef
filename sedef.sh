@@ -181,7 +181,7 @@ if [ ! -f "${output}/align.joblog.ok" ] || [ "${force}" == "y" ]; then
 fi
 
 echo "************************************************************************"
-if [ ! -f "${output}/report.joblog.okq" ] || [ "${force}" == "y" ]; then
+if [ ! -f "${output}/report.joblog.ok" ] || [ "${force}" == "y" ]; then
 	rm -f "${output}/report.joblog.ok"
 	echo "Running SD reporting..."
 
@@ -193,7 +193,7 @@ if [ ! -f "${output}/report.joblog.okq" ] || [ "${force}" == "y" ]; then
 	# Now get the final calls
 	export OMP_NUM_THREADS=${jobs}
 	echo ${OMP_NUM_THREADS}
-	/usr/bin/time -f'Report time: %E (%M MB)' sedef stats generate "${input}" "${output}/aligned.bed" |\
+	/usr/bin/time -f'Report time: %E (%M MB, user %U)' sedef stats generate "${input}" "${output}/aligned.bed" |\
 		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n | uniq > "${output}/final.bed"
 
 	wc -l "${output}/"*.bed
