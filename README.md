@@ -4,7 +4,8 @@ SEDEF is a tool to find all segmental duplications in the genome.
 
 ## Paper Results
 
-[Please find here](results/out.hg19.bed) the calls for hg19.
+[Please find here](http://cb.csail.mit.edu/cb/sedef/hg19.bed) the calls for human genome (hg19).
+[Please find here](http://cb.csail.mit.edu/cb/sedef/mm8.bed) the calls for mouse genome (mm8).
 
 ## How to compile
 
