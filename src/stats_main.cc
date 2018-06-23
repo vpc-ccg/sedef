@@ -456,6 +456,14 @@ void stats(const string &ref_path, const string &bed_path)
 	int hit_count = 0, out_count = 0;
 	string prev;
 
+	prn(
+		"#chr1\tstart1\tend1\tchr2\tstart2\tend2\tname\tscore\tstrand1\tstrand2\tmax_len\taln_len\tcomment\t" // 1-13
+		"aln_len\tindel_a\tindel_b\talnB\tmatchB\tmismatchB\t" // 14-19
+		"transitionsB\ttransversions\tfracMatch\tfracMatchIndel\tjck\tk2K\t" // 20-25
+		"aln_gaps\tuppercaseA\tuppercaseB\tuppercaseMatches\t" // 26-29
+		"aln_matches\taln_mismatches\taln_gaps\taln_gap_bases\t" // 30-33
+		"cigar" // 34
+	);
 	#pragma omp parallel for
 	for (auto hsi = 0; hsi < hits.size(); hsi++) {
 		process(hits[hsi].first, hits[hsi].second, fr);
