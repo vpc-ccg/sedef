@@ -1,6 +1,9 @@
 /// 786
-/// Adapted from SCALCE source code 
-/// https://github.com/sfu-compbio/scalce
+
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
 
 /******************************************************************************/
 
@@ -16,9 +19,7 @@
 #include "common.h"
 #include "hit.h"
 
-using namespace std;
-
 /******************************************************************************/
 
 std::vector<Hit> fast_align(const std::string &query, const std::string &ref, 
-	const Hit &orig, int kmer_size = 12);
+	const Hit &orig, int kmer_size);

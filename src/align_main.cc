@@ -1,5 +1,10 @@
 /// 786
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
+
 /******************************************************************************/
 
 #include <map>
@@ -22,26 +27,14 @@
 #include "chain.h"
 #include "hit.h"
 #include "merge.h"
+#include "util.h" 
+#include "extern/argh.h"
 
 using namespace std;
 
 /******************************************************************************/
 
-const double EXTEND_RATIO = 5;
-const int MAX_EXTEND = 15000;
-const int MERGE_DIST = 250;
-
-/******************************************************************************/
-
-auto stat_file(const string &path)
-{
-	struct stat path_stat;
-	int s = stat(path.c_str(), &path_stat);
-	assert(s == 0);
-	return path_stat.st_mode;
-}
-
-auto bucket_alignments(const string &bed_path, int nbins, string output_dir = "", bool extend=false)
+auto bucket_alignments(const string &bed_path, int nbins, string output_dir, bool extend)
 {
 	vector<string> files;
 	if (S_ISREG(stat_file(bed_path))) {
@@ -71,7 +64,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 		while (getline(fin, s)) {
 			Hit h = Hit::from_bed(s);
 			if (extend) {
-				h.extend(EXTEND_RATIO, MAX_EXTEND);
+				h.extend(Globals::Extend::RATIO, Globals::Extend::MAX_EXTEND);
 			}
 			hits.push_back(h);
 			nhits++;
@@ -81,7 +74,7 @@ auto bucket_alignments(const string &bed_path, int nbins, string output_dir = ""
 
 	eprn("Read total {} alignments", hits.size());
 	if (extend) {
-		hits = merge(hits, MERGE_DIST);
+		hits = merge(hits, Globals::Extend::MERGE_DIST);
 		eprn("After merging remaining {} alignments", hits.size());
 	}
 	int max_complexity = 0;
@@ -130,7 +123,7 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 {
 	auto T = cur_time();
 
-	auto schedule = bucket_alignments(bed_path, 1);
+	auto schedule = bucket_alignments(bed_path, 1, "", false);
 	FastaReference fr(ref_path);
 
 	int lines = 0, total = 0;
@@ -143,13 +136,7 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 	for (int i = 0; i < schedule.size(); i++) {
 		for (auto &h: schedule[i]) {
 			lines++;
-			// 1557 out of 1559 (99.9, len 184647..182999)      chr16	5128906	5451300	chr4	3946932	4274093			+	-327161	0			OK;;;
- 			//1558 out of 1559 (99.9, len 322394..327161)      ^C^CProcess PID:   5413
-			// if (lines !=  1559) {
-				// continue;
-			// }
-			// eprn("{}", h.to_bed(0));
-
+			
 			string fa = fr.get_sequence(h.query->name, h.query_start, &h.query_end);
 			string fb = fr.get_sequence(h.ref->name, h.ref_start, &h.ref_end);
 			if (h.ref->is_rc) 
@@ -181,7 +168,6 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 				total_written++;
 				prn("{}\t{}", hh.to_bed(false), h.to_bed(0));
 			}
-			// eprn("{}", h.to_bed(false));
 		}
 	}
 
@@ -192,20 +178,35 @@ void generate_alignments(const string &ref_path, const string &bed_path, int kme
 
 void align_main(int argc, char **argv)
 {
-	if (argc < 3) {
+	using namespace Globals;
+	argh::parser cmdl(argc, argv, argh::parser::PREFER_PARAM_FOR_UNREG_OPTION);
+
+	cmdl("match", Align::MATCH) >> Align::MATCH;
+	cmdl("mismatch", Align::MISMATCH) >> Align::MISMATCH;
+	cmdl("gap-open", Align::GAP_OPEN) >> Align::GAP_OPEN;
+	cmdl("gap-extend", Align::GAP_EXTEND) >> Align::GAP_EXTEND;
+
+	cmdl("extend-ratio", Extend::RATIO) >> Extend::RATIO;
+	cmdl("max-extend", Extend::MAX_EXTEND) >> Extend::MAX_EXTEND;
+	cmdl("merge-dist", Extend::MERGE_DIST) >> Extend::MERGE_DIST;
+
+	if (!cmdl(2)) {
 		throw fmt::format("Not enough arguments to align");
 	}
 
-	string command = argv[0];
+	string command = cmdl[0];
 	if (command == "bucket") {
-		if (argc < 4) {
-			throw fmt::format("Not enough arguments to align-bucket");
+		int nbins;
+		if (!(cmdl({"-n", "--bins"}) >> nbins)) {
+			throw fmt::format("Must provide number of bins (--bins)");	
 		}
-		bucket_alignments(argv[1], atoi(argv[3]), argv[2], true);
+		bucket_alignments(cmdl[1], nbins, cmdl[2], true);
 	} else if (command == "generate") {
-		generate_alignments(argv[1], argv[2], atoi(argv[3]));
-	// } else if (command == "process") {
-	// 	postprocess(argv[1], argv[2]);
+		int kmer_size;
+		if (!(cmdl({"-k", "--kmer"}) >> kmer_size)) {
+			throw fmt::format("Must provide k-mer size (--kmer)");
+		}
+		generate_alignments(cmdl[1], cmdl[2], kmer_size);
 	} else {
 		throw fmt::format("Unknown align command");
 	}

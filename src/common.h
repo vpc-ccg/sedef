@@ -1,5 +1,10 @@
 /// 786
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
+
 /******************************************************************************/
 
 #pragma once 
@@ -14,6 +19,8 @@
 #include <cstdlib>
 
 #include "extern/format.h"
+#include "globals.h"
+#include "util.h"
 
 /******************************************************************************/
 
@@ -33,29 +40,6 @@
 
 #define cur_time()     chrono::high_resolution_clock::now() 
 #define elapsed(t)     (chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - (t)).count() / 1000.00)
-
-/******************************************************************************/
-
-const int    KMER_SIZE      = 12;
-const int    WINDOW_SIZE    = 16; // <-- Needs to be changed
-static_assert(KMER_SIZE <= 16, "k-mer space is 32-bit");
-
-const double MAX_ERROR      = 0.30;
-const double MAX_EDIT_ERROR = 0.15;
-const double ERROR_RATIO    = (MAX_ERROR - MAX_EDIT_ERROR) / MAX_EDIT_ERROR;
-const double MAX_GAP_ERROR  = MAX_EDIT_ERROR * ERROR_RATIO;
-const double GAP_FREQUENCY  = 0.005;
-const int    MIN_READ_SIZE  = 1000 * (1 - MAX_ERROR);
-
-const size_t KB = 1024;
-const size_t MB = 1024 * KB;
-const size_t GB = 1024 * MB;
-
-/******************************************************************************/
-
-extern bool do_uppercase;
-extern bool do_uppercase_seeds;
-extern bool do_qgram;
 
 /******************************************************************************/
 
@@ -111,13 +95,3 @@ inline double pct(double p, double tot)
 {
 	return 100.0 * p / tot;
 }
-
-/******************************************************************************/
-
-double tau(double edit_error, int kmer_size);
-
-int relaxed_jaccard_estimate(int s, int kmer_size);
-
-std::vector<std::string> split(const std::string &s, char delim);
-
-std::string rc(const std::string &s);

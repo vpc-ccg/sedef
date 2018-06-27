@@ -1,5 +1,10 @@
 /// 786
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
+
 /******************************************************************************/
 
 #include <list>
@@ -15,15 +20,6 @@ using namespace std;
 
 /******************************************************************************/
 
-const int MIN_UPPERCASE = KMER_SIZE;
-
-/******************************************************************************/
-
-extern bool do_uppercase;
-extern bool do_qgram;
-
-/******************************************************************************/
-
 /* extern */ int64_t QGRAM_NORMAL_FAILED = 0;
 /* extern */ int64_t OTHER_FAILED = 0;
 
@@ -31,25 +27,23 @@ extern bool do_qgram;
 
 inline int min_qgram(int l, int q) 
 {
-	return l * (1 - MAX_GAP_ERROR - q * MAX_EDIT_ERROR) - (GAP_FREQUENCY * l + 1) * (q - 1);
+	return l * (1 - (Globals::Search::MAX_ERROR - Globals::Search::MAX_EDIT_ERROR) 
+				  - q * Globals::Search::MAX_EDIT_ERROR) 
+	        - (Globals::Search::GAP_FREQUENCY * l + 1) * (q - 1);
 }
 
 /******************************************************************************/
 
 pair<bool, string> uppercase_filter(const string &q, int q_pos, int q_len, const string &r, int r_pos, int r_len) 
 {
-	// dprn(":: up {}", q.substr(q_pos, q_len));
-	// dprn(":: up {}", q.substr(r_pos, r_len));
 	int q_up = 0; for (int i = 0; i < q_len; i++) 
 		q_up += (bool)isupper(q[q_pos + i]); 
 	int r_up = 0; for (int i = 0; i < r_len; i++) 
 		r_up += (bool)isupper(r[r_pos + i]);
-	// dprn(":: up === {} {}", q_up, r_up);
 
-	if (q_up < MIN_UPPERCASE || r_up < MIN_UPPERCASE) {
-		// #pragma omp atomic
+	if (q_up < Globals::Search::MIN_UPPERCASE || r_up < Globals::Search::MIN_UPPERCASE) {
 		OTHER_FAILED++;
-		return {false, fmt::format("upper ({}, {}) < {}", q_up, r_up, MIN_UPPERCASE)};
+		return {false, fmt::format("upper ({}, {}) < {}", q_up, r_up, Globals::Search::MIN_UPPERCASE)};
 	}
 	return {true, ""};
 }
@@ -84,7 +78,6 @@ pair<bool, string> qgram_filter(const string &q, int q_pos, int q_len, const str
 	}
 
 	if (dist < minqg) {
-		// #pragma omp atomic
 		QGRAM_NORMAL_FAILED++;
 		return {false, fmt::format("q-grams {} < {}", dist, minqg)};
 	}
@@ -95,15 +88,13 @@ pair<bool, string> qgram_filter(const string &q, int q_pos, int q_len, const str
 
 pair<bool, string> filter(const string &q, int q_pos, int q_end, const string &r, int r_pos, int r_end) 
 {	
-	if (do_uppercase) {
+	if (Globals::Internal::DoUppercase) {
 		auto f = uppercase_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
-		// dprn(":: up {} {}", f.first, f.second);
 		if (!f.first) return f;
 	}
 
-	if (do_qgram) {
+	if (Globals::Internal::DoQgram) {
 		auto f = qgram_filter(q, q_pos, q_end - q_pos, r, r_pos, r_end - r_pos);
-		// dprn(":: qg {} {}", f.first, f.second);
 		if (!f.first) return f;
 	}
 

@@ -1,5 +1,10 @@
 /// 786 
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Authors: alimg, inumanag
+
 /******************************************************************************/
 
 #include <fstream>
@@ -19,14 +24,9 @@
 #include "fasta.h"
 #include "hit.h"
 #include "merge.h"
+#include "extern/argh.h"
 
 using namespace std;
-
-/******************************************************************************/
-
-const int MAX_OK_GAP = 50;
-const int MIN_SPLIT_SIZE = 1000;
-const int MIN_ALIGNMENT_GAP_SIZE = 100;
 
 /******************************************************************************/
 
@@ -55,8 +55,6 @@ bool subhit(const Hit &hin, int start, int end, Hit &h)
 			}
 		}
 	}
-	//eprn("{}-{} ({}-{})", hin.query_start, hin.query_end, hin.aln.start_a, hin.aln.end_a);
-	//eprn("{}-{} ({}-{})", hin.ref_start, hin.ref_end, hin.aln.start_b, hin.aln.end_b);
 	h.aln.align_a = h.aln.align_a.substr(start, end - start);
 	h.aln.alignment = h.aln.alignment.substr(start, end - start);
 	h.aln.align_b = h.aln.align_b.substr(start, end - start);
@@ -118,17 +116,15 @@ vector<Hit> gap_split(Hit h)
 		dprn("--> {} :: a:{} b:{} ... a:{} b:{}", g.len,
 			g.start_a - h.aln.start_a, g.start_b - h.aln.start_b,
 			h.aln.end_a - (g.start_a + g.len_a), h.aln.end_b - (g.start_b + g.len_b));
-		if (g.start_a - h.aln.start_a < MIN_SPLIT_SIZE || g.start_b - h.aln.start_b < MIN_SPLIT_SIZE)
+		if (g.start_a - h.aln.start_a < Globals::Stats::MIN_SPLIT_SIZE || g.start_b - h.aln.start_b < Globals::Stats::MIN_SPLIT_SIZE)
 			continue;
-		if (h.aln.end_a - (g.start_a + g.len_a) < MIN_SPLIT_SIZE || h.aln.end_b - (g.start_b + g.len_b) < MIN_SPLIT_SIZE)
+		if (h.aln.end_a - (g.start_a + g.len_a) < Globals::Stats::MIN_SPLIT_SIZE || h.aln.end_b - (g.start_b + g.len_b) < Globals::Stats::MIN_SPLIT_SIZE)
 			continue;
-
 		
 		double g_score = pct(g.len, h.aln.error.matches + h.aln.error.gap_bases + h.aln.error.mismatches);
 
 		dprn("{} ~ {}", g_score, g.len);
-		if (g_score >= MAX_OK_GAP) {
-			// eprn("gap! {} {} {}", g_score, g.len, h.aln.alignment.size());
+		if (g_score >= Globals::Stats::MAX_OK_GAP) {
 			dprn(":: Found gap of size {} and score {}\n:: {}\n:: {}\n:: {}", g.len, g_score,
 				h.aln.align_a.substr(g.start, g.len),
 				h.aln.alignment.substr(g.start, g.len),
@@ -151,59 +147,8 @@ vector<Hit> gap_split(Hit h)
 	return hits;
 }
 
-void trimlower(Hit &h)
-{	
-	int sa = 0, sb = 0, i;
-	for (i = 0; i < h.aln.align_a.size(); i++) {
-		if (isupper(h.aln.align_a[i]) || isupper(h.aln.align_b[i]))
-			break;
-		sa += bool(h.aln.align_a[i] != '-');
-		sb += bool(h.aln.align_b[i] != '-');
-	}
-	// eprn("sa={} sb={} i={}", sa, sb, i);
-
-	int ea = h.aln.end_a, eb = h.aln.end_b, j;
-	for (j = h.aln.align_a.size() - 1; j >= 0; j--) {
-		if (isupper(h.aln.align_a[j]) || isupper(h.aln.align_b[j]))
-			break;
-		ea -= bool(h.aln.align_a[j] != '-');
-		eb -= bool(h.aln.align_b[j] != '-');
-	}
-	j++;
-	// eprn("sa={} sb={} i={}", ea, eb, j);
-
-	h.aln.align_a = h.aln.align_a.substr(i, j - i);
-	h.aln.alignment = h.aln.alignment.substr(i, j - i);
-	h.aln.align_b = h.aln.align_b.substr(i, j - i);
-	
-	h.aln.a = h.aln.a.substr(sa, ea - sa);
-	h.aln.start_a = sa;
-	h.aln.end_a = ea;
-	
-	h.aln.b = h.aln.b.substr(sb, eb - sb);
-	h.aln.start_b = sb;
-	h.aln.end_b = eb;
-	
-	h.aln.cigar_from_alignment();
-	// h.aln.trim_back();
-	// h.aln.trim_front();
-	
-	h.query_start += sa;
-	h.query_end = h.query_start + (ea - sa);
-	assert(!h.query->is_rc);
-	if (h.ref->is_rc) {
-		dprn("applying RC");
-		h.ref_start = h.ref_end - eb;
-		h.ref_end = h.ref_end - sb;
-	} else {
-		h.ref_start += sb;
-		h.ref_end = h.ref_start + (eb - sb);
-	}
-}
-
 vector<Hit> split_alignment(Hit h) 
 {
-	// Find all alignments!!!
 	vector<Hit> hits;
 
 	// Find stretch of Ns
@@ -214,7 +159,7 @@ vector<Hit> split_alignment(Hit h)
 		if (toupper(h.aln.align_a[i]) == 'N') {
 			prev_an++;
 		} else {
-			if (prev_an >= MIN_ALIGNMENT_GAP_SIZE) {
+			if (prev_an >= Globals::Stats::MIN_ASSEMBLY_GAP_SIZE) {
 				dprn(":: Found assembly gap of size {}\n:: {}\n:: {}\n:: {}", prev_an,
 					h.aln.align_a.substr(i - prev_an, prev_an),
 					h.aln.alignment.substr(i - prev_an, prev_an),
@@ -228,7 +173,7 @@ vector<Hit> split_alignment(Hit h)
 		if (toupper(h.aln.align_b[i]) == 'N') {
 			prev_bn++; 
 		} else {
-			if (prev_bn >= MIN_ALIGNMENT_GAP_SIZE) {
+			if (prev_bn >= Globals::Stats::MIN_ASSEMBLY_GAP_SIZE) {
 				dprn(":: Found assembly gap of size {}\n:: {}\n:: {}\n:: {}", prev_bn,
 					h.aln.align_a.substr(i - prev_bn, prev_bn),
 					h.aln.alignment.substr(i - prev_bn, prev_bn),
@@ -259,19 +204,8 @@ vector<Hit> split_alignment(Hit h)
 
 void process(Hit hs, string cigar, FastaReference &fr)
 {
-	// auto ita = reference.find(hs.query->name);
-	// assert(ita != reference.end());
-	// auto itb = reference.find(hs.ref->name);
-	// assert(itb != reference.end());
-
 	string fa = fr.get_sequence(hs.query->name, hs.query_start, &hs.query_end);
 	string fb = fr.get_sequence(hs.ref->name, hs.ref_start, &hs.ref_end);
-	// if (hs.query_end > ita->second.size()) 
-	// 	hs.query_end = ita->second.size();
-	// string fa = ita->second.substr(hs.query_start, hs.query_end - hs.query_start);
-	// if (hs.ref_end > itb->second.size()) 
-	// 	hs.ref_end = itb->second.size();
-	// string fb = itb->second.substr(hs.ref_start, hs.ref_end - hs.ref_start);
 	assert(!hs.query->is_rc); 
 	if (hs.query->is_rc) {
 		fa = rc(fa);
@@ -284,14 +218,8 @@ void process(Hit hs, string cigar, FastaReference &fr)
 
 	auto hs_split = split_alignment(hs);
 	for (auto &h: hs_split) {
-		// eprn("{}", h.aln.print(80));
-		// trimlower(h);
-		if (h.aln.alignment.size() < 900)
+		if (h.aln.alignment.size() < Globals::Chain::Refine::MIN_READ)
 			continue;
-		// if (!h.aln.alignment.size())
-			// continue;
-		// eprn("alnd");
-		// eprn("{}", h.aln.print(80));
 
 		int align_length = h.aln.span();
 		int indel_a = 0;
@@ -350,21 +278,19 @@ void process(Hit hs, string cigar, FastaReference &fr)
 		int overlap = !same_chr ? 0 : max(0, 
 			min(h.query_end, h.ref_end) - max(h.query_start, h.ref_start));
 		bool too_big_overlap = 
-			(h.query_end - h.query_start - overlap) < 100 ||
-			(h.ref_end - h.ref_start - overlap) < 100;
+			(h.query_end - h.query_start - overlap) < Globals::Stats::BIG_OVERLAP_THRESHOLD ||
+			(h.ref_end - h.ref_start - overlap) < Globals::Stats::BIG_OVERLAP_THRESHOLD;
 		too_big_overlap &= same_chr;
-		// too_big_overlap = 0;
 
 		double errorScaled = (h.aln.gaps() + h.aln.mismatches()) / 
 			double(h.aln.gaps() + h.aln.mismatches() + h.aln.matches());
 
 		// Split large gaps?
-		if (uppercaseA >= 100 
-			&& uppercaseB >= 100 
+		if (uppercaseA >= Globals::Stats::MIN_UPPERCASE 
+			&& uppercaseB >= Globals::Stats::MIN_UPPERCASE 
 			&& !too_big_overlap 
-			&& errorScaled <= .50
-		 	&& uppercaseMatches >= 100
-		 	)
+			&& errorScaled <= Globals::Stats::MAX_SCALED_ERROR
+		 	&& uppercaseMatches >= Globals::Stats::MIN_UPPERCASE)
 		{
 			string l = h.to_bed(false);
 			
@@ -401,31 +327,6 @@ void stats(const string &ref_path, const string &bed_path)
 		throw fmt::format("BED file {} does not exist", bed_path);
 	}
 
-	// string sq = "chr7	14840644	14858402	chr7	16454676	16460667	S248049	72.9	+	+	17758	18059	108M1I210M10I76M1I307M1I568M1D45M1D475M1I1677D99M1I106M1D480M2I88M28D61M7D46M7D156M1I41M4D24M17D96M32I43M9D51M4I75M3D21M23I13M13I1M172I57M7D41M1D184M1I23M10D78M1D125M1D133M5D27M1I21M1D17M1I119M7D64M1D139M1I30M1D13M2I61M1D218M1I30M29I10277D352M1I587M1I165M1I16M";
-	// // string sq = "chr17	13718022	13742917	chr17	20899063	20929192	S382400	53.2	+	-	30129	36658	308M1D114M6I179M4D208M1I71M4D9M1I288M2I409M1D103M1D200M3D31M16I149M6I544M1I513M2I254M6D99M2I21M2D2731I166M47D100M1I286M4D51M2I31M1D286M10D42M5I111M7I258M1I125M1I99M4D78M22D136M22I50M1278I97M1I273M3D138M29D368M2I28M1I170M2I1072M3D187M845I158M11I174M1D235M1I488M794D312M25D74M25I6704I42M1D104M1I19M1D686M1I84M1I475M3I158M5135D75M1I241M1D155M5D253M111D26M58D15M151D31M63D27M12I31M4D78M2I75M3I21M1D568M1D1618M1D87M4D988M1I56M1D330M42I154M1D22M2I60M1D22M1I438M1I129M1I172M6I46M1I164M17D492M1D175M1D22M3D25M1D145M1I24M3I322M1D131M2I363M1I124M";
-	// string cigar;
-	// Hit hs = Hit::from_bed(sq, &cigar);
-	// string fa, fb;
-	// fa = fr.get_sequence(hs.query->name, hs.query_start, &hs.query_end);
-	// fb = fr.get_sequence(hs.ref->name, hs.ref_start, &hs.ref_end);
-	// assert(!hs.query->is_rc); 
-	// if (hs.query->is_rc) {
-	// 	fa = rc(fa);
-	// }
-	// if (hs.ref->is_rc) {
-	// 	fb = rc(fb);
-	// }
-	// assert(cigar.size());
-	// hs.aln = Alignment(fa, fb, cigar);
-	// dprn(">> IN: {}\t{}", hs.to_bed(0,0), hs.aln.cigar_string());
-
-	// auto hh = split_alignment(hs);
-	// for (auto &h: hh) {
-	// 	dprn(">> OU: {}\t{}", h.to_bed(0,0), h.aln.cigar_string());
-	// 	dprn("{}", h.aln.print(80));
-	// }
-	// exit(0);
-
 	string s;
 	vector<pair<Hit, string>> hits;
 	while (getline(fin, s)) {
@@ -442,7 +343,6 @@ void stats(const string &ref_path, const string &bed_path)
 				if (c == 'I') c = 'D';
 				else if (c == 'D') c = 'I';
 			}
-			// h.aln.swap();
 		}
 		hits.push_back({h, cigar});
 	}
@@ -452,7 +352,6 @@ void stats(const string &ref_path, const string &bed_path)
 			tie(b.first.ref->is_rc, b.first.query->name, b.first.ref->name, b.first.query_start, b.first.ref_start);
 	});
 
-	eprn("\nRead {:n} hits", hits.size());
 	int hit_count = 0, out_count = 0;
 	string prev;
 
@@ -468,10 +367,9 @@ void stats(const string &ref_path, const string &bed_path)
 	for (auto hsi = 0; hsi < hits.size(); hsi++) {
 		process(hits[hsi].first, hits[hsi].second, fr);
 		#pragma omp critical
-		eprnn("\rProcessed hit {:n}", ++hit_count);
+		eprnn("\rProcessed hit {:n} out of {:n}", ++hit_count, hits.size());
 	}
-	eprn("\nRead {:n} hits, wrote {:n} SDs", hit_count, out_count);
-	eprn("\nDone!");
+	eprn("\rProcessed hit {:n} out of {:n}... done!", hit_count, hits.size());
 }
 
 /******************************************************************************/
@@ -484,11 +382,11 @@ void get_differences(const string &ref_path, const string &bed_path,
 
 	FastaReference fr(ref_path);
 
-
 	string s;
 	ifstream fin(bed_path);
 	int q = 0, w = 0;
 	while (getline(fin, s)) {
+		if (s[0] == '#') continue;
 		string cigar;
 		Hit h = Hit::from_bed(s, &cigar);
 
@@ -585,15 +483,26 @@ void get_differences(const string &ref_path, const string &bed_path,
 
 void stats_main(int argc, char **argv)
 {
-	if (argc < 3) {
+	using namespace Globals;
+	argh::parser cmdl(argc, argv, argh::parser::PREFER_PARAM_FOR_UNREG_OPTION);
+
+	cmdl("max-ok-gap", Stats::MAX_OK_GAP) >> Stats::MAX_OK_GAP;
+	cmdl("min-split", Stats::MIN_SPLIT_SIZE) >> Stats::MIN_SPLIT_SIZE;
+	cmdl("uppercase", Stats::MIN_UPPERCASE) >> Stats::MIN_UPPERCASE;
+	cmdl("max-error", Stats::MAX_SCALED_ERROR) >> Stats::MAX_SCALED_ERROR;
+
+	if (!cmdl(2)) {
 		throw fmt::format("Not enough arguments to stats");
 	}
 
-	string command = argv[0];
+	string command = cmdl[0];
 	if (command == "generate") {
-		stats(argv[1], argv[2]);
+		stats(cmdl[1], cmdl[2]);
 	} else if (command == "diff") {
-		get_differences(argv[1], argv[2], argv[3]);
+		if (!cmdl(3)) {
+			throw fmt::format("Not enough arguments to stats");
+		}
+		get_differences(cmdl[1], cmdl[2], cmdl[3]);
 	} else {
 		throw fmt::format("Unknown stats command");
 	}

@@ -1,4 +1,9 @@
 /// 786
+
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
 /// Based on http://www.biorxiv.org/content/biorxiv/early/2017/03/24/103812.full.pdf
 
 /******************************************************************************/
@@ -21,24 +26,14 @@ using namespace std;
 
 /******************************************************************************/
 
-extern bool do_uppercase_seeds;
-
-/******************************************************************************/
-
 /* extern */ int64_t TOTAL_ATTEMPTED = 0;
 /* extern */ int64_t JACCARD_FAILED  = 0;
 /* extern */ int64_t INTERVAL_FAILED = 0;
 
 /******************************************************************************/
 
-const int MAX_MATCH = 1 * MB;   /// 1MB at most
-
-/******************************************************************************/
-
 bool is_overlap(Tree &tree, int pf_pos, int pf_end, int pfp_pos, int pfp_end) 
 {
-	const int RIGHT_ALLOWANCE = MIN_READ_SIZE;    /// TODO more mathy formulation
-	
 	assert(pf_pos <= pf_end);
 	assert(pfp_pos <= pfp_end);
 
@@ -59,13 +54,14 @@ bool is_overlap(Tree &tree, int pf_pos, int pf_end, int pfp_pos, int pfp_end)
 			return true;
 
 		// 2. do not check overlaps with too small intervals
-		if (min(eA - sA, eB - sB) < MIN_READ_SIZE * 1.5) 
+		if (min(eA - sA, eB - sB) < Globals::Search::MIN_READ_SIZE * 1.5) 
 			continue;
 
 		// 3. if partial overlap, it must be greater than RIGHT_ALLOWANCE (i.e. do not count small overlaps as hits)
 		// ----------+
 		//     +------------
 		//     |*****| the space inside must be at least RIGHT_ALLOWANCE to trigger overlap
+		const int RIGHT_ALLOWANCE = Globals::Search::MIN_READ_SIZE;  /// TODO more mathy formulation
 		if (eA - pf_pos >= RIGHT_ALLOWANCE && eB - pfp_pos >= RIGHT_ALLOWANCE) 
 			return true;
 	}
@@ -173,7 +169,6 @@ Hit extend(SlidingMap &winnow,
 		undo_extend_query_left();
 	};
 
-
 	auto do_extend_both_both = [&]() {
 		if (!query_winnow_start || !ref_winnow_start) 
 			return false;
@@ -191,8 +186,8 @@ Hit extend(SlidingMap &winnow,
 	#define p(q) make_pair(do_extend_##q, undo_extend_##q)
 	auto extensions = vector<pair<function<bool(void)>, function<void(void)>>>{
 		p(both_both),
-		p(both_right), // p(query_right), p(ref_right),
-		p(both_left),  //  p(query_left),  p(ref_left)
+		p(both_right),
+		p(both_left)
 	};
 	#undef p
 
@@ -202,10 +197,11 @@ Hit extend(SlidingMap &winnow,
 	ref_start = ref_winnow_start ? ref_hash->minimizers[ref_winnow_start - 1].loc + 1 : 0;
 	ref_end = ref_winnow_end < ref_hash->minimizers.size() ? ref_hash->minimizers[ref_winnow_end].loc : ref_hash->seq->seq.size();
 
+	const double MAX_GAP_ERROR = Globals::Search::MAX_ERROR - Globals::Search::MAX_EDIT_ERROR;
 	for (; ;) {
-		int max_match = min(MAX_MATCH, same_genome 
+		int max_match = min(Globals::Search::MAX_SD_SIZE, same_genome 
 			? int((1.0 / MAX_GAP_ERROR + .5) * abs(query_start - ref_start)) 
-			: MAX_MATCH);
+			: Globals::Search::MAX_SD_SIZE);
 		int aln_len = max(query_end - query_start, ref_end - ref_start);
 		int seq_len = min(query_end - query_start, ref_end - ref_start);
 		if (aln_len > max_match || pct(seq_len, aln_len) < 100 * (1 - 2 * MAX_GAP_ERROR)) {
@@ -214,7 +210,7 @@ Hit extend(SlidingMap &winnow,
 
 		if (same_genome) {
 			int overlap = query_end - ref_start;
-			if (overlap > 0 && pct(overlap, ref_end - ref_start) > 100 * MAX_ERROR)
+			if (overlap > 0 && pct(overlap, ref_end - ref_start) > 100 * Globals::Search::MAX_ERROR)
 				break;
 		}
 
@@ -253,17 +249,12 @@ vector<Hit> search_in_reference_interval (
 	assert(t_start >= 0);
 	assert(winnow.query_size > 0);
 
-	// #pragma omp atomic
 	TOTAL_ATTEMPTED++; 
  
 	int ref_start = t_start, 
 	    ref_end = min(t_start + init_len, (int)ref_hash->seq->seq.size());
 	int ref_winnow_start = ref_hash->find_minimizers(ref_start);
 	assert(ref_winnow_start < ref_hash->minimizers.size());
-
-	// dprn("::looking for: {} ^{} -> [{}..{}]", query_start,
-		// query_hash->minimizers[query_winnow_start].hash,
-	 // 	ref_start, ref_end);
 
 	int ref_winnow_end = ref_winnow_start; // winnow is W(query) ; extend it to W(query) | W(ref)
 	for (; ref_winnow_end < ref_hash->minimizers.size() 
@@ -300,17 +291,9 @@ vector<Hit> search_in_reference_interval (
 	}
 	// END TODO
 
-	// dprn(":: best matches: {} vs {} @ {}--{} ^{}", best_winnow.intersection, best_winnow.limit,
-		// best_ref_start, best_ref_end,
-		// ref_hash->minimizers[best_ref_winnow_start].hash);
-
-	// if (query_start > 10596454) exit(0);
-
 	vector<Hit> hits;
 
 	if (best_winnow.jaccard() < 0) {
-		// #pragma omp atomic
-		// dprn(":: >> jaccard/fail");
 		JACCARD_FAILED++;
 		if (report_fails) hits.push_back({
 			query_hash->seq, query_start, query_start + init_len, 
@@ -321,10 +304,8 @@ vector<Hit> search_in_reference_interval (
 		if (!is_overlap(tree, query_start, query_start + init_len, best_ref_start, best_ref_end)) {
 			auto f = filter(query_hash->seq->seq, query_start, query_start + init_len, ref_hash->seq->seq, ref_start, ref_end);
 			if (!f.first) {
-				// dprn(":: >> extend/filter");
 				if (report_fails) hits.push_back({query_hash->seq, query_start, query_start + init_len, ref_hash->seq, ref_start, ref_end, 0, "", f.second, {} });
 			} else {
-				// dprn(":: >> extend/extend");
 				Hit h = extend(best_winnow,
 					query_hash, query_start, query_start + init_len, query_winnow_start, query_winnow_end,
 					ref_hash, best_ref_start, best_ref_end, best_ref_winnow_start, best_ref_winnow_end, 
@@ -337,24 +318,13 @@ vector<Hit> search_in_reference_interval (
 						hits.push_back(h);
 					}
 				} else {
-					// dprn(":: push");
 					hits.push_back(h);
-					// auto hh = fast_align(
-					// 	query_hash->seq->seq.substr(h.query_start, h.query_end - h.query_start),
-					// 	ref_hash->seq->seq.substr(h.ref_start, h.ref_end - h.ref_start)
-					// );
-					// for (auto &hhh: hh) {
-					// 	auto a = Interval(h.query_start + hhh.query_start, h.query_start + hhh.query_end);
-					// 	auto b = Interval(h.ref_start + hhh.ref_start, h.ref_start + hhh.ref_end);
-					// 	tree += make_pair(a, Subtree({b, {make_pair(a, b)}}));	
-					// }
 					auto a = Interval(h.query_start, h.query_end);
 					auto b = Interval(h.ref_start, h.ref_end);
 					tree += make_pair(a, Subtree({b, {make_pair(a, b)}}));
 				}
 			}
 		} else {
-			// #pragma omp atomic
 			INTERVAL_FAILED++;
 		}
 	} else {
@@ -400,33 +370,19 @@ vector<Hit> search (int query_winnow_start,
 		auto &h = query_hash->minimizers[query_winnow_end].hash;
 		init_winnow.add_to_query(h);
 
-		// do_uppercase_seeds=0;
-		if (do_uppercase_seeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
+		if (Globals::Internal::DoUppercaseSeeds && h.status != Hash::Status::HAS_UPPERCASE) // use only hashes with uppercase character!
 			continue; 
-		// if (h.status == Hash::Status::HAS_N)
-			// continue;
-		
-		// nadji i upper i lower
-		// Hash hh[2] = { h, Hash { h.hash, 
-		// 	h.status != Hash::Status::HAS_UPPERCASE 
-		// 		? Hash::Status::HAS_UPPERCASE
-		// 		: Hash::Status::ALL_LOWERCASE } 
-		// };
 		auto pf = tree.find(query_hash->minimizers[query_winnow_end].loc);
-		// for (int hi = 0; hi < 1; hi++) {
-			// if (h.status == Hash::Status::ALL_LOWERCASE && hh[hi].status == Hash::Status::ALL_LOWERCASE)
-				// continue;
-			auto ptr = ref_hash->index.find(h);
-			if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
-				continue;
-			} else for (auto pos: ptr->second) {
-				if (!same_genome || pos >= query_start + init_len) { // Make sure to have at least read_len spacing if reference = query
-					if (pf == tree.end() || pf->second.find(pos) == pf->second.end()) {
-						candidates_prel.insert(pos);
-					}
+		auto ptr = ref_hash->index.find(h);
+		if (ptr == ref_hash->index.end() || ptr->second.size() >= ref_hash->threshold) {
+			continue;
+		} else for (auto pos: ptr->second) {
+			if (!same_genome || pos >= query_start + init_len) { // Make sure to have at least read_len spacing if reference = query
+				if (pf == tree.end() || pf->second.find(pos) == pf->second.end()) {
+					candidates_prel.insert(pos);
 				}
 			}
-		// }
+		}
 	}
 	if (!init_winnow.query_size)
 		return {};
@@ -446,8 +402,6 @@ vector<Hit> search (int query_winnow_start,
 		}
 	}
 
-	// dprn("::T size: {}", T.size());
-
 	vector<Hit> hits;
 	for (auto &t: T) {
 		if (same_genome) {
@@ -461,9 +415,8 @@ vector<Hit> search (int query_winnow_start,
 			allow_extend, report_fails, init_winnow, t.first, t.second);
 		for (auto &hh: h) 
 			hits.push_back(hh);
-		// hits.insert(hits.end(), h.begin(), h.end());
 	}
 
-	tree -= Interval(0, query_start - MIN_READ_SIZE);
+	tree -= Interval(0, query_start - Globals::Search::MIN_READ_SIZE);
 	return parse_hits(hits);	
 }

@@ -1,5 +1,10 @@
 /// 786
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
+
 /******************************************************************************/
 
 #pragma once
@@ -10,8 +15,6 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
-
-using namespace std;
 
 /******************************************************************************/
 
@@ -40,11 +43,11 @@ namespace std {
 /******************************************************************************/
 
 struct Sequence {
-	string name;
-	string seq;
+	std::string name;
+	std::string seq;
 	bool is_rc;
 
-	Sequence(const string &name, const string &seq, bool is_rc = false);
+	Sequence(const std::string &name, const std::string &seq, bool is_rc = false);
 };
 
 struct Index {
@@ -52,15 +55,15 @@ struct Index {
 	const int window_size;
 	unsigned int threshold;
 
-	shared_ptr<Sequence> seq;
+	std::shared_ptr<Sequence> seq;
 
 	// (hash, loci), sorted by loci
-	vector<Minimizer> minimizers;
+	std::vector<Minimizer> minimizers;
 	// hash -> list of locations
-	unordered_map<Hash, list<int>> index;
+	std::unordered_map<Hash, std::list<int>> index;
 
 public:
-	Index(shared_ptr<Sequence> seq, int kmer_size = KMER_SIZE, int window_size = WINDOW_SIZE, bool separate_lowercase = true);
+	Index(std::shared_ptr<Sequence> seq, int kmer_size, int window_size, bool separate_lowercase = true);
 
 	// Find first minimizer at loci p
 	int find_minimizers(int p) const;
@@ -68,7 +71,7 @@ public:
 
 #include "extern/ostream.h"
 
-ostream& operator<<(ostream& os, const Hash& dt);
+std::ostream& operator<<(std::ostream& os, const Hash& dt);
 
 bool operator<(const Hash &x, const Hash &y);
 bool operator<=(const Hash &x, const Hash &y);

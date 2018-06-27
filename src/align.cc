@@ -1,5 +1,10 @@
 /// 786
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
+
 /******************************************************************************/
 
 #include <map>
@@ -32,12 +37,6 @@ inline bool ceq(char a, char b)
 
 auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis, int gapo, int gape, int bandwidth)
 {
-	// #ifdef __SSE4_1__
-	// eprn(">> >> >> woohoo sse4");
-	// #endif
-
-	const int STEP = 60 * 1000; // Max. alignment size (if larger, split into pieces)
-
 	int8_t a = (int8_t)sc_mch, b = sc_mis < 0 ? (int8_t)sc_mis : (int8_t)(-sc_mis); // a>0 and b<0
 	int8_t mat[25] = { 
 		a, b, b, b, 0, 
@@ -47,20 +46,17 @@ auto align_helper(const string &qseq, const string &tseq, int sc_mch, int sc_mis
 		0, 0, 0, 0, 0 
 	};
 	deque<pair<char, int>> cigar;
-	for (int SP = 0; SP < min(tseq.size(), qseq.size()); SP += STEP) {
+	for (int SP = 0; SP < min(tseq.size(), qseq.size()); SP += Globals::Align::MAX_KSW_SEQ_LEN) {
 		ksw_extz_t ez;
 		ksw_extz2_sse(0, 
-			min(STEP, (int)(qseq.size() - SP)), (const uint8_t*)(qseq.c_str() + SP), 
-			min(STEP, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
+			min(Globals::Align::MAX_KSW_SEQ_LEN, (int)(qseq.size() - SP)), (const uint8_t*)(qseq.c_str() + SP), 
+			min(Globals::Align::MAX_KSW_SEQ_LEN, (int)(tseq.size() - SP)), (const uint8_t*)(tseq.c_str() + SP), 
 			5, mat, // M; MxM matrix
 			gapo, gape, 
-			bandwidth, -1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
+			bandwidth, 
+			-1, // band width; off-diagonal drop-off to stop extension (-1 to disable)
 			0, &ez);
 		for (int i = 0; i < ez.n_cigar; i++) {
-			// if((ez.cigar[i] & 0xf) >= 3) {
-			// 	eprn("{}", ez.cigar[i] & 0xf);
-			// 	exit(1);
-			// }
 			int idx = ez.cigar[i] & 0xf;
 			int len = ez.cigar[i] >> 4;
 			if (idx < 3) {
@@ -91,7 +87,9 @@ Alignment::Alignment(const string &fa, const string &fb):
 	transform(xa.begin(), xa.end(), xa.begin(), align_dna);
 	transform(xb.begin(), xb.end(), xb.begin(), align_dna);
 
-	cigar = align_helper(xa, xb, MATCH, MISMATCH, -GAP_OPEN, -GAP_EXTEND, -1);
+	cigar = align_helper(xa, xb, 
+		Globals::Align::MATCH, Globals::Align::MISMATCH, 
+		-Globals::Align::GAP_OPEN, -Globals::Align::GAP_EXTEND, -1);
 	populate_nice_alignment();
 }
 
@@ -115,8 +113,6 @@ Alignment::Alignment(const string &fa, const string &fb, const string &cigar_str
 
 Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &guide, const int side) 
 {
-	// eprn("aligning {} to {}", qstr.size(), rstr.size());
-
 	auto prev = guide.begin();
 	*this = prev->aln;
 	for (auto cur = next(prev); cur != guide.end(); cur++) {
@@ -125,9 +121,6 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 
 		int rs = cur->ref_start, re = cur->ref_end;
 		int rps = prev->ref_start, rpe = prev->ref_end;
-
-		// eprn("   {}..{}->{}..{}", qps, qpe, rps, rpe);
-		// eprn("TO {}..{}->{}..{}", qs, qe, rs, re);
 
 		assert(qpe <= qs);
 		assert(rpe <= rs);
@@ -156,35 +149,21 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 		} else if (rgap) {
 			append_cigar({{'I', rgap}});	
 		} 
-		// eprn("");
-		// assert(qe - qs == re - rs);
 		append_cigar(cur->aln.cigar);
 		prev = cur;
 	}
-	// Add end
-
 
 	int qlo = start_a, qhi = end_a;
 	int rlo = start_b, rhi = end_b;
-	// eprn("{}", cigar_string());
-	// populate_nice_alignment();
-	// eprn("{}", print());
-	// eprn("{} {}\n{} {}", a.size(), a.substr(0,50), qhi-qlo, qstr.substr(qlo, qhi - qlo).substr(0,50));
 	assert(a == qstr.substr(qlo, qhi - qlo));
 	assert(b == rstr.substr(rlo, rhi - rlo));
-	// eprn("alohaaaa");
-
-	// populate_nice_alignment();
-	// eprn("{}", cigar_string());
 
 	if (side) {
 		int qlo_n = max(0, qlo - side);
 		int rlo_n = max(0, rlo - side);
 		if (qlo - qlo_n && rlo - rlo_n) {
 			Alignment gap(qstr.substr(qlo_n, qlo - qlo_n), rstr.substr(rlo_n, rlo - rlo_n));
-			// dprn("-> bfr trim/f {}", gap.cigar_string());
 			gap.trim_front();
-			// dprn("after trim/f {}", gap.cigar_string());
 
 			qlo_n = qlo - (gap.end_a - gap.start_a);
 			rlo_n = rlo - (gap.end_b - gap.start_b);
@@ -199,10 +178,7 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 		int rhi_n = min(rhi + side, (int)rstr.size());
 		if (qhi_n - qhi && rhi_n - rhi) {
 			Alignment gap(qstr.substr(qhi, qhi_n - qhi), rstr.substr(rhi, rhi_n - rhi));
-			// dprn("-> bfr trim/b {}", gap.cigar_string());
 			gap.trim_back();
-			// dprn("after trim/b {}", gap.cigar_string());
-			// dprn("{} {} {} {} ", qhi, rhi, gap.end_a, gap.end_b);
 
 			qhi_n = qhi + gap.end_a;
 			rhi_n = rhi + gap.end_b;
@@ -221,24 +197,8 @@ Alignment::Alignment(const string &qstr, const string &rstr, const vector<Hit> &
 	assert(a == qstr.substr(qlo, qhi - qlo));
 	assert(b == rstr.substr(rlo, rhi - rlo));
 
-	//eprn("{} {}{} {}{}", cigar_string(), cigar.front().first, cigar.front().second,
-	//	cigar.back().first, cigar.back().second);
-	//assert(cigar.front().first == 'M');
-	//assert(cigar.back().first == 'M');
-
-	// eprn("alohaaaa2");
-
-	// *this = this->trim(); NEEDED?
-	// trim();
 	populate_nice_alignment();
-	// eprn("{}", print(70));
-
-
-	// eprn("final {}", aln.cigar_string());
-	// eprn("{}", aln.print());
-	// cin.get();
 }
-
 
 Alignment::Alignment(const string &qstr, const string &rstr, 
 	const vector<Anchor> &guide, const vector<int> &guide_idx):
@@ -298,19 +258,11 @@ Alignment::Alignment(const string &qstr, const string &rstr,
 		append_cigar({{'M', qe - qs}});
 		prev = cur;
 	}
-	// Add end
-
 
 	int qlo = start_a, qhi = end_a;
 	int rlo = start_b, rhi = end_b;
-	// eprn("{}", cigar_string());
-	// populate_nice_alignment();
-	// eprn("{}", print());
-	// eprn("{} {}\n{} {}", a.size(), a.substr(0,50), qhi-qlo, qstr.substr(qlo, qhi - qlo).substr(0,50));
 	assert(a == qstr.substr(qlo, qhi - qlo));
 	assert(b == rstr.substr(rlo, rhi - rlo));
-	// eprn("alohaaaa");
-
 	assert(qlo >= 0);
 	assert(rlo >= 0);
 	assert(qhi <= qstr.size());
@@ -318,15 +270,7 @@ Alignment::Alignment(const string &qstr, const string &rstr,
 	assert(a == qstr.substr(qlo, qhi - qlo));
 	assert(b == rstr.substr(rlo, rhi - rlo));
 
-	// eprn("alohaaaa2");
-
-	// *this = this->trim(); NEEDED?
-	// trim();
 	populate_nice_alignment();
-
-	// eprn("final {}", aln.cigar_string());
-	// eprn("{}", aln.print());
-	// cin.get();
 }
 
 /******************************************************************************/
@@ -337,12 +281,8 @@ void Alignment::populate_nice_alignment()
 	align_b = "";
 	alignment = "";
 	int ia = 0, ib = 0;
-	// eprn(" {} - {} ; {}" , a.size(), b.size(), cigar_string());
 	for (auto &c: cigar) {
 		for (int i = 0; i < c.second; i++) {
-			// if(c.first == 'M' && (ia >= a.size() || ib >= b.size()))
-				// eprnn(" - {}{} {} - {}/{} {}/{} - ", c.first, c.second, i, ia, a.size(), ib,b.size());
-
 			assert(c.first != 'M' || ia < a.size());
 			assert(c.first != 'M' || ib < b.size());
 			if (c.first == 'M' && ceq(a[ia], b[ib])) {
@@ -409,18 +349,18 @@ void Alignment::trim_front() // ABCD -> --CD
 	int score = 0;
 	for (int i = alignment.size() - 1; i >= 0; i--) {
 		if (alignment[i] == '|') {
-			score += MATCH;
+			score += Globals::Align::MATCH;
 		} else {
 			if (align_a[i] != '-' && align_b[i] != '-') {
-				score += MISMATCH;
+				score += Globals::Align::MISMATCH;
 			} else {
 				if (i == alignment.size() - 1 || 
 						(align_a[i] == '-' && align_a[i + 1] != '-') || 
 						(align_b[i] == '-' && align_b[i + 1] != '-')) 
 				{
-					score += GAP_OPEN;
+					score += Globals::Align::GAP_OPEN;
 				}
-				score += GAP_EXTEND;
+				score += Globals::Align::GAP_EXTEND;
 			}
 		}
 		if (score >= max_score) {
@@ -434,13 +374,9 @@ void Alignment::trim_front() // ABCD -> --CD
 		cigar.clear();
 		return;
 	}
-	// eprn("max i is {}", max_i);
-	// eprn("--> {}\n{}", cigar_string(), print(70));
 	for (int ci = 0, cur_len = 0; ci < cigar.size(); ci++) {
-		// eprn("{} {}", start_a, start_b);
 		if (cigar[ci].second + cur_len > max_i) {
 			assert(cigar[ci].first == 'M');
-			// split this one
 			int need = max_i - cur_len;
 			cigar[ci].second -= need; 
 			for (int cj = 0; cj < ci; cj++)
@@ -462,8 +398,6 @@ void Alignment::trim_front() // ABCD -> --CD
 	a = a.substr(start_a, end_a - start_a);
 	b = b.substr(start_b, end_b - start_b);
 	populate_nice_alignment();
-	// eprn("--> {}\n{}", cigar_string(), print(70));
-
 }
 
 void Alignment::trim_back() // ABCD -> AB--
@@ -473,18 +407,18 @@ void Alignment::trim_back() // ABCD -> AB--
 	int score = 0;
 	for (int i = 0; i < alignment.size(); i++) {
 		if (alignment[i] == '|') {
-			score += MATCH;
+			score += Globals::Align::MATCH;
 		} else {
 			if (align_a[i] != '-' && align_b[i] != '-') {
-				score += MISMATCH;
+				score += Globals::Align::MISMATCH;
 			} else {
 				if (i == 0 || 
 						(align_a[i] == '-' && align_a[i - 1] != '-') || 
 						(align_b[i] == '-' && align_b[i - 1] != '-')) 
 				{
-					score += GAP_OPEN;
+					score += Globals::Align::GAP_OPEN;
 				}
-				score += GAP_EXTEND;
+				score += Globals::Align::GAP_EXTEND;
 			}
 		}
 		if (score >= max_score) {
@@ -499,13 +433,10 @@ void Alignment::trim_back() // ABCD -> AB--
 		return;
 	}
 	max_i++;
-	// eprn("max i is {}", max_i);
 	end_a = start_a, end_b = start_b;
-		// eprn("--> {}\n{}", cigar_string(), print(70));
 	for (int ci = 0, cur_len = 0; ci < cigar.size(); ci++) {
 		if (cigar[ci].second + cur_len >= max_i) {
 			assert(cigar[ci].first == 'M');
-			// split this one
 			int need = max_i - cur_len;
 			cigar[ci].second = need; 
 			while (cigar.size() - 1 > ci)
@@ -527,7 +458,6 @@ void Alignment::trim_back() // ABCD -> AB--
 	a = a.substr(start_a, end_a - start_a);
 	b = b.substr(start_b, end_b - start_b);
 	populate_nice_alignment();
-	// eprn("--> {}\n{}", cigar_string(), print(70));
 }
 
 void Alignment::prepend_cigar(const deque<pair<char, int>> &app)
@@ -580,20 +510,15 @@ void Alignment::cigar_from_alignment()
 void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 {
 	assert(cur.start_a < end_a || cur.start_b < end_b);
-	// eprn("merging... {}..{} to {}..{}", start_a, end_a, start_b, end_b);
-	// eprn("         . {}..{} to {}..{}", cur.start_a, cur.end_a, cur.start_b, cur.end_b);
-
 	assert(end_a <= cur.end_a);
 	assert(end_b <= cur.end_b);
 	
 	int trim = end_a - cur.start_a;
-	// eprn("trim q: {}", trim);
 	int q = 0, r = 0, i = 0;
 	for (i = alignment.size() - 1; i >= 0 && q < trim; i--) {
 		if (align_a[i] != '-') q++;
 		if (align_b[i] != '-') r++;
 	}
-	// eprn("i={}", i);
 	align_a = align_a.substr(0, i+1);
 	alignment = alignment.substr(0, i+1);
 	align_b = align_b.substr(0, i+1);
@@ -601,12 +526,6 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 	end_b = start_b + b.size() - r;
 	a = a.substr(0, a.size() - q);
 	b = b.substr(0, b.size() - r);
-	string X;
-	// X="";for (auto c: align_a) if (c!='-')X+=c; assert(X==a); 
-	// assert(a==qstr.substr(start_a, end_a-start_a));
-	// X="";for (auto c: align_b) if (c!='-')X+=c; assert(X==b);
-	// assert(b==rstr.substr(start_b, end_b-start_b));
-
 
 	q = 0, r = 0, i = 0;
 	for (i = 0; i < cur.alignment.size() && q < trim; i++) {
@@ -620,14 +539,8 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 	cur.start_b += r;
 	cur.a = cur.a.substr(q);
 	cur.b = cur.b.substr(r);
-	// X="";for (auto c: cur.align_a) if (c!='-')X+=c; assert(X==cur.a);
-		// assert(cur.a==qstr.substr(cur.start_a, cur.end_a-cur.start_a));
-	// X="";for (auto c: cur.align_b) if (c!='-')X+=c; assert(X==cur.b);
-		// assert(cur.b==rstr.substr(cur.start_b, cur.end_b-cur.start_b));
-
 
 	trim = end_b - cur.start_b;
-	// eprn("trim r: {}", trim);
 	q = 0, r = 0, i = 0;
 	for (i = alignment.size() - 1; i >= 0 && r < trim; i--) {
 		if (align_a[i] != '-') q++;
@@ -640,12 +553,6 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 	end_b = start_b + b.size() - r;
 	a = a.substr(0, a.size() - q);
 	b = b.substr(0, b.size() - r);
-	// X="";for (auto c: align_a) if (c!='-')X+=c; assert(X==a);
-	// assert(a==qstr.substr(start_a, end_a-start_a));
-	// X="";for (auto c: align_b) if (c!='-')X+=c; assert(X==b);
-	// assert(b==rstr.substr(start_b, end_b-start_b));
-
-
 
 	q = 0, r = 0;
 	for (i = 0; i < cur.alignment.size() && r < trim; i++) {
@@ -659,23 +566,9 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 	cur.start_b += r;
 	cur.a = cur.a.substr(q);
 	cur.b = cur.b.substr(r);
-	// X="";for (auto c: cur.align_a) if (c!='-')X+=c; assert(X==cur.a);
-		// assert(cur.a==qstr.substr(cur.start_a, cur.end_a-cur.start_a));
-	// X="";for (auto c: cur.align_b) if (c!='-')X+=c; assert(X==cur.b);
-		// assert(cur.b==rstr.substr(cur.start_b, cur.end_b-cur.start_b));
 	
 	cigar_from_alignment();
-	// eprn("")
-	// eprn
-	// eprn("{}\n{}", align_a, align_b);
-		// eprn("{}", print(70));
-
 	cur.cigar_from_alignment();
-		// eprn("{}", cur.print(70));
-
-
-	// eprn("postfix... {}..{} to {}..{}", start_a, end_a, start_b, end_b);
-	// eprn("         . {}..{} to {}..{}", cur.start_a, cur.end_a, cur.start_b, cur.end_b);
 
 	assert(start_a <= cur.start_a);
 	assert(start_b <= cur.start_b);
@@ -683,17 +576,13 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 	assert(end_b <= cur.start_b);
 	int qgap = cur.start_a - end_a;
 	int rgap = cur.start_b - end_b;
-	// eprn("aligning {}..{} to {}..{}", end_a, end_a+qgap, end_b, end_b+rgap);
-	// eprn("aligning {}..{} to {}..{}", end_a, end_a+qgap, end_b, end_b+rgap);
 	if (qgap && rgap) {
-		// eprn("aligning len {} -> {}", qgap, rgap);
 		if (qgap <= 1000 && rgap <= 1000) { // "close" hits
 			Alignment gap(qstr.substr(end_a, qgap), rstr.substr(end_b, rgap));
 			append_cigar(gap.cigar);
 		} else { // assume only one part is the gap
 			int ma = max(qgap, rgap); // gap 
 			int mi = min(qgap, rgap); // mismatch
-			// eprn("2xaligning len {}", mi);
 			Alignment ma1(qstr.substr(end_a, mi), rstr.substr(end_b, mi));
 			ma1.cigar.push_back({qgap == mi ? 'I' : 'D', ma - mi});
 			Alignment ma2(qstr.substr(cur.start_a - mi, mi), rstr.substr(cur.start_b - mi, mi));
@@ -706,8 +595,6 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 		append_cigar({{'I', rgap}});	
 	} 
 
-
-	// eprn("done");
 	a += qstr.substr(end_a, qgap) + cur.a; 
 	b += rstr.substr(end_b, rgap) + cur.b; 
 	assert(cur.end_a >= end_a);
@@ -716,13 +603,6 @@ void Alignment::merge(Alignment &cur, const string &qstr, const string &rstr)
 	end_b = cur.end_b;
 	append_cigar(cur.cigar);
 	populate_nice_alignment();
-	// eprn("{}", print(70));
-	// eprn("became... {}..{} to {}..{} --> {}", start_a, end_a, start_b, end_b, cigar_string());
-
-	// X="";for (auto c: align_a) if (c!='-')X+=c; assert(X==a); 
-	// assert(a==qstr.substr(start_a, end_a-start_a));
-	// X="";for (auto c: align_b) if (c!='-')X+=c; assert(X==b);
-	// assert(b==rstr.substr(start_b, end_b-start_b));
 }
 
 /******************************************************************************/

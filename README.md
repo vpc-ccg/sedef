@@ -1,11 +1,19 @@
-# SEDEF: SEgmental Duplication Evaluation Framework
+# SEDEF: <u>Se</u>gmental <u>D</u>uplication <u>E</u>valuation <u>F</u>ramework
 
-SEDEF is a tool to find all segmental duplications in the genome.
+SEDEF is a quick tool to find all segmental duplications in the genome.
 
-## Paper Results
+## Paper
 
-[Please find here](http://cb.csail.mit.edu/cb/sedef/hg19.bed) the calls for human genome (hg19).
-[Please find here](http://cb.csail.mit.edu/cb/sedef/mm8.bed) the calls for mouse genome (mm8).
+SEDEF has been accepted at [ECCB 2018](http://eccb18.org). 
+bioRxiv preprint is [available here](void:null).
+
+### Results
+
+| 👨‍🎨 Human (hg19) | 🐭 Mouse (mm8) |
+|-----|-----|
+| [Final calls](http://cb.csail.mit.edu/cb/sedef/hg19.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/mm8.bed) |
+
+Paper experiments are outlined [in this Jupyter notebook](experiments.ipynb) (coming soon).
 
 ## How to compile
 
@@ -49,6 +57,7 @@ You can add `-f` if `sedef_hg19` already exists (it will overwrite its content t
 located in `sedef_hg19/final.bed`.
 
 Please note that `sedef.sh` requires SAMtools and GNU Parallel.
+If you want to experiment with different parameters, run `sedef help` for parameter documentation.
 
 ### Manual transmission
 
@@ -70,7 +79,8 @@ for j in `seq 1 22` X Y; do
 	if [ "$SI" -le "$SJ" ] ; 
 	then 
 		for m in y n ; do
-		echo "sedef search single hg19.fa chr$i chr$j $m >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
+		[ "$m" == "y" ] && rc="-r" || rc="";
+		echo "sedef search $rc hg19.fa chr$i chr$j >out/${i}_${j}_${m}.bed 2>out/log/${i}_${j}_${m}.log"
 		done; 
 	fi
 done
@@ -93,12 +103,12 @@ afterwards run the whole alignment:
 # First bucket the reads into 1000 bins
 mkdir -p out/bins
 mkdir -p out/log/bins
-time sedef align bucket out out/bins 1000
+time sedef align bucket -n 1000 out out/bins
 
 # Now run the alignment
 for j in out/bins/bucket_???? ; do
 	k=$(basename $j);
-	echo "sedef align generate hg19.fa $j 11 >${j}.bed 2>out/log/bins/${k}.log"
+	echo "sedef align generate -k 11 hg19.fa $j >${j}.bed 2>out/log/bins/${k}.log"
 done | time parallel --will-cite -j 80 --eta
 
 # Make sure that all runs finished nicely
@@ -117,14 +127,12 @@ Finally, run `sedef-stats` to produce the final output:
 # Concatenate the files 
 cat out/*.bed > out.bed # seed SDs
 cat out/bins/bucket_???? > out.init.bed # potential SD regions
-cat out/bins/*.bed > out.final.bed # final chains
-
-# Count the number of SDs in each stage
-wc -l out.*bed
+cat out/bins/*.bed | sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n |\
+	uniq > out.final.bed # final chains
 
 # Now get the final calls
-sedef stats generate hg19.fa out.final.bed > out.hg19.bed
+sedef stats generate hg19.fa out.final.bed |\
+		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n |\
+		uniq > out.hg19.bed
 ```
-
-Final calls will be in `out.hg19.bed`.
 

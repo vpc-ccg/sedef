@@ -1,4 +1,9 @@
 /// 786
+
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
 /// Fast winnowing algorithm: 
 //  https://people.cs.uct.ac.za/~ksmith/articles/sliding_window_minimum.html
 
@@ -54,7 +59,6 @@ bool operator<(const Minimizer &x, const Minimizer &y)
 
 /******************************************************************************/
 
-
 vector<Minimizer> get_minimizers(const string &s, int kmer_size, 
 	const int window_size, bool separate_lowercase)
 {
@@ -80,7 +84,7 @@ vector<Minimizer> get_minimizers(const string &s, int kmer_size,
 
 		Hash hh { h, last_n >= (i - kmer_size + 1) 
 			? Hash::Status::HAS_N 
-			: (last_u >= (i - kmer_size + 1)) // || isupper(s[i+2]) || isupper(s[i+3])
+			: (last_u >= (i - kmer_size + 1))
 				? Hash::Status::HAS_UPPERCASE 
 				: Hash::Status::ALL_LOWERCASE
 		};   
@@ -119,8 +123,6 @@ Sequence::Sequence(const string &name, const string &seq, bool is_rc):
 Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size, bool separate_lowercase): 
 	seq(seq), kmer_size(kmer_size), window_size(window_size) 
 {
-	// eprn("Hashing {} bps", s.size());
-
 	assert(kmer_size <= 16);
 	minimizers = get_minimizers(seq->seq, kmer_size, window_size, separate_lowercase);
 	
@@ -128,7 +130,7 @@ Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size, bool sepa
 		index[i.hash].push_back(i.loc);
 	}
 
-	int ignore = (minimizers.size() * 0.001) / 100.0;
+	int ignore = (minimizers.size() * Globals::Hash::INDEX_CUTOFF) / 100.0;
 	
 	map<int, int> hist;
 	for (auto &i: index) {
@@ -145,7 +147,6 @@ Index::Index(shared_ptr<Sequence> seq, int kmer_size, int window_size, bool sepa
 			break;
 		}
 	}
-	// eprn("Ignoring top {} hits", j);
 }
 
 int Index::find_minimizers(int p) const

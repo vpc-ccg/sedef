@@ -12,7 +12,7 @@ fi
 PATH="${PATH}:"`pwd`
 
 if ! command -v "samtools" >/dev/null 2>&1 ; then
-	echo "SAMtools not found in \$PATH (${PATH})"
+	echo "Samtools not found in \$PATH (${PATH})"
 	exit 1
 fi
 
@@ -117,7 +117,8 @@ if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
 			SJ=`awk '$1=="'$j'" {print $2}' "${input}.fai"` 
 			if [ "$SI" -le "$SJ" ] ; then 
 				for m in n y ; do
-					echo "/usr/bin/time -f'TIMING: %e %M' sedef search single ${input} $i $j $m >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
+					[ "$m" == "y" ] && rc="-r" || rc="";
+					echo "/usr/bin/time -f'TIMING: %e %M' sedef search -k 12 -w 16 ${rc} ${input} $i $j >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
 				done
 			fi
 		done
@@ -151,12 +152,12 @@ if [ ! -f "${output}/align.joblog.ok" ] || [ "${force}" == "y" ]; then
 
 	mkdir -p "${output}/align"
 	mkdir -p "${output}/log/align"
-	/usr/bin/time -f'Bucketing time: %E' sedef align bucket "${output}/seeds" "${output}/align" 1000 2>"${output}/log/bucket.log"
+	/usr/bin/time -f'Bucketing time: %E' sedef align bucket -n 1000 "${output}/seeds" "${output}/align" 2>"${output}/log/bucket.log"
 
 	# Now run the alignment
 	for j in "${output}/align/bucket_"???? ; do
 		k=$(basename $j);
-		echo "/usr/bin/time -f'TIMING: %e %M' sedef align generate \"${input}\" $j 11 >${j}.aligned.bed 2>${output}/log/align/${k}.log"
+		echo "/usr/bin/time -f'TIMING: %e %M' sedef align generate -k 11 \"${input}\" $j >${j}.aligned.bed 2>${output}/log/align/${k}.log"
 	done | tee "${output}/align.comm" | /usr/bin/time -f'Aligning time: %E' parallel --will-cite -j "${jobs}" --bar --joblog "${output}/align.joblog"
 
 	proc=`cat "${output}/align.comm" | wc -l`
@@ -192,10 +193,13 @@ if [ ! -f "${output}/report.joblog.ok" ] || [ "${force}" == "y" ]; then
 
 	# Now get the final calls
 	export OMP_NUM_THREADS=${jobs}
-	echo ${OMP_NUM_THREADS}
-	/usr/bin/time -f'Report time: %E (%M MB, user %U)' sedef stats generate "${input}" "${output}/aligned.bed" |\
-		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n | uniq > "${output}/final.bed"
+	# echo ${OMP_NUM_THREADS}
+	(/usr/bin/time -f'Report time: %E (%M MB, user %U)' \
+		sedef stats generate "${input}" "${output}/aligned.bed" |\
+		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n |\
+		uniq > "${output}/final.bed") 2>&1 | sed 1d
 
+	echo "Line counts:"
 	wc -l "${output}/"*.bed
 
 	touch "${output}/report.joblog.ok"
@@ -206,18 +210,16 @@ echo "End: `date`"
 echo "************************************************************************"
 
 if [ -f "${wgac}" ]; then
-	echo "Running SD/aligned checking..."
-	/usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
-		${wgac} ${output}/aligned.bed ${output}/aligned.misses.txt
-	/usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
-		${output}/aligned.bed ${wgac}
-
-	echo "Running SD/final checking..."
+	echo "Comparing WGAC with SEDEF..."
+	# /usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
+	# 	${wgac} ${output}/aligned.bed ${output}/aligned.misses.txt
+	# /usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
+	# 	${output}/aligned.bed ${wgac}
+	# echo "Running SD/final checking..."
 	/usr/bin/time -f'Python time: %E (%M MB)' python2 scratch/check-overlap.py \
 		${wgac} ${output}/final.bed ${output}/final.misses.txt
 	/usr/bin/time -f'diff time: %E (%M MB)' sedef stats diff ${input} \
 		${output}/final.bed ${wgac}
-
 fi
 
 echo "************************************************************************"

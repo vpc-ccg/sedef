@@ -1,5 +1,10 @@
 /// 786
 
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
+
 /******************************************************************************/
 
 #pragma once
@@ -16,32 +21,34 @@
 /******************************************************************************/
 
 struct Hit {
-	/*const*/ shared_ptr<Sequence> query;
+	std::shared_ptr<Sequence> query;
 	int query_start, query_end; // query range
 
-	/*const*/ shared_ptr<Sequence> ref;
+	std::shared_ptr<Sequence> ref;
 	int ref_start, ref_end; // reference range
 
 	int jaccard; // coordinates of seed matches
-	string name, comment;
+	std::string name, comment;
 
 	Alignment aln;
 
 public:
 	static Hit from_bed(const std::string &bed, std::string *cigar = nullptr);
-	static Hit from_bed(const std::string &bed, shared_ptr<Sequence> query, shared_ptr<Sequence> ref);
-	static Hit from_wgac(const string &bed);
+	static Hit from_bed(const std::string &bed, std::shared_ptr<Sequence> query, std::shared_ptr<Sequence> ref);
+	static Hit from_wgac(const std::string &bed);
 
 public:
 	std::string to_bed(bool do_rc=true, bool with_cigar=true) const;
 	bool operator<(const Hit &h) const {
 		return 
-			tie(query_start, query_end, ref_start, ref_end) < 
-			tie(h.query_start, h.query_end, h.ref_start, h.ref_end);
+			std::tie(query_start, query_end, ref_start, ref_end) < 
+			std::tie(h.query_start, h.query_end, h.ref_start, h.ref_end);
 	}
 
 public:
 	void extend(const double factor, const int max_extend);
 };
+
+/******************************************************************************/
 
 void update_from_alignment(Hit &h);

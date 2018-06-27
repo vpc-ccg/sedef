@@ -1,4 +1,9 @@
 /// 786
+
+/// This file is subject to the terms and conditions defined in
+/// file 'LICENSE', which is part of this source code package.
+
+/// Author: inumanag
 /// Adapted from Bedtools source code 
 /// https://github.com/arq5x/bedtools/tree/master/src/fastaFromBed
 
