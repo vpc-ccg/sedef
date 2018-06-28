@@ -5,7 +5,7 @@ SEDEF is a quick tool to find all segmental duplications in the genome.
 ## Paper
 
 SEDEF has been accepted at [ECCB 2018](http://eccb18.org). 
-bioRxiv preprint is [available here](void:null).
+Preprint is [available here](paper/preprint.pdf).
 
 ### Results
 
@@ -13,7 +13,7 @@ bioRxiv preprint is [available here](void:null).
 |-----|-----|
 | [Final calls](http://cb.csail.mit.edu/cb/sedef/hg19.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/mm8.bed) |
 
-Paper experiments are outlined [in this Jupyter notebook](experiments.ipynb) (coming soon).
+Paper experiments are outlined [in this Jupyter notebook](paper/experiments.ipynb).
 
 ## How to compile
 
@@ -135,4 +135,12 @@ sedef stats generate hg19.fa out.final.bed |\
 		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n |\
 		uniq > out.hg19.bed
 ```
+
+## Acknowledgements 
+
+SEDEF uses [{fmt}](https://github.com/fmtlib/fmt), [argh](https://github.com/adishavit/argh) and the modified version of [Heng Li's ksw2](https://github.com/lh3/ksw2).
+
+## Support
+
+Questions, bugs? Open a GitHub issue or drop me an e-mail at `inumanag at mit dot edu`.
 
