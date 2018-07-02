@@ -55,8 +55,8 @@ PYTHON_VERSION = 2.7
 PYTHON_INCLUDE = /usr/include/python$(PYTHON_VERSION)
 
 $(LIB): $(OBJECTS)
-	$(CXX) -I$(PYTHON_INCLUDE) -I. -fPIC -c scratch/sedef.cpp -std=c++14 -o scratch/sedef.po
-	$(CXX) -shared -Wl,--export-dynamic scratch/sedef.po $(OBJECTS) -lboost_python -lrt -lz -L/usr/lib/python$(PYTHON_VERSION)/config -lpython$(PYTHON_VERSION) -fopenmp -o $@.so
+	$(CXX) -I$(PYTHON_INCLUDE) -I. -fPIC -c python/sedef.cpp -std=c++14 -o python/sedef.po
+	$(CXX) -shared -Wl,--export-dynamic python/sedef.po $(OBJECTS) -lboost_python -lrt -lz -L/usr/lib/python$(PYTHON_VERSION)/config -lpython$(PYTHON_VERSION) -fopenmp -o $@.so
 
 $(EXECUTABLE): $(OBJECTS) 
 	$(CXX) $(OBJECTS) $(LDFLAGS) -o $(EXE)

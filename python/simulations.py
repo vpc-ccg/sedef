@@ -1,5 +1,31 @@
 from random import randint as rand
-import sedef
+import multiprocessing, functools
+import sedef, random
+
+def test_sedef():
+    seq1 = 'ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATACAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGTGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCAGGGATGCGGGGTGGGGGCAGGTACATCCTCTCTTGAGCTACAGCAGATTAACTCTGTTCTGTTTCATTGTGGTTGTTTAGTTTGCGTTTTTTTTTCTCCAACTTTGTGCTTCATCGGGAAAAGCTTTGGATCACAATTCCCAGtgctgaagaaaaggccaaactctggaaaaaatttgaatattttgagccaaatgtgaggaccacaacctgtgagaacggaaaataaatcctgggaccccagactcactaagccaaagggaaaagccaagctgggaactggcttatgcaaacctgcttcccatctggttcctaaataagatagctattacacaaagacaaaaaagctacatccctgcctctacctccatcgcatgcaaaatgtgtattcagtgaacgctgaccaaagacagaagaatgcaaccatttgcctctgatttacccacacccattttttccacttcttcccctttccccaatacccgcacttttcccctttacttactgaggtccccagacaacctttgggaaaagcacggaccacagtttttcctgtggttctctgttcttttctcaggtgtgtccttaaccttgcaaatagatttcttgaaatgattgagactcaccttggttgtgttctttgattAGTgcctgtgacgcagcttcaggaggtcctgagaacgtgtgcacagtttagtcggcagaaacttagggaaatgtaagaccaccatcagcacataggagttctgcattggtttggtctgcattggtttggtctggaaggaggaaaattcaaagtaatggggcttacaggtcatagatagattcaaagattttctgattgtcaattggttgaaagaattattatctacagacctgctatcaatagaaaggagagtctgggttaagataagagactgtggagacc'
+    seq2 = 'ATCCTTGAAGCGCCCCCAAGGGCATCTTCTCAAAGTTGGATGTGTGCATTTTCCTGAGAGGAAAGCTTTCCCACATTATTCAGCTTCTGAAAGGGTTGCTTGACCCACAGATGTGAAGCTGAGGCTGAAGGAGACTGATGTGGTTTCTCCTCAGTTTCTCTGTGCGGCACCAGGTGGCAGCAGAGGTCAGCAAGGCAAACCCGAGCCCGGGGATGCGGGGTGGGGGCAGCTACGTCCTCTCTTGAGCTACAGCAGATTCACTCTGTTCTGTTTCATTGTTGCTTAGTTTGCGTTTTGTTTCTCCAACTTTGTGCCTCATCAGGAAAAGCTTTGGATCACAATTCCCAGtgctgaagaaaaggccaaactctggaaaaaattttgaatattttgagccaaatgtgaggaccacaacctgtgagaacggaaaataaatcctgggaccccagactcactaagccaaagggaaaagccaagctgggaactggcttatgcaaacctgcttcccatctggttcctaaataagatagctattacacaaagataaaaaagctacatccctgcctctacctccctcgcatgtaaaatgtgtattcagtgaacactgaccaaagacagaagaatgcaaccatttgcctctgatttacccacacccattttttccacttcttcccctttccccaatacccgcacttttcccctttacttactgaggcccccagacaatctttgggaaaagcacggaccacagtttttcctgtggttctctgttcttttctcaggtgtgtccttaaccttgcaaatagatttcttgaaatgattgacactcaccttggttgtgttctttgatcagcgcctgtgacgcagcttcaggaggtcctgagaacgtgtgcacagtttagtcggcagaaacttagggaaacgtaagaccaccatcagtacgtaggagttgtgcattggtttggtctggaaggaggaaaattcaaagtaatggggcttacaggtcatagatagattcaaagattttctgattgtcaattgattgaaagaattattatctacagacctgctatcaatagaaaggagagtctgagttaagataagagactgtggagacc'
+
+    aln = sedef.PyAligner()
+    hits = aln.chain_align(seq1.upper(), seq2.upper())
+    print 'chains'
+    for h in hits:
+        print '  {}..{} -> {}..{} === {} (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(), 
+            h.cigar(), h.alignment_size(), h.gaps(), h.mismatches())
+
+    hits = aln.jaccard_align(seq1.upper(), seq2.upper())
+    print 'jaccard'
+    for h in hits:
+        print '  {}..{} -> {}..{} === {} (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(), 
+            h.cigar(), h.alignment_size(), h.gaps(), h.mismatches())
+
+    hits = aln.full_align(seq1.upper(), seq2.upper())
+    print 'full'
+    for h in hits:
+        print '  {}..{} -> {}..{} === {} (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(), 
+            h.cigar(), h.alignment_size(), h.gaps(), h.mismatches())
+
+random.seed(17)
 
 #global vars
 minLen = 1000 #min sd length
@@ -12,7 +38,8 @@ letter = 'ATCGATCG'
 def loadSeq(filename):
     """get sequence from filename"""
     with open(filename, 'r') as f:
-        seq = ''.join(l.strip() for l in f) # seq is your seq now
+        seq = ''.join(l.strip() for l in f if l[0] != '>' and set(l.strip()) != set(['N'])) # seq is your seq now
+    print len(seq)
     return seq
 
 def randSeq(length):
@@ -117,7 +144,7 @@ def generate_random_sd(error, seq = None):
     else:
         length = rand(minLen, maxLen)
         start = rand(0, len(seq) - length - 1)
-        seq1 = seq[start, start + length]
+        seq1 = seq[start:start + length]
     sED = rand(max(0, error - maxLED),min(maxSED, error))
     seq2 = makeSmall(seq1, sED)[0]
     seq2 = makeLarge(seq2, error-sED)[0]
@@ -167,152 +194,156 @@ def calculateSum(arr):
 
     return out
 
-def resultsTable(runs, maxerror = 30, output = "output.txt", seq = None, freeroom = 20):
-    """ outputs results in tables. WIll simulate # on runs for each values between 0 and maxerror. inclusive.
-    output is output file.  Can specify that a sequence should be a subsequence of seq.
-    Can specify what percentage of free rooms to call hits vs. partials  """
-    filename = "detailed-"+ output
-    array = []
+def getPar(error, runs, seq, output, freeroom):
+    out = [0,0,0] # hit, miss, partial
     badNum = 0
     misses  = 0
+    filename = "detailed-{}-{}".format(output, error)
     with open(filename, 'w') as f:
         f.write('sep=;\n')
         f.write('length1; length2; aveLen; TED; SED; LED; jSum1; jSum2; jMax1; jMax2; '+
             'cSum1; cSum2; cMax1; cMax2; cAlig; jcSum1; jcSum2; jcMax1; jcMax2; jcAlig; ' +
             'jSumVal; jMaxVal; cSumVal; cMaxVal; jcSumVal; jcMaxVal; jcSum012\n')
+        for i in range(runs):
+            # print('***',i,'***')
 
-        for error in range(maxerror + 1):
-            out = [0,0,0] # hit, miss, partial
-            for i in range(runs):
-                print('***',i,'***')
+            seq1, seq2, sED = generate_random_sd(error, seq)
+            len1 = len(seq1)
+            len2 = len(seq2)
+            alen = float(len1 + len2)/2
 
-                seq1, seq2, sED = generate_random_sd(error, seq)
-                len1 = len(seq1)
-                len2 = len(seq2)
-                alen = float(len1 + len2)/2
-
-                jSum = [0,0]
-                jMax = [0,0]
-                cSum = [0,0]
-                cMax = [0,0]
-                aMax = [0,0]
-                jcSum = [0,0]
-                jcMax = [0,0]
+            jSum = [0,0]
+            jMax = [0,0]
+            cSum = [0,0]
+            cMax = [0,0]
+            aMax = [0,0]
+            jcSum = [0,0]
+            jcMax = [0,0]
 
 
+            temp1 = []
+            temp2 = []
+
+
+            aln = sedef.PyAligner()
+
+            hits1 = aln.chain_align(seq1.upper(), seq2.upper())
+
+            #print('chains')
+            for h in hits1:
+                #print('  {}..{} -> {}..{}  (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(),
+                #    h.alignment_size(), h.gaps(), h.mismatches()))
+                temp1.append((h.query_start(), h.query_end()))
+                temp2.append((h.ref_start(), h.ref_end()))
+                cMax[0] = max(cMax[0],  h.query_end() -  h.query_start())
+                cMax[1] = max(cMax[1],  h.ref_end() -  h.ref_start())
+                aMax[0] = max(aMax[0], h.alignment_size())
+            cSum = [calculateSum(temp1), calculateSum(temp2)]
+
+
+            temp1 = []
+            temp2 = []
+
+
+            hits2 = aln.jaccard_align(seq1.upper(), seq2.upper())
+
+            #print('jaccard')
+            for h in hits2:
+                #print('  {}..{} -> {}..{} === {} (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(),
+                #    h.cigar(), h.alignment_size(), h.gaps(), h.mismatches()))
+
+                temp1.append((h.query_start(), h.query_end()))
+                temp2.append((h.ref_start(), h.ref_end()))
+                jMax[0] = max(jMax[0],  h.query_end() -  h.query_start())
+                jMax[1] = max(jMax[1],  h.ref_end() -  h.ref_start())
+            jSum = [calculateSum(temp1), calculateSum(temp2)]
+
+
+            #print('chain on jaccard')
+
+            def extend(query_start, query_end, ref_start, ref_end):
+                """extend each jaccard hit to length 15000 or 10 times itself"""
+                w = max(query_end - query_start, ref_end - ref_start);
+                w = min(15000, int(5 * w));
+                return (max(0, query_start - w), min(query_end + w, len1), max(0, ref_start - w), min(ref_end + w, len2))
+
+            for i in range(len(temp1)):
+                extended = extend(temp1[i][0], temp1[i][1], temp2[i][0], temp2[i][1])
+                temp1[i] = (extended[0], extended[1])
+                temp2[i] = (extended[2], extended[3])
+
+            combined = (combine(temp1), combine(temp2))
+
+            if len(combined[0]) == 1 and len(combined[1]) == 1:
                 temp1 = []
                 temp2 = []
 
-
-                aln = sedef.PyAligner()
-
-                hits1 = aln.chain_align(seq1.upper(), seq2.upper())
-
-                print('chains')
-                for h in hits1:
-                    print('  {}..{} -> {}..{}  (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(),
-                        h.alignment_size(), h.gaps(), h.mismatches()))
+                hits3 = aln.chain_align(seq1[combined[0][0][0]:combined[0][0][1]], seq2[combined[1][0][0]:combined[1][0][1]])
+                for h in hits3:
+                    #print('  {}..{} -> {}..{}  (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(),
+                    #    h.alignment_size(), h.gaps(), h.mismatches()))
                     temp1.append((h.query_start(), h.query_end()))
                     temp2.append((h.ref_start(), h.ref_end()))
-                    cMax[0] = max(cMax[0],  h.query_end() -  h.query_start())
-                    cMax[1] = max(cMax[1],  h.ref_end() -  h.ref_start())
-                    aMax[0] = max(aMax[0], h.alignment_size())
-                cSum = [calculateSum(temp1), calculateSum(temp2)]
+                    jcMax[0] = max(jcMax[0],  h.query_end() -  h.query_start())
+                    jcMax[1] = max(jcMax[1],  h.ref_end() -  h.ref_start())
+                    aMax[1] = max(aMax[1], h.alignment_size())
+                jcSum = [calculateSum(temp1), calculateSum(temp2)]
 
+            elif len(combined[0]) == 0 or len(combined[1]) == 0:
+                misses += 1
 
-                temp1 = []
-                temp2 = []
+            else: #non overlappping thingsd
+                groups = [[],[]]
 
+                #print('*(87E98008343247@&^@(&*#&^#^NOT IMPLEMENTED@#&(#^&#@#$@#(&^@#*)&^)#(&*^')
+                #print(len(combined[0]))
+                #print(len(combined[1]))
+                badNum += 1
+                # should probably figure out how to make this case work
 
-                hits2 = aln.jaccard_align(seq1.upper(), seq2.upper())
+            #'jSumVal; jMaxVal; cSumVal; cMaxVal; jcSumVal; jcMaxVal; jcSum012
+            if jcSum[0]+ jcSum[1] == 0:
+                val = 0
+                out[1] += 1
+            elif 50*float(jcSum[0]+ jcSum[1])/alen < 100 - freeroom - error:
+                val = 1
+                out[2] += 1
+            else:
+                val = 2
+                out[0] += 1
 
-                print('jaccard')
-                for h in hits2:
-                    print('  {}..{} -> {}..{} === {} (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(),
-                        h.cigar(), h.alignment_size(), h.gaps(), h.mismatches()))
+            f.write('{}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; \n'.format(len1,
+            len2, alen, error, sED, error-sED,
+            jSum[0], jSum[1], jMax[0], jMax[1], cSum[0], cSum[1],
+            cMax[0], cMax[1], aMax[0], jcSum[0], jcSum[1], jcMax[0], jcMax[1], aMax[1],
+            float(jSum[0]+ jSum[1])/alen, float(jMax[0]+ jMax[1])/alen, float(cSum[0]+ cSum[1])/alen,
+            float(cMax[0]+ cMax[1])/alen, float(jcSum[0]+ jcSum[1])/alen, float(jcMax[0]+ jcMax[1])/alen, val))
 
-                    temp1.append((h.query_start(), h.query_end()))
-                    temp2.append((h.ref_start(), h.ref_end()))
-                    jMax[0] = max(jMax[0],  h.query_end() -  h.query_start())
-                    jMax[1] = max(jMax[1],  h.ref_end() -  h.ref_start())
-                jSum = [calculateSum(temp1), calculateSum(temp2)]
-
-
-                print('chain on jaccard')
-
-                def extend(query_start, query_end, ref_start, ref_end):
-                    """extend each jaccard hit to length 15000 or 10 times itself"""
-                    w = max(query_end - query_start, ref_end - ref_start);
-                    w = min(15000, int(5 * w));
-                    return (max(0, query_start - w), min(query_end + w, len1), max(0, ref_start - w), min(ref_end + w, len2))
-
-                for i in range(len(temp1)):
-                    extended = extend(temp1[i][0], temp1[i][1], temp2[i][0], temp2[i][1])
-                    temp1[i] = (extended[0], extended[1])
-                    temp2[i] = (extended[2], extended[3])
-
-                combined = (combine(temp1), combine(temp2))
-
-                if len(combined[0]) == 1 and len(combined[1]) == 1:
-                    temp1 = []
-                    temp2 = []
-
-                    hits3 = aln.chain_align(seq1[combined[0][0][0]:combined[0][0][1]], seq2[combined[1][0][0]:combined[1][0][1]])
-                    for h in hits3:
-                        print('  {}..{} -> {}..{}  (sz={} g={} m={})'.format(h.query_start(), h.query_end(), h.ref_start(), h.ref_end(),
-                            h.alignment_size(), h.gaps(), h.mismatches()))
-                        temp1.append((h.query_start(), h.query_end()))
-                        temp2.append((h.ref_start(), h.ref_end()))
-                        jcMax[0] = max(jcMax[0],  h.query_end() -  h.query_start())
-                        jcMax[1] = max(jcMax[1],  h.ref_end() -  h.ref_start())
-                        aMax[1] = max(aMax[1], h.alignment_size())
-                    jcSum = [calculateSum(temp1), calculateSum(temp2)]
-
-                elif len(combined[0]) == 0 or len(combined[1]) == 0:
-                    misses += 1
-
-                else: #non overlappping thingsd
-                    groups = [[],[]]
-
-                    print('*(87E98008343247@&^@(&*#&^#^NOT IMPLEMENTED@#&(#^&#@#$@#(&^@#*)&^)#(&*^')
-                    print(len(combined[0]))
-                    print(len(combined[1]))
-                    badNum += 1
-                    # should probably figure out how to make this case work
-
-                #'jSumVal; jMaxVal; cSumVal; cMaxVal; jcSumVal; jcMaxVal; jcSum012
-                if jcSum[0]+ jcSum[1] == 0:
-                    val = 0
-                    out[1] += 1
-                elif 50*float(jcSum[0]+ jcSum[1])/alen < 100 - freeroom - error:
-                    vel = 1
-                    out[2] += 1
-                else:
-                    val = 2
-                    out[0] += 1
-
-                with open(filename, 'a') as f:
-                    f.write('{}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; {}; \n'.format(len1,
-                    len2, alen, error, sED, error-sED,
-                    jSum[0], jSum[1], jMax[0], jMax[1], cSum[0], cSum[1],
-                    cMax[0], cMax[1], aMax[0], jcSum[0], jcSum[1], jcMax[0], jcMax[1], aMax[1],
-                    float(jSum[0]+ jSum[1])/alen, float(jMax[0]+ jMax[1])/alen, float(cSum[0]+ cSum[1])/alen,
-                    float(cMax[0]+ cMax[1])/alen, float(jcSum[0]+ jcSum[1])/alen, float(jcMax[0]+ jcMax[1])/alen, val))
-
-            array.append((error, out))
-
-        print(misses, " misses, ", badNum, ' unexpected things')
+        print(error, " : ", misses, " misses, ", badNum, ' unexpected things')
         f.write(str(misses) + " misses, " + str(badNum) + ' unexpected things\n')
+    return (error, out, badNum, misses)
+
+def resultsTable(runs, maxerror = 30, output = "output.txt", seq = None, freeroom = 0):
+    """ outputs results in tables. WIll simulate # on runs for each values between 0 and maxerror. inclusive.
+    output is output file.  Can specify that a sequence should be a subsequence of seq.
+    Can specify what percentage of free rooms to call hits vs. partials  """
+    filename = "detailed-"+ output
+    
+    pool = multiprocessing.Pool(32)
+    array = pool.map(functools.partial(getPar, runs=runs, seq=seq, output=output, freeroom=freeroom), range(maxerror + 1))      
+
+    badNum = sum(y[2] for y in array)
+    misses = sum(y[3] for y in array)
 
     with open(output, 'w') as f:
         f.write('sep=;\n')
-        f.write('error; hits; misses; partials\n')
-        for e, r in array:
-            f.write('{}; {}; {}; {}; \n'.format(e, *r))
+        f.write('error;hits;misses;partials\n')
+        for e, r, _, _ in array:
+            f.write('{};{};{};{}\n'.format(e, *r))
         if badNum > 0:
             f.write(str(misses) + " misses, " + str(badNum) + ' unexpected things\n')
 
 
 if __name__ == '__main__':
     resultsTable(1000)
-
+    # resultsTable(1000, seq=loadSeq('chr1.fa'))
