@@ -24,7 +24,6 @@ public:
 	int gaps() { return c.gap_bases();  }
 	int mismatches() { return c.mismatches();  }
 
-
 	bool operator==(const PyHit &q) const {
 		return tie(qs, qe, rs, re) == tie(q.qs, q.qe, q.rs, q.re);
 	}
@@ -39,8 +38,8 @@ public:
 
 vector<PyHit> PyAligner::jaccard_align(const string &q, const string &r)
 {
-	shared_ptr<Index> query_hash = make_shared<Index>(make_shared<Sequence>("qry", q));
-	shared_ptr<Index> ref_hash = make_shared<Index>(make_shared<Sequence>("ref", r));
+	shared_ptr<Index> query_hash = make_shared<Index>(make_shared<Sequence>("qry", q), 12, 16);
+	shared_ptr<Index> ref_hash = make_shared<Index>(make_shared<Sequence>("ref", r), 12, 16);
 
 	Tree tree;
 	vector<PyHit> hits;
@@ -51,7 +50,8 @@ vector<PyHit> PyAligner::jaccard_align(const string &q, const string &r)
 			// eprn("search {}", qm.loc);
 			if (qm.hash.status != Hash::Status::HAS_UPPERCASE) 
 				continue; 
-			auto hi = search(qi, query_hash, ref_hash, tree, false);
+			auto hi = search(qi, query_hash, ref_hash, tree, false,
+				max(q.size(), r.size()), true, false);
 			for (auto &pp: hi) {
 				hits.push_back(PyHit {
 					pp.query_start, pp.query_end,
@@ -62,7 +62,8 @@ vector<PyHit> PyAligner::jaccard_align(const string &q, const string &r)
 		}
 	} else {
 		// Disabled for now
-		auto hi = search(0, query_hash, ref_hash, tree, false, max(q.size(), r.size()), false);
+		auto hi = search(0, query_hash, ref_hash, tree, 
+			false, max(q.size(), r.size()), false, false);
 		for (auto &pp: hi) {
 			hits.push_back({
 				pp.query_start, pp.query_end,
@@ -76,10 +77,12 @@ vector<PyHit> PyAligner::jaccard_align(const string &q, const string &r)
 
 vector<PyHit> PyAligner::chain_align(const string &q, const string &r)
 {
-	// extern int DEBUG;
-	// DEBUG = 0;
 	vector<PyHit> hits;
-	auto hi = fast_align(q, r);
+	Hit orig {
+	    make_shared<Sequence>("A", q), 0, (int)q.size(),
+	    make_shared<Sequence>("B", r), 0, (int)r.size()
+	};
+	auto hi = fast_align(q, r, orig, 11);
 	for (auto &pp: hi) {
 		hits.push_back({
 			pp.query_start, pp.query_end,
@@ -94,8 +97,8 @@ vector<PyHit> PyAligner::full_align(const string &q, const string &r)
 {
 	auto aln = Alignment(q, r);
 	return vector<PyHit> {{
-		0, q.size(),
-		0, r.size(),
+		0, (int)q.size(),
+		0, (int)r.size(),
 		aln
 	}};
 }
