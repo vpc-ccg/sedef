@@ -5,7 +5,7 @@ SEDEF is a quick tool to find all segmental duplications in the genome.
 ## Paper
 
 SEDEF has been accepted at [ECCB 2018](http://eccb18.org). 
-Preprint is [available here](paper/preprint.pdf).
+Preprint is [available here](https://arxiv.org/abs/1807.00205).
 
 ### Results
 
@@ -39,6 +39,7 @@ CPATH={path_to_boost} make -j release
 
 ## How to run
 
+The genome assembly must be soft-masked: all common and tandem repeats are converted to lower-case letters.
 Suppose that our genome is in `hg19.fa` file (we used UCSC hg19 with "normal" 24 chromosomes without patches (unGl) or random strains (chrXX_random).
 
 ### Automatic transmission

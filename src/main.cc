@@ -26,11 +26,12 @@ void print_help()
 {
 	eprn(
 		"Basic usage: sedef [command] [args...]\n"
-		"All menaingful output is redirected to stdout \n \n"
-		"It's recommended to use sedef.sh unless you really know what you are doing."
+		"All meaningful output is redirected to stdout. \n \n"
+		"It's recommended to use sedef.sh unless you really know what you are doing. "
 		"List of commands: \n"
 		"- search [reference.fa] [chrQuery] [chrRef] \n"
-		"  finds all initial SDs by aligning chrQuery onto the chrRef \n"
+		"  finds all initial SDs by aligning chrQuery onto the chrRef. \n"
+                "  reference.fa should be soft-masked (i.e. all common repeats are in lowercase characters. \n"
 		"  params: \n"
 		"    -r, --reverse \n"
 		"      set if you want reference to be reverse-complemented \n"
@@ -90,7 +91,7 @@ int main(int argc, char **argv)
 {
 	ios_base::sync_with_stdio(0);
 	setlocale(LC_NUMERIC, "en_US.UTF-8");
-	if (argc < 3) {
+	if (argc < 2) {
 		eprn("Arguments missing: please run sedef help for more information.");
 		exit(1);
 	}
@@ -110,6 +111,12 @@ int main(int argc, char **argv)
 
 	string command = argv[1];
 
+	if (argc < 3 && command != "help") {
+		eprn("Arguments missing: please run sedef help for more information.");
+		exit(1);
+	}
+
+	
 	try {
 		if (command == "help") {
 			print_help();
