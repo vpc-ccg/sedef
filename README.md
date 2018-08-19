@@ -31,6 +31,8 @@ By default, SEDEF uses Intel C++ compiler. If you are using g++, build with:
 make -j release CXX=g++
 ```
 
+> You need at least g++ 5.1.0 (C++14) to compile SEDEF. clang should work fine as well.
+
 SEDEF requires Boost libraries in order to compile. In case you have non-standard Boost installation, you can still compile as follows:
 
 ```bash
