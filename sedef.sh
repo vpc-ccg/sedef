@@ -38,8 +38,8 @@ if ! command -v "sedef" >/dev/null 2>&1 ; then
 	exit 1
 fi
 
-OPTIONS=hj:o:w:fe:
-LONGOPTIONS=help,jobs,output,wgac,force,exclude
+OPTIONS=hj:o:w:fe:t:
+LONGOPTIONS=help,jobs,output,wgac,force,exclude,translate
 PARSED=$($GETOPT --options=$OPTIONS --longoptions=$LONGOPTIONS --name "$0" -- "$@")
 if [[ $? -ne 0 ]]; then
 	exit 2
@@ -50,6 +50,7 @@ output="sedef_out"
 jobs=4
 force="n"
 wgac=""
+translate=""
 exclude="^(chr)|(trans)[0-9A-Z]+$"
 while true; do
 	case "$1" in
@@ -61,6 +62,10 @@ while true; do
 		-f|--force)
 			force="y"
 			shift
+			;;
+		-t|--translate)
+			translate="$2"
+			shift 2
 			;;
 		-w|--wgac)
 			wgac="$2"
@@ -122,6 +127,24 @@ fi
 
 mkdir -p "${output}/seeds"
 mkdir -p "${output}/log/seeds"
+
+if [ ! -z "${translate}" ]; then
+	if [ ! -f "${translate}" ] ; then 
+		echo "Translating ..."
+		${TIME} -f'Translation time: %E (%M MB, user %U)' \
+			sedef translate "${input}" "${translate}";
+	fi
+	if [ ! -f "${translate}.fai" ]; then
+		samtools faidx "${translate}"
+	fi
+	input="${translate}"
+fi
+
+if [ -z "`cut -f1 "${input}.fai" | awk '$1~/'${exclude}'/'`" ]; then
+	echo "No valid chromosomes found. Double-check --exclude (current value: ${exclude})."
+	echo "Alternatively, use --translate translation.fa. Check docs for more info."
+	exit 1
+fi
 
 echo "************************************************************************"
 if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then

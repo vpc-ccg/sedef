@@ -4,8 +4,9 @@ SEDEF is a quick tool to find all segmental duplications in the genome.
 
 ## Paper
 
-SEDEF has been accepted at [ECCB 2018](http://eccb18.org). 
+SEDEF has been accepted at [ECCB 2018](http://eccb18.org) (DOI [10.1093/bioinformatics/bty586](https://doi.org/10.1093/bioinformatics/bty586)). 
 Preprint is [available here](https://arxiv.org/abs/1807.00205).
+Get the final paper [here](https://academic.oup.com/bioinformatics/article/34/17/i706/5093240).
 
 ### Results
 
@@ -52,15 +53,38 @@ Just go to `sedef` directory and run
 ```
 
 For example, to run hg19.fa on 80 cores type:
-```bash
-./sedef.sh -o sedef_hg19 -j 80 hg19.fa 
-```
-
-You can add `-f` if `sedef_hg19` already exists (it will overwrite its content though). The final results will be
+^(chr)|(trans)[0-9A-Z]+$^(chr)|(trans)[0-9A-Z]+$You can add `-f` if `sedef_hg19` already exists (it will overwrite its content though). The final results will be
 located in `sedef_hg19/final.bed`.
+
+> Note: SEDEF will only search chromosomes whose name has the format "chr(number|X|Y|M)".
+> That means that "chr1" will be searched while "1" will not.
+> You can pass a regex to parameter `-e / --exclude` to `sedef.sh` to modify this criteria.
+> For example, to use FASTAs with NCBI format pass `-e "^[0-9A-Z]+$"`.
 
 Please note that `sedef.sh` requires SAMtools and GNU Parallel.
 If you want to experiment with different parameters, run `sedef help` for parameter documentation.
+
+#### Incomplete assemblies
+
+SEDEF assumes that the number of "proper" chromosomes (i.e. completely assembled chromosomes)
+in FASTA file is limited (less than 50). 
+
+This is true for complete assemblies like hg19 and mm8. However, if you happen to have incomplete
+assembly with lots of short contigs, you should use condensed FASTAs that merge multiple short contigs
+into the large one.
+(otherwise `sedef.sh` will launch a search process for each contig --- and if you have 1,000 contigs
+you will end up with 1,000,000 jobs).
+
+SEDEF can make a condensed FASTA for you if you ask nicely.
+Just run `sedef.sh` with a `-t <translation.fa>`. 
+In this case, SEDEF will also take care of the final output 
+(i.e. reported SD pairs will not refer to translated FASTA but to the original FASTA).
+
+Example:
+
+```bash
+./sedef.sh -o <output> -j <jobs> -t translation.fa <genome> 
+```
 
 ### Manual transmission
 
@@ -139,7 +163,7 @@ sedef stats generate hg19.fa out.final.bed |\
 		uniq > out.hg19.bed
 ```
 
-## Acknowledgements 
+## Acknowledgments 
 
 SEDEF uses [{fmt}](https://github.com/fmtlib/fmt), [argh](https://github.com/adishavit/argh) and the modified version of [Heng Li's ksw2](https://github.com/lh3/ksw2).
 

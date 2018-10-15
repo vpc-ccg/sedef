@@ -100,7 +100,7 @@ FastaReference::FastaReference(string filename)
 	FILE *tfile;
 	if (tfile = fopen(fmt::format("{}.sedef-translate", filename).c_str(), "r")) {
 		eprn("Detected FASTA translation index for {}", filename);
-		char *buf; size_t sz;
+		char *buf = 0; size_t sz = 0;
 		while (getline(&buf, &sz, tfile) != -1) {
 			string s = string(buf);
 			if (s.size() && s.back() == '\n')

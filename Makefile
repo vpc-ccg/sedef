@@ -1,6 +1,7 @@
 CXX=g++
 CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color -march=native
-LDFLAGS=-lz -fopenmp  -lboost_system -lboost_thread-mt
+LDFLAGS=-lz -fopenmp  
+# -lboost_system -lboost_thread-mt
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
