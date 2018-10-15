@@ -292,7 +292,7 @@ void process(Hit hs, string cigar, FastaReference &fr)
 			&& errorScaled <= Globals::Stats::MAX_SCALED_ERROR
 		 	&& uppercaseMatches >= Globals::Stats::MIN_UPPERCASE)
 		{
-			string l = h.to_bed(false);
+			// string l = h.to_bed(false);
 			
 			h.name = "S";
 			h.comment = ""; 
@@ -303,7 +303,7 @@ void process(Hit hs, string cigar, FastaReference &fr)
 				"{}\t{}\t{}\t"
 				"{}\t{}\t{}\t{}\t"
 				"{}\t{}", 
-				h.to_bed(false, false), // 1-13
+				h.to_bed(false, false, &fr), // 1-13
 				align_length, // 14
 				indel_a, indel_b, // 15-16
 				alignB, matchB, mismatchB, // 17-19

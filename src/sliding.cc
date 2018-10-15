@@ -128,7 +128,7 @@ void SlidingMap::add_to_query(const Hash &h)
 	if (!add(h, 1)) 
 		return;
 
-	limit = relaxed_jaccard_estimate(++query_size, kmer_size) ;
+	limit = relaxed_jaccard_estimate(++query_size, kmer_size, this->estimate_memoize);
 	assert(boundary != storage.end() || (query_size == 1));
 	if (boundary == storage.end()) {
 		boundary = storage.begin();
@@ -146,7 +146,7 @@ void SlidingMap::remove_from_query(const Hash &h)
 	if (!remove(h, 1)) 
 		return;
 	
-	limit = relaxed_jaccard_estimate(--query_size, kmer_size) ;
+	limit = relaxed_jaccard_estimate(--query_size, kmer_size, this->estimate_memoize);
 	assert(boundary != storage.begin() || !query_size);
 	if (boundary != storage.end())
 		intersection -= (boundary->second == 3);

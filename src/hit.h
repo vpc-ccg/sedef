@@ -38,7 +38,8 @@ public:
 	static Hit from_wgac(const std::string &bed);
 
 public:
-	std::string to_bed(bool do_rc=true, bool with_cigar=true) const;
+	std::string to_bed(bool do_rc=true, bool with_cigar=true, 
+		const FastaReference *fr = nullptr) const;
 	bool operator<(const Hit &h) const {
 		return 
 			std::tie(query_start, query_end, ref_start, ref_end) < 

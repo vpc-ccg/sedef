@@ -3,14 +3,25 @@
 
 echo "Start: `date`"
 
-getopt --test > /dev/null
+GETOPT="getopt"
+TIME="/usr/bin/time"
+
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+	:
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+	GETOPT="$(brew --prefix gnu-getopt)/bin/getopt"
+	TIME="gtime"
+else
+	echo "Unknown environment ${OSTYPE} --- use at your own risk!"
+fi
+
+$GETOPT --test > /dev/null
 if [[ $? -ne 4 ]]; then
-	echo "I’m sorry, `getopt --test` failed in this environment."
+	echo "I’m sorry, `$GETOPT --test` failed in this environment."
 	exit 1
 fi
 
 PATH="${PATH}:"`pwd`
-TIME="/usr/bin/time"
 
 if ! command -v "samtools" >/dev/null 2>&1 ; then
 	echo "Samtools not found in \$PATH (${PATH})"
@@ -29,7 +40,7 @@ fi
 
 OPTIONS=hj:o:w:fe:
 LONGOPTIONS=help,jobs,output,wgac,force,exclude
-PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTIONS --name "$0" -- "$@")
+PARSED=$($GETOPT --options=$OPTIONS --longoptions=$LONGOPTIONS --name "$0" -- "$@")
 if [[ $? -ne 0 ]]; then
 	exit 2
 fi
@@ -39,7 +50,7 @@ output="sedef_out"
 jobs=4
 force="n"
 wgac=""
-exclude="^chr[0-9A-Z]+$"
+exclude="^(chr)|(trans)[0-9A-Z]+$"
 while true; do
 	case "$1" in
 		-h|--help)

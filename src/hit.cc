@@ -122,9 +122,58 @@ Hit Hit::from_wgac(const string &bed)
 
 /******************************************************************************/
 
-string Hit::to_bed(bool do_rc, bool with_cigar) const
+int get_position(const vector<pair<size_t, string>> &ar, size_t ppos)
+{
+	auto lb = lower_bound(ar.begin(), ar.end(), make_pair(ppos, string())); 
+	if (lb == ar.end()) 
+		return ar.size() - 1;
+	else if (lb->first == ppos) 
+		return lb - ar.begin();
+	else {
+		assert(lb != ar.begin());	
+		return lb - ar.begin() - 1;
+	}
+}
+
+string Hit::to_bed(bool do_rc, bool with_cigar, const FastaReference *fr) const
 {
 	assert(!query->is_rc);
+
+	string qn = query->name;
+	int qs = query_start, qe = query_end;
+	string rn = ref->name;
+	int rs = do_rc && ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start; 
+	int re = do_rc && ref->is_rc ? ref->seq.size() - ref_start + 1 : ref_end;
+
+	if (fr && fr->translation_index.size()) {
+		const auto p = fr->translation_index.find(qn);
+		assert(p != fr->translation_index.end());
+		
+		int pos = get_position(p->second, qs);
+		
+		// if (pos != p->second.size() - 1 && p->second[pos + 1].first <= qe) {
+		// 	eprn("{} {} {}", qn, qs, qe);
+		// 	eprn("{} {} ... {} {}",
+		// 	 p->second[pos].first, p->second[pos].second,
+		// 	 p->second[pos + 1].first, p->second[pos + 1].second);
+		// }
+
+		qn = p->second[pos].second;
+		qs -= p->second[pos].first;
+		assert(pos == p->second.size() - 1 || p->second[pos + 1].first > qe);
+		qe -= p->second[pos].first;
+	}
+	if (fr && fr->translation_index.size()) {
+		const auto p = fr->translation_index.find(rn);
+		assert(p != fr->translation_index.end());
+		int pos = get_position(p->second, rs);
+
+		rn = p->second[pos].second;
+		rs -= p->second[pos].first;
+		assert(pos == p->second.size() - 1 || p->second[pos + 1].first > re);
+		re -= p->second[pos].first;
+	}
+
 	return fmt::format(
 		"{}\t{}\t{}\t" // QUERY 0 1 3
 		"{}\t{}\t{}\t" // REF   3 4 5
@@ -132,10 +181,8 @@ string Hit::to_bed(bool do_rc, bool with_cigar) const
 		"{}\t{}\t"     // STRAND 8 STRAND 9
 		"{}\t{}\t"     // MAXLEN 10 ALNLEN 11 
 		"{}{}",        // CIGAR 12 COMMENT 13
-		query->name, query_start, query_end, 
-		ref->name, 
-		do_rc && ref->is_rc ? ref->seq.size() - ref_end + 1 : ref_start, 
-		do_rc && ref->is_rc ?  ref->seq.size() - ref_start + 1 : ref_end,
+		qn, qs, qe,
+		rn, rs, re,
 		name,
 		aln.span() ? fmt::format("{:.1f}", aln.total_error()) : "",
 		query->is_rc ? "-" : "+",

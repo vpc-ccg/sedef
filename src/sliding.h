@@ -29,6 +29,8 @@ struct SlidingMap {
 	double limit;
 	int kmer_size;
 
+	std::unordered_map<int, int> estimate_memoize;
+
 private:
 	SlidingMap() = default;
 

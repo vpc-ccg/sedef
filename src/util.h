@@ -9,6 +9,13 @@
 
 #pragma once 
 
+#include <vector>
+#include <string>
+#include <unordered_map>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+
 /******************************************************************************/
 
 mode_t stat_file(const std::string &path);
@@ -21,5 +28,5 @@ std::string rc(const std::string &s);
 
 double tau(double edit_error, int kmer_size);
 
-int relaxed_jaccard_estimate(int s, int kmer_size);
+int relaxed_jaccard_estimate(int s, int kmer_size, std::unordered_map<int, int> &mm);
 

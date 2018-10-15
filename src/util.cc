@@ -55,10 +55,10 @@ string rc(const string &s)
 double tau(double edit_error, int kmer_size)
 {
 	const double ERROR_RATIO = (Globals::Search::MAX_ERROR - Globals::Search::MAX_EDIT_ERROR) / Globals::Search::MAX_EDIT_ERROR;
-    double gap_error = std::min(1.0, ERROR_RATIO * edit_error);
-    double a = (1 - gap_error) / (1 + gap_error);
-    double b = 1 / (2 * std::exp(kmer_size * edit_error) - 1);
-    return a * b;
+   double gap_error = std::min(1.0, ERROR_RATIO * edit_error);
+   double a = (1 - gap_error) / (1 + gap_error);
+   double b = 1 / (2 * std::exp(kmer_size * edit_error) - 1);
+   return a * b;
 }
 
 double solve_inverse_jaccard(int j, int kmer_size)
@@ -76,10 +76,8 @@ double solve_inverse_jaccard(int j, int kmer_size)
 	}, 0.10, 0.0, 1.0, numeric_limits<double>::digits);
 }
 
-int relaxed_jaccard_estimate(int s, int kmer_size)
+int relaxed_jaccard_estimate(int s, int kmer_size, unordered_map<int, int> &mm)
 {
-	static unordered_map<int, int> mm;
-
 	double result = -1;
 	auto it = mm.find(s);
 	if (it != mm.end()) result = it->second;

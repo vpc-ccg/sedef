@@ -16,6 +16,7 @@
 #include "search_main.h"
 #include "align_main.h"
 #include "stats_main.h"
+#include "translate.h"
 #include "merge.h"
 
 using namespace std;
@@ -47,6 +48,10 @@ void print_help()
 		"      set maximum small mutation rate (default: 0.15) \n"
 		"    -g, --gap-freq \n"
 		"      set gap frequency rate (default: 0.005) \n"
+		"    -t, --threads \n"
+		"      number of threads (providing this will activate parallel mode--- use sedef.sh unless really sure) \n"
+		"    -m, --max-parallel-size (default: 0)\n"
+		"      maximum size of chromosome in MB to be processed by parallel mode (default: no limit)\n"
 		"- align bucket -n [count] [bed_directory(/)] [buckets/] \n"
 		"  bucket BEDs from [bed_directory] directory (or file) in the [count] bins (files) \n"
 		"  in [buckets/] for balanced parallel alignment stage \n"
@@ -78,6 +83,14 @@ void print_help()
 		"      minimum amount of uppercase (non-masked) characters in SD (default: 100) \n"
 		"    --max-error \n"
 		"      maximum wgac-scaled error rate allowed for SD (default: 0.5) \n"
+		"- translate [old_fasta] [new_fasta] \n"
+		"  merge [old_fasta] chromosomes to larger chromosomes in [new_fasta] \n"
+		"  each chromosome is of size [max_size] which is by default 100 MB \n"
+		"  useful for incomplete assemblies with lots of small contigs"
+		"  params: \n"
+		"    -m, --max-size \n"
+		"      maximum chromosome size \n"
+
 		"- help \n"
 		"  Displays this help message \n"
 		"\n"
@@ -115,7 +128,6 @@ int main(int argc, char **argv)
 		eprn("Arguments missing: please run sedef help for more information.");
 		exit(1);
 	}
-
 	
 	try {
 		if (command == "help") {
@@ -127,6 +139,8 @@ int main(int argc, char **argv)
 			align_main(argc - 2, argv + 2);
 		} else if (command == "stats") {
 			stats_main(argc - 2, argv + 2);
+		} else if (command == "translate") {
+			trans_main(argc - 2, argv + 2);
 		} else {
 			eprn("Whoops, invalid command!");
 		}

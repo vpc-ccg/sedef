@@ -50,6 +50,9 @@ struct FastaReference {
 	void* filemm;
 	size_t filesize;
 	FastaIndex index;
+
+	std::map<std::string, std::vector<std::pair<size_t, std::string>>> 
+		translation_index;
 	
 	FastaReference(std::string filename);
 	~FastaReference();
