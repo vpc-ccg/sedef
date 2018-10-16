@@ -119,8 +119,8 @@ Other fields are (in the order of appearance):
 | `transversions`    | Transversion count (all mismatches that are not transitions)    |       
 | `fracMatch`        | `matchB / alnB` |
 | `fracMatchIndel`   | `matchB / aln_len`    |        
-| `jck`              | Jaccard score (<img src="https://latex.codecogs.com/svg.latex?\frac{3}{4}\log\left(1-\frac{4}{3}w\right)" /> where `w = mismatchB / alnB` |
-| `k2K`              | Kimura score (<img src="https://latex.codecogs.com/svg.latex?\frac{1}{2}\log\left(\frac{1}{1-2p-q}\right)+\frac{1}{4}\log\left(\frac{1}{1-2q}\right)" />) where `p = transitionsB / alnB` and `q = transitionsB / alnB` |
+| `jck`              | Jaccard score: <img src="https://latex.codecogs.com/svg.latex?\frac{3}{4}\log\left(1-\frac{4}{3}w\right)" /> where `w = mismatchB / alnB` |
+| `k2K`              | Kimura score: <img src="https://latex.codecogs.com/svg.latex?\frac{1}{2}\log\left(\frac{1}{1-2p-q}\right)+\frac{1}{4}\log\left(\frac{1}{1-2q}\right)" /> where `p = transitionsB / alnB` and `q = transitionsB / alnB` |
 | `aln_gaps`         | Number of gaps in the alignment     |
 | `uppercaseA`       | Number of non-masked (uppercase) bases in 1st mate    |    
 | `uppercaseB`       | Number of non-masked (uppercase) bases in 2st mate    |   
