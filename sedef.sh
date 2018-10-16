@@ -51,7 +51,7 @@ jobs=4
 force="n"
 wgac=""
 translate=""
-exclude="^(chr)|(trans)[0-9A-Z]+$"
+exclude="^(chr|trans)[0-9A-Z]+$"
 while true; do
 	case "$1" in
 		-h|--help)
@@ -140,7 +140,9 @@ if [ ! -z "${translate}" ]; then
 	input="${translate}"
 fi
 
-if [ -z "`cut -f1 "${input}.fai" | awk '$1~/'${exclude}'/'`" ]; then
+validchrs="$(cut -f1 "${input}.fai" | awk '$1~/'${exclude}'/')"
+
+if [ -z "$validchrs" ]; then
 	echo "No valid chromosomes found. Double-check --exclude (current value: ${exclude})."
 	echo "Alternatively, use --translate translation.fa. Check docs for more info."
 	exit 1
@@ -151,8 +153,8 @@ if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
 	rm -f "${output}/seeds.joblog.ok"
 	echo "Running SD seeding..."
 
-	for i in `cut -f1 "${input}.fai" | awk '$1~/'${exclude}'/'`; do 
-		for j in `cut -f1 "${input}.fai" | awk '$1~/'${exclude}'/'`; do  
+	for i in $validchrs; do 
+		for j in $validchrs; do  
 			SI=`awk '$1=="'$i'" {print $2}' "${input}.fai"`
 			SJ=`awk '$1=="'$j'" {print $2}' "${input}.fai"` 
 			if [ "$SI" -le "$SJ" ] ; then 
