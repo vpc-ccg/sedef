@@ -86,6 +86,53 @@ Example:
 ./sedef.sh -o <output> -j <jobs> -t translation.fa <genome> 
 ```
 
+
+### Output
+
+Output will be located in `<out_dir>/final.bed`.
+
+The fields of BEDPE file are as follows:
+
+First 6 fields are standard BEDPE fields describing the coordinates of SD mates:
+- `chr1`, `start1` and `end1`
+- `chr2`, `start2` and `end2`
+
+Other fields are (in the order of appearance):
+
+| Field              | Description |
+|--------------------|--------------------|
+| `name`             | SD name |
+| `score`            | Total alignment error  |
+| `strand1`          | 1st SD mate strand |
+| `strand2`          | 2nd SD mate strand |
+| `max_len`          | Length of longer mate  |
+| `aln_len`          | Alignment length (length with gaps) |
+| `cigar`            | Empty string |
+| `comment`          | Comment: currently shows mismatch error (`m`) and gap error (`g`) |
+| `aln_len`          | Alignment length (length with gaps)    |
+| `indel_a`          | Number of gap bases in 1st mate |
+| `indel_b`          | Number of gap bases in 2st mate     |
+| `alnB`             | Aligned base count (matches and mismatches without gaps) |
+| `matchB`           | Match base count  |
+| `mismatchB`        | Mismatch base count |
+| `transitionsB`     | Transition count (A <-> G and C <-> T) |
+| `transversions`    | Transversion count (all mismatches that are not transitions)    |       
+| `fracMatch`        | `matchB / alnB` |
+| `fracMatchIndel`   | `matchB / aln_len`    |        
+| `jck`              | Jaccard score (<img src="https://latex.codecogs.com/svg.latex?\frac{3}{4}\log\left(1-\frac{4}{3}w\right)" /> where `w = mismatchB / alnB` |
+| `k2K`              | Kimura score (<img src="https://latex.codecogs.com/svg.latex?\frac{1}{2}\log\left(\frac{1}{1-2p-q}\right)+\frac{1}{4}\log\left(\frac{1}{1-2q}\right)" />) where `p = transitionsB / alnB` and `q = transitionsB / alnB` |
+| `aln_gaps`         | Number of gaps in the alignment     |
+| `uppercaseA`       | Number of non-masked (uppercase) bases in 1st mate    |    
+| `uppercaseB`       | Number of non-masked (uppercase) bases in 2st mate    |   
+| `uppercaseMatches` | Non-masked match count |
+| `aln_matches`      | Match base count |
+| `aln_mismatches`   | Mismatch base count            |
+| `aln_gaps`         | Number of gaps in the alignment      |
+| `aln_gap_bases`    | Number of gap bases (`indel_a + indel_b`)    |     
+| `cigar`            | CIGAR string of the SD mate alignment |
+
+All errors are expressed in percentages (0-100) of the alignment length unless otherwise noted.
+
 ### Manual transmission
 
 First make sure to index the file:
