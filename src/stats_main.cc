@@ -302,7 +302,7 @@ void process(Hit hs, string cigar, FastaReference &fr)
 				"{}\t{}\t{}\t{}\t{}\t{}\t"
 				"{}\t{}\t{}\t"
 				"{}\t{}\t{}\t{}\t"
-				"{}\t{}", 
+				"{}\t{}\t{}", 
 				h.to_bed(false, false, &fr), // 1-13
 				align_length, // 14
 				indel_a, indel_b, // 15-16
@@ -313,7 +313,7 @@ void process(Hit hs, string cigar, FastaReference &fr)
 				h.aln.gaps(), // 26
 				uppercaseA, uppercaseB, uppercaseMatches, // 27-29
 				h.aln.matches(), h.aln.mismatches(), h.aln.gaps(), h.aln.gap_bases(), // 30-33
-				h.aln.cigar_string() // 34
+				h.aln.cigar_string(), errorScaled // 34-35
 			);
 		}
 	}
