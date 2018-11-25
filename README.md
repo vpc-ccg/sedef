@@ -130,6 +130,7 @@ Other fields are (in the order of appearance):
 | `aln_gaps`         | Number of gaps in the alignment      |
 | `aln_gap_bases`    | Number of gap bases (`indel_a + indel_b`)    |     
 | `cigar`            | CIGAR string of the SD mate alignment |
+| `filter_score`     | `(aln_gaps + aln_mismatches) / aln_len` (should be ≥ 0.5) |
 
 All errors are expressed in percentages (0-100) of the alignment length unless otherwise noted.
 
