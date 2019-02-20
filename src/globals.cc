@@ -33,7 +33,7 @@ double Extend::RATIO = 5;
 int Extend::MAX_EXTEND = 15 * KB;
 int Extend::MERGE_DIST = 250; 	
 
-int Stats::MAX_OK_GAP = 50; 
+int Stats::MAX_OK_GAP = -1; 
 int Stats::MIN_SPLIT_SIZE = KB;
 int Stats::MIN_UPPERCASE = 100;
 double Stats::MAX_SCALED_ERROR = 0.5;

@@ -111,8 +111,7 @@ vector<Hit> gap_split(Hit h)
 	Hit hh;
 	vector<Hit> hits;
 	double gap_score = h.aln.gap_error();
-	for (auto &g: gaps) {
-		break;
+	if (Globals::Stats::MAX_OK_GAP > -1) for (auto &g: gaps) {
 		dprn("--> {} :: a:{} b:{} ... a:{} b:{}", g.len,
 			g.start_a - h.aln.start_a, g.start_b - h.aln.start_b,
 			h.aln.end_a - (g.start_a + g.len_a), h.aln.end_b - (g.start_b + g.len_b));
@@ -313,7 +312,7 @@ void process(Hit hs, string cigar, FastaReference &fr)
 				h.aln.gaps(), // 26
 				uppercaseA, uppercaseB, uppercaseMatches, // 27-29
 				h.aln.matches(), h.aln.mismatches(), h.aln.gaps(), h.aln.gap_bases(), // 30-33
-				h.aln.cigar_string(), errorScaled // 34-35
+				h.aln.cigar_string(), 1-errorScaled // 34-35
 			);
 		}
 	}
@@ -361,7 +360,7 @@ void stats(const string &ref_path, const string &bed_path)
 		"transitionsB\ttransversions\tfracMatch\tfracMatchIndel\tjck\tk2K\t" // 20-25
 		"aln_gaps\tuppercaseA\tuppercaseB\tuppercaseMatches\t" // 26-29
 		"aln_matches\taln_mismatches\taln_gaps\taln_gap_bases\t" // 30-33
-		"cigar" // 34
+		"cigar\tfilter_score" // 34
 	);
 	#pragma omp parallel for
 	for (auto hsi = 0; hsi < hits.size(); hsi++) {

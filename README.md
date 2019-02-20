@@ -108,7 +108,7 @@ Other fields are (in the order of appearance):
 | `max_len`          | Length of longer mate  |
 | `aln_len`          | Alignment length (length with gaps) |
 | `cigar`            | Empty string |
-| `comment`          | Comment: currently shows mismatch error (`m`) and gap error (`g`) |
+| `comment`          | Comment: currently shows mismatch base error (`m`) and gap base error (`g`) |
 | `aln_len`          | Alignment length (length with gaps)    |
 | `indel_a`          | Number of gap bases in 1st mate |
 | `indel_b`          | Number of gap bases in 2st mate     |
@@ -132,7 +132,13 @@ Other fields are (in the order of appearance):
 | `cigar`            | CIGAR string of the SD mate alignment |
 | `filter_score`     | `(aln_gaps + aln_mismatches) / aln_len` (should be ≥ 0.5) |
 
-All errors are expressed in percentages (0-100) of the alignment length unless otherwise noted.
+All errors are expressed in percentages (0.0--1.0) of the alignment length unless otherwise noted.
+
+> *Warning*: as per WGAC, when calculating the similarity and error rates (fields `score`, `fracMatch`, 
+`fracMatchIndel` and `filter_score`) SEDEF counts a gap as a *single* error 
+(so the hypothetical alignment of `A-----GC` and `AT-----C` will have error 4 and NOT 8). This might lead
+to SDs with rather large gap contents. For more filtering, consult `comment` field that provides the
+percentage of match/mismatch and gap bases.
 
 ### Manual transmission
 
