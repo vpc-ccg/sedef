@@ -242,7 +242,7 @@ if [ ! -f "${output}/report.joblog.ok" ] || [ "${force}" == "y" ]; then
 	export OMP_NUM_THREADS=${jobs}
 	# echo ${OMP_NUM_THREADS}
 	(${TIME} -f'Report time: %E (%M MB, user %U)' \
-		sedef stats generate "${stat_params}" "${input}" "${output}/aligned.bed" |\
+		sedef stats generate ${stat_params} "${input}" "${output}/aligned.bed" |\
 		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n |\
 		uniq > "${output}/final.bed") 2>&1 | sed 1d
 
