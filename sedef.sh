@@ -137,7 +137,7 @@ if [ ! -z "${translate}" ]; then
 	if [ ! -f "${translate}" ] ; then 
 		echo "Translating ..."
 		${TIME} -f'Translation time: %E (%M MB, user %U)' \
-			sedef translate "${input}" "${translate}";
+			sedef translate "${input}" "${translate}" 2>"${output}/log/translate.log";
 	fi
 	if [ ! -f "${translate}.fai" ]; then
 		samtools faidx "${translate}"
@@ -193,15 +193,24 @@ if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
 fi
 
 echo "************************************************************************"
+if [ ! -f "${output}/bucket.joblog.ok" ] || [ "${force}" == "y" ]; then
+	rm -f "${output}/bucket.joblog.ok"
+	echo "Running SD alignment..."
+
+	mkdir -p "${output}/align"
+	${TIME} -f'Bucketing time: %E' sedef align bucket -n 1000 "${output}/seeds" "${output}/align" 2>"${output}/log/bucket.log"
+
+	touch "${output}/bucket.joblog.ok"
+fi
+
+echo "************************************************************************"
 if [ ! -f "${output}/align.joblog.ok" ] || [ "${force}" == "y" ]; then
 	rm -f "${output}/align.joblog.ok"
 	echo "Running SD alignment..."
 
+	# Now run the alignment
 	mkdir -p "${output}/align"
 	mkdir -p "${output}/log/align"
-	${TIME} -f'Bucketing time: %E' sedef align bucket -n 1000 "${output}/seeds" "${output}/align" 2>"${output}/log/bucket.log"
-
-	# Now run the alignment
 	for j in "${output}/align/bucket_"???? ; do
 		k=$(basename $j);
 		echo "${TIME} -f'TIMING: %e %M' sedef align generate -k 11 \"${input}\" $j >${j}.aligned.bed 2>${output}/log/align/${k}.log"

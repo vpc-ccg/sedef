@@ -34,6 +34,154 @@ using namespace std;
 
 /******************************************************************************/
 
+void bucket_alignments_extern(const string &bed_path, int nbins, string output_dir, bool extend)
+{
+	vector<string> files;
+	if (S_ISREG(stat_file(bed_path))) {
+		files.push_back(bed_path);
+	} else if (S_ISDIR(stat_file(bed_path))) {
+		glob_t glob_result;
+		glob((bed_path + "/*.bed").c_str(), GLOB_TILDE, NULL, &glob_result);
+		for (int i = 0; i < glob_result.gl_pathc; i++) {
+			string f = glob_result.gl_pathv[i];
+			if (S_ISREG(stat_file(f))) {
+				files.push_back(f);
+			}
+		}
+	} else {
+		throw fmt::format("Path {} is neither file nor directory", bed_path);
+	}
+
+	vector<Hit> hits;
+	map<string, FILE *> tmp_bins;
+	map<string, int> lens;
+	int ix=0, total_nhits=0;
+	for (auto &file: files) {
+		// if(++ix>4) break;
+		ifstream fin(file.c_str());
+		if (!fin.is_open()) {
+			throw fmt::format("BED file {} does not exist", bed_path);
+		}
+
+		int nhits = 0;
+		string s;
+		while (getline(fin, s)) {
+			Hit h = Hit::from_bed(s);
+			if (extend) {
+				h.extend(Globals::Extend::RATIO, Globals::Extend::MAX_EXTEND);
+			}
+			assert(h.ref != nullptr);
+			assert(h.query != nullptr);
+			if (tie(h.query->name, h.query_start, h.query_end) > tie(h.ref->name, h.ref_start, h.ref_end)) {
+				swap(h.query->name, h.ref->name);
+				swap(h.query_start, h.ref_start);
+				swap(h.query_end, h.ref_end);
+			}
+			// Bucket reads to allow external sorting
+			string fno = output_dir + fmt::format("/tmp_{}_{}.tmp", h.query->name, h.ref->name);
+			auto it = tmp_bins.find(fno);
+			if (it == tmp_bins.end()) {
+				tmp_bins[fno] = fopen(fno.c_str(), "w");
+				it = tmp_bins.find(fno);
+			}
+			FILE *fo = it->second;
+			fputs(h.to_bed(false).c_str(), fo);
+			fputs("\n", fo);
+			lens[fno]++;
+
+			// hits.push_back(h);
+			nhits++; total_nhits++;
+		}
+		eprnn("\rRead {:10} alignments in {}         ", nhits, file);
+	}
+	eprn("\nRead total {} alignments", total_nhits);
+
+	int max_complexity = 0;
+	map<int, int> complexity;
+	for (auto bin: tmp_bins) {
+		fclose(bin.second);
+		ifstream fin(bin.first.c_str());
+		eprnn("\rProcessing bucket {}...", bin.first);
+		vector<Hit> hits;
+		hits.reserve(lens[bin.first]);
+		string s;
+		while (getline(fin, s)) {
+			Hit h = Hit::from_bed(s);
+			hits.push_back(h);
+		}
+		fin.close();
+
+		if (extend) {
+			hits = merge(hits, Globals::Extend::MERGE_DIST);
+			eprnn("after merging remaining {} alignments       ", hits.size());
+		}
+		for (auto &h: hits) {
+			int c = (int)sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
+			max_complexity = max(max_complexity, c);
+			complexity[c/1000]++;
+		}
+
+		FILE *fo = fopen(bin.first.c_str(), "w");
+		for (auto &h: hits) {
+			fputs(h.to_bed(false).c_str(), fo);
+			fputs("\n", fo);
+		}
+		fclose(fo);
+	}
+	eprn("\nFinished with sorting");
+
+	auto next_bin = vector<int>(1, 0);
+	for (int c = 1; c <= max_complexity / 1000; c++) 
+		next_bin.push_back((next_bin[c - 1] + complexity[c - 1]) % nbins);
+
+	const int BUFF_SZ = 1000;
+	vector<vector<Hit>> buffer(nbins);
+
+	vector<ofstream> fout;
+	for (int b = 0; b < nbins; b++) {
+		string of = output_dir + fmt::format("/bucket_{:04d}", b);
+		fout.push_back(ofstream(of.c_str()));
+		if (!fout.back().is_open()) {
+			throw fmt::format("Cannot open file {} for writing", of);
+		}
+	}
+
+	for (auto bin: tmp_bins) {
+		ifstream fin(bin.first.c_str());
+		eprnn("\rProcessing bucket {}...", bin.first);
+		string s;
+		while (getline(fin, s)) {
+			Hit h = Hit::from_bed(s);
+			int complexity = sqrt(double(h.query_end - h.query_start) * double(h.ref_end - h.ref_start));
+			complexity /= 1000;
+
+			int bin = next_bin[complexity];
+			next_bin[complexity] = (next_bin[complexity] + 1) % nbins;
+
+			if (h.query->is_rc) {
+				swap(h.query, h.ref);
+				swap(h.query_start, h.ref_start);
+				swap(h.query_end, h.ref_end);
+			}
+			buffer[bin].push_back(h);
+			if (buffer[bin].size() == BUFF_SZ) {
+				for (auto &h: buffer[bin])
+					fout[bin] << h.to_bed(false) << endl;
+				buffer[bin].clear();
+			}
+		}
+		fin.close();
+	}
+
+	for (int b = 0; b < nbins; b++) {
+		for (auto &h: buffer[b])
+			fout[b] << h.to_bed(false) << endl;
+		fout[b].close();
+	}
+	for (auto &s: tmp_bins)
+		unlink(s.first.c_str());
+}
+
 auto bucket_alignments(const string &bed_path, int nbins, string output_dir, bool extend)
 {
 	vector<string> files;
@@ -200,7 +348,7 @@ void align_main(int argc, char **argv)
 		if (!(cmdl({"-n", "--bins"}) >> nbins)) {
 			throw fmt::format("Must provide number of bins (--bins)");	
 		}
-		bucket_alignments(cmdl[1], nbins, cmdl[2], true);
+		bucket_alignments_extern(cmdl[1], nbins, cmdl[2], true);
 	} else if (command == "generate") {
 		int kmer_size;
 		if (!(cmdl({"-k", "--kmer"}) >> kmer_size)) {
