@@ -10,9 +10,9 @@ Get the final paper [here](https://academic.oup.com/bioinformatics/article/34/17
 
 ### Results
 
-| 👨‍🎨 Human (hg19) | 🐭 Mouse (mm8) |
-|-----|-----|
-| [Final calls](http://cb.csail.mit.edu/cb/sedef/hg19.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/mm8.bed) |
+| 👨🎨 Human (hg38) | 👨‍🎨 Human (hg19) | 🐭 Mouse (mm8) |
+|-----|-----|-----|
+| [Final calls](http://alkanlab.org/share/sedef/hg38.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/hg19.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/mm8.bed) |
 
 Paper experiments are outlined [in this Jupyter notebook](paper/experiments.ipynb).
 
