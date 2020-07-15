@@ -1,10 +1,10 @@
 # SEDEF: <u>Se</u>gmental <u>D</u>uplication <u>E</u>valuation <u>F</u>ramework
 
-SEDEF is a quick tool to find all segmental duplications in the genome.
+SEDEF is a tool for quick detection of segmental duplications in a genome.
 
 ## Paper
 
-SEDEF has been accepted at [ECCB 2018](http://eccb18.org) (DOI [10.1093/bioinformatics/bty586](https://doi.org/10.1093/bioinformatics/bty586)). 
+SEDEF has been presented at [ECCB 2018](http://eccb18.org) (DOI [10.1093/bioinformatics/bty586](https://doi.org/10.1093/bioinformatics/bty586)). 
 Preprint is [available here](https://arxiv.org/abs/1807.00205).
 Get the final paper [here](https://academic.oup.com/bioinformatics/article/34/17/i706/5093240).
 
@@ -14,12 +14,11 @@ Get the final paper [here](https://academic.oup.com/bioinformatics/article/34/17
 |-----|-----|-----|
 | [Final calls](http://alkanlab.org/share/sedef/hg38.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/hg19.bed) | [Final calls](http://cb.csail.mit.edu/cb/sedef/mm8.bed) |
 
-Paper experiments are outlined [in this Jupyter notebook](paper/experiments.ipynb).
+The experiment pipeline from the paper is described [in this Jupyter notebook](paper/experiments.ipynb).
 
 ## How to compile
 
-Simple! Use
-
+Simple! Do this:
 ```bash
 git clone https://github.com/vpc-ccg/sedef
 cd sedef
@@ -27,23 +26,27 @@ make -j release
 ```
 
 By default, SEDEF uses Intel C++ compiler. If you are using g++, build with:
-
 ```bash
 make -j release CXX=g++
 ```
 
-> You need at least g++ 5.1.0 (C++14) to compile SEDEF. clang should work fine as well.
+If you are using Clang on macOS, compile as 
+```bash
+brew install libomp
+make -j release OPENMP="-Xpreprocessor -fopenmp" CXX=clang++
+```
 
-SEDEF requires Boost libraries in order to compile. In case you have non-standard Boost installation, you can still compile as follows:
+> You need at least g++ 5.1.0 (C++14) to compile SEDEF. Clang should work fine as well.
 
+SEDEF requires Boost libraries in order to compile. In case you installed Boost in a non-standard directory, you can still compile as follows:
 ```bash
 CPATH={path_to_boost} make -j release
 ```
 
 ## How to run
 
-The genome assembly must be soft-masked: all common and tandem repeats are converted to lower-case letters.
-Suppose that our genome is in `hg19.fa` file (we used UCSC hg19 with "normal" 24 chromosomes without patches (unGl) or random strains (chrXX_random).
+The genome assembly **must be soft-masked** (i.e. all common and tandem repeats should be converted to lower-case letters) and **indexed**.
+Suppose that our genome is `hg19.fa` (we use UCSC hg19 genome with 24 standard chromosomes that does not contain patches (unGl) or random strains (chrXX_random)).
 
 ### Automatic transmission
 
@@ -53,39 +56,15 @@ Just go to `sedef` directory and run
 ```
 
 For example, to run hg19.fa on 80 cores type:
-^(chr)|(trans)[0-9A-Z]+$^(chr)|(trans)[0-9A-Z]+$You can add `-f` if `sedef_hg19` already exists (it will overwrite its content though). The final results will be
-located in `sedef_hg19/final.bed`.
-
-> Note: SEDEF will only search chromosomes whose name has the format "chr(number|X|Y|M)".
-> That means that "chr1" will be searched while "1" will not.
-> You can pass a regex to parameter `-e / --exclude` to `sedef.sh` to modify this criteria.
-> For example, to use FASTAs with NCBI format pass `-e "^[0-9A-Z]+$"`.
-
-Please note that `sedef.sh` requires SAMtools and GNU Parallel.
-If you want to experiment with different parameters, run `sedef help` for parameter documentation.
-
-#### Incomplete assemblies
-
-SEDEF assumes that the number of "proper" chromosomes (i.e. completely assembled chromosomes)
-in FASTA file is limited (less than 50). 
-
-This is true for complete assemblies like hg19 and mm8. However, if you happen to have incomplete
-assembly with lots of short contigs, you should use condensed FASTAs that merge multiple short contigs
-into the large one.
-(otherwise `sedef.sh` will launch a search process for each contig --- and if you have 1,000 contigs
-you will end up with 1,000,000 jobs).
-
-SEDEF can make a condensed FASTA for you if you ask nicely.
-Just run `sedef.sh` with a `-t <translation.fa>`. 
-In this case, SEDEF will also take care of the final output 
-(i.e. reported SD pairs will not refer to translated FASTA but to the original FASTA).
-
-Example:
-
 ```bash
-./sedef.sh -o <output> -j <jobs> -t translation.fa <genome> 
+./sedef.sh -o sedef_hg19 -j 80 hg19.fa
 ```
 
+You can add `-f` if `sedef_hg19` already exists (it will overwrite the existing content though). 
+The final results will be located in `sedef_hg19/final.bed`.
+
+Please note that `sedef.sh` depends on Samtools and GNU Parallel.
+If you want to experiment with different parameters, run `sedef help` for parameter documentation.
 
 ### Output
 
@@ -109,9 +88,8 @@ Other fields are (in the order of appearance):
 | `aln_len`          | Alignment length (length with gaps) |
 | `cigar`            | Empty string |
 | `comment`          | Comment: currently shows mismatch base error (`m`) and gap base error (`g`) |
-| `aln_len`          | Alignment length (length with gaps)    |
-| `indel_a`          | Number of gap bases in 1st mate |
-| `indel_b`          | Number of gap bases in 2st mate     |
+| `indel_a`          | Number of gap bases in the 1st mate |
+| `indel_b`          | Number of gap bases in the 2nd mate     |
 | `alnB`             | Aligned base count (matches and mismatches without gaps) |
 | `matchB`           | Match base count  |
 | `mismatchB`        | Mismatch base count |
@@ -122,8 +100,8 @@ Other fields are (in the order of appearance):
 | `jck`              | Jaccard score: <img src="https://latex.codecogs.com/svg.latex?\frac{3}{4}\log\left(1-\frac{4}{3}w\right)" /> where `w = mismatchB / alnB` |
 | `k2K`              | Kimura score: <img src="https://latex.codecogs.com/svg.latex?\frac{1}{2}\log\left(\frac{1}{1-2p-q}\right)+\frac{1}{4}\log\left(\frac{1}{1-2q}\right)" /> where `p = transitionsB / alnB` and `q = transitionsB / alnB` |
 | `aln_gaps`         | Number of gaps in the alignment     |
-| `uppercaseA`       | Number of non-masked (uppercase) bases in 1st mate    |    
-| `uppercaseB`       | Number of non-masked (uppercase) bases in 2st mate    |   
+| `uppercaseA`       | Number of non-masked (uppercase) bases in the 1st mate    |    
+| `uppercaseB`       | Number of non-masked (uppercase) bases in the 2nd mate    |   
 | `uppercaseMatches` | Non-masked match count |
 | `aln_matches`      | Match base count |
 | `aln_mismatches`   | Mismatch base count            |
@@ -132,7 +110,7 @@ Other fields are (in the order of appearance):
 | `cigar`            | CIGAR string of the SD mate alignment |
 | `filter_score`     | `(aln_gaps + aln_mismatches) / aln_len` (should be ≥ 0.5) |
 
-All errors are expressed in percentages (0.0--1.0) of the alignment length unless otherwise noted.
+All errors are expressed as ratios (0.0--1.0) of the alignment length unless otherwise noted.
 
 > *Warning*: as per WGAC, when calculating the similarity and error rates (fields `score`, `fracMatch`, 
 `fracMatchIndel` and `filter_score`) SEDEF counts a gap as a *single* error 
@@ -142,13 +120,13 @@ percentage of match/mismatch and gap bases.
 
 ### Manual transmission
 
-First make sure to index the file:
+First make sure to index the genome:
 
 ```bash
 samtools faidx hg19.fa
 ```
 
-Then run the `sedef-search` in parallel (in this example, we use GNU parallel) to get the initial SD seeds:
+Then run the `sedef-search` in parallel (in this example, we will use GNU parallel) to get the initial seeds:
 ```bash
 mkdir -p out # For the output
 mkdir -p out/log # For the logs
@@ -178,8 +156,8 @@ grep Wall out/log/*.log | tr -d '(' | awk '{s+=$4}END{print s}'
 grep Memory out/log/*.log | awk '{if($3>m)m=$3}END{print m}'
 ```
 
-Then use `sedef-align` to bucket the files for the optimal parallel alignment, and
-afterwards run the whole alignment:
+Then use `sedef-align` to bucket the files for the optimal parallel alignment. 
+Afterwards, start the whole alignment:
 ```bash
 # First bucket the reads into 1000 bins
 mkdir -p out/bins

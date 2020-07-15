@@ -130,8 +130,8 @@ if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
 	rm -f "${output}/seeds.joblog.ok"
 	echo "Running SD seeding..."
 
-	for j in {0..$((numchrs - 1))}; do # reference
-		for i in {$j..$((numchrs - 1))}; do # query; query < reference
+	for j in `seq 0 $((numchrs - 1))`; do # reference
+		for i in `seq $j $((numchrs - 1))`; do # query; query < reference
 			for m in n y ; do
 				[ "$m" == "y" ] && rc="-r" || rc="";
 				echo "${TIME} -f'TIMING: %e %M' sedef search -k 12 -w 16 ${rc} ${input} -t $i $j >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"

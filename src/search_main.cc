@@ -91,7 +91,7 @@ string v2s(const vector<string> &v) {
 };
 
 vector<vector<string>> generate_translation(const string &ref_path,
-                                            bool print = false) {
+                                            bool print) {
   FastaReference fr(ref_path);
   eprn("Translating {}...", ref_path);
 
@@ -147,32 +147,43 @@ void search_single(const string &ref_path, const string &query_chr,
     auto ref = generate_translation(ref_path);
     qr = ref[std::stoi(query_chr)];
     rr = ref[std::stoi(ref_chr)];
-    eprn("Transform: {} to {}", v2s(qr), v2s(rr));
+    // eprn("Transform: {} to {}", v2s(qr), v2s(rr));
   }
 
   // q < r ?
   int total = 0;
-  for (auto ri = 0; ri < rr.size(); ri++) {
-    string ref = fr.get_sequence(rr[ri]);
-    auto ref_hash = make_shared<Index>(
-        make_shared<Sequence>(rr[ri], ref, is_ref_complement), kmer_size,
-        window_size);
-    for (auto qi = 0; qi < rr.size(); qi++) {
-      auto query_hash = ref_hash;
-      bool is_same_genome = (rr[ri] == rr[qi]) && !is_ref_complement;
-      if (!is_same_genome) {
-        string query = fr.get_sequence(rr[qi]);
-        query_hash = make_shared<Index>(make_shared<Sequence>(rr[qi], query),
-                                        kmer_size, window_size);
-      }
-      // eprn("Building index took {:.1f}s", elapsed(T)), T = cur_time();
-      total += initial_search(query_hash, ref_hash, is_same_genome,
-                              [](Hit &h) { prn("{}", h.to_bed()); });
-      eprn("");
+
+  map<pair<string, bool>, shared_ptr<Index>> indices;
+  for (auto &r : rr) {
+    string ref = fr.get_sequence(r);
+    indices[{r, is_ref_complement}] =
+        make_shared<Index>(make_shared<Sequence>(r, ref, is_ref_complement),
+                           kmer_size, window_size);
+  }
+  for (auto &r : qr) {
+    if (indices.find({r, false}) == indices.end()) {
+      string query = fr.get_sequence(r);
+      indices[{r, false}] = make_shared<Index>(make_shared<Sequence>(r, query),
+                                               kmer_size, window_size);
+    }
+  }
+  eprn("Building index took {:.1f}s", elapsed(T)), T = cur_time();
+
+  for (auto &r: rr) {
+    auto ref_hash = indices[{r, is_ref_complement}];
+    for (auto &q: qr) {
+      auto query_hash = indices[{q, false}];
+      bool is_same_genome = (q == r) && !is_ref_complement;
+      total += initial_search(
+          query_hash, ref_hash, is_same_genome,
+          [](Hit &h) { prn("{}", h.to_bed()); },
+          qr.size() == 1 && rr.size() == 1);
+      // if (!(qr.size() == 1 && rr.size() == 1))
+      //   eprnn("\r{:10} / {:10} ({:10})", ri * rr.size() + qi,
+      //         rr.size() * rr.size(), ri);
     }
   }
 
-  eprn("");
   eprn("Total:           = {:10n}", total);
   eprn("Fails: attempts  = {:10n}\n"
        "       Jaccard   = {:10n}\n"

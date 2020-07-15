@@ -28,6 +28,7 @@
 #include "fasta.h"
 #include "hit.h"
 #include "merge.h"
+#include "search_main.h"
 #include "util.h"
 
 using namespace std;
@@ -35,7 +36,15 @@ using namespace std;
 /******************************************************************************/
 
 void bucket_alignments_extern(const string &bed_path, int nbins,
-                              string output_dir, bool extend) {
+                              string output_dir, bool extend,
+                              const string &reference) {
+
+  auto ref = generate_translation(reference);
+  map<string, int> lookup;
+  for (int i = 0; i < ref.size(); i++)
+    for (auto &j : ref[i])
+      lookup[j] = i;
+
   vector<string> files;
   if (S_ISREG(stat_file(bed_path))) {
     files.push_back(bed_path);
@@ -57,7 +66,6 @@ void bucket_alignments_extern(const string &bed_path, int nbins,
   map<string, int> lens;
   int ix = 0, total_nhits = 0;
   for (auto &file : files) {
-    // if(++ix>4) break;
     ifstream fin(file.c_str());
     if (!fin.is_open()) {
       throw fmt::format("BED file {} does not exist", bed_path);
@@ -79,12 +87,14 @@ void bucket_alignments_extern(const string &bed_path, int nbins,
         swap(h.query_end, h.ref_end);
       }
       // Bucket reads to allow external sorting
-      string fno = output_dir +
-                   fmt::format("/tmp_{}_{}.tmp", h.query->name, h.ref->name);
+      string fno =
+          output_dir + fmt::format("/tmp_{}_{}.tmp", lookup[h.query->name],
+                                   lookup[h.ref->name]);
       auto it = tmp_bins.find(fno);
       if (it == tmp_bins.end()) {
         tmp_bins[fno] = fopen(fno.c_str(), "w");
         it = tmp_bins.find(fno);
+        assert(it != tmp_bins.end());
       }
       FILE *fo = it->second;
       fputs(h.to_bed(false).c_str(), fo);
@@ -351,7 +361,7 @@ void align_main(int argc, char **argv) {
     if (!(cmdl({"-n", "--bins"}) >> nbins)) {
       throw fmt::format("Must provide number of bins (--bins)");
     }
-    bucket_alignments_extern(cmdl[1], nbins, cmdl[2], true);
+    bucket_alignments_extern(cmdl[1], nbins, cmdl[2], true, cmdl[3]);
   } else if (command == "generate") {
     int kmer_size;
     if (!(cmdl({"-k", "--kmer"}) >> kmer_size)) {
