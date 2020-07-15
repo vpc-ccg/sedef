@@ -315,7 +315,6 @@ void process(Hit hs, string cigar, FastaReference &fr) {
           "{}\t{}\t{}\t{}\t"
           "{}\t{}\t{}",
           h.to_bed(false, false, &fr),              // 1-13
-          align_length,                             // 14
           indel_a, indel_b,                         // 15-16
           alignB, matchB, mismatchB,                // 17-19
           transitionsB, transversionsB,             // 20-21
@@ -373,7 +372,7 @@ void stats(const string &ref_path, const string &bed_path) {
 
   prn("#chr1\tstart1\tend1\tchr2\tstart2\tend2\tname\tscore\tstrand1\tstrand2\t"
       "max_len\taln_len\tcomment\t"                          // 1-13
-      "aln_len\tindel_a\tindel_b\talnB\tmatchB\tmismatchB\t" // 14-19
+      "indel_a\tindel_b\talnB\tmatchB\tmismatchB\t" // 14-19
       "transitionsB\ttransversions\tfracMatch\tfracMatchIndel\tjck\tk2K\t" // 20-25
       "aln_gaps\tuppercaseA\tuppercaseB\tuppercaseMatches\t"   // 26-29
       "aln_matches\taln_mismatches\taln_gaps\taln_gap_bases\t" // 30-33
