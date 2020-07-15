@@ -38,8 +38,8 @@ if ! command -v "sedef" >/dev/null 2>&1 ; then
 	exit 1
 fi
 
-OPTIONS=hj:o:w:fe:t:S:
-LONGOPTIONS=help,jobs,output,wgac,force,exclude,translate,stat-params
+OPTIONS=hj:o:w:fe:S:
+LONGOPTIONS=help,jobs,output,wgac,force,stat-params
 PARSED=$($GETOPT --options=$OPTIONS --longoptions=$LONGOPTIONS --name "$0" -- "$@")
 if [[ $? -ne 0 ]]; then
 	exit 2
@@ -50,8 +50,6 @@ output="sedef_out"
 jobs=4
 force="n"
 wgac=""
-translate=""
-exclude="^(chr|trans)[0-9A-Z]+$"
 stat_params=""
 while true; do
 	case "$1" in
@@ -64,10 +62,6 @@ while true; do
 			force="y"
 			shift
 			;;
-		-t|--translate)
-			translate="$2"
-			shift 2
-			;;
 		-w|--wgac)
 			wgac="$2"
 			shift 2
@@ -76,12 +70,8 @@ while true; do
 			output="$2"
 			shift 2
 			;;
-		 -j|--jobs)
+		-j|--jobs)
 			jobs="$2"
-			shift 2
-			;;
-		 -e|--exclude)
-			exclude="$2"
 			shift 2
 			;;
 		-S|--stat-params)
@@ -133,41 +123,19 @@ fi
 mkdir -p "${output}/seeds"
 mkdir -p "${output}/log/seeds"
 
-if [ ! -z "${translate}" ]; then
-	if [ ! -f "${translate}" ] ; then 
-		echo "Translating ..."
-		${TIME} -f'Translation time: %E (%M MB, user %U)' \
-			sedef translate "${input}" "${translate}" 2>"${output}/log/translate.log";
-	fi
-	if [ ! -f "${translate}.fai" ]; then
-		samtools faidx "${translate}"
-	fi
-	input="${translate}"
-fi
-
-validchrs="$(cut -f1 "${input}.fai" | awk '$1~/'${exclude}'/')"
-
-if [ -z "$validchrs" ]; then
-	echo "No valid chromosomes found. Double-check --exclude (current value: ${exclude})."
-	echo "Alternatively, use --translate translation.fa. Check docs for more info."
-	exit 1
-fi
+numchrs=`sedef translate ${input} 2>/dev/null`
 
 echo "************************************************************************"
 if [ ! -f "${output}/seeds.joblog.ok" ] || [ "${force}" == "y" ]; then
 	rm -f "${output}/seeds.joblog.ok"
 	echo "Running SD seeding..."
 
-	for i in $validchrs; do 
-		for j in $validchrs; do  
-			SI=`awk '$1=="'$i'" {print $2}' "${input}.fai"`
-			SJ=`awk '$1=="'$j'" {print $2}' "${input}.fai"` 
-			if [ "$SI" -le "$SJ" ] ; then 
-				for m in n y ; do
-					[ "$m" == "y" ] && rc="-r" || rc="";
-					echo "${TIME} -f'TIMING: %e %M' sedef search -k 12 -w 16 ${rc} ${input} $i $j >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
-				done
-			fi
+	for j in {0..$((numchrs - 1))}; do # reference
+		for i in {$j..$((numchrs - 1))}; do # query; query < reference
+			for m in n y ; do
+				[ "$m" == "y" ] && rc="-r" || rc="";
+				echo "${TIME} -f'TIMING: %e %M' sedef search -k 12 -w 16 ${rc} ${input} -t $i $j >${output}/seeds/${i}_${j}_${m}.bed 2>${output}/log/seeds/${i}_${j}_${m}.log"
+			done
 		done
 	done | tee "${output}/seeds.comm" | ${TIME} -f'Seeding time: %E' parallel --will-cite -j ${jobs} --bar --joblog "${output}/seeds.joblog"
 

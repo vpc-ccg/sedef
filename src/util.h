@@ -7,14 +7,14 @@
 
 /******************************************************************************/
 
-#pragma once 
+#pragma once
 
-#include <vector>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 /******************************************************************************/
 
@@ -28,5 +28,5 @@ std::string rc(const std::string &s);
 
 double tau(double edit_error, int kmer_size);
 
-int relaxed_jaccard_estimate(int s, int kmer_size, std::unordered_map<int, int> &mm);
-
+int relaxed_jaccard_estimate(int s, int kmer_size,
+                             std::unordered_map<int, int> &mm);

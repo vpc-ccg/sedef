@@ -11,15 +11,15 @@
 
 /******************************************************************************/
 
-#include <list>
-#include <vector>
-#include <string>
 #include <cmath>
+#include <list>
+#include <string>
+#include <vector>
 
 #include "common.h"
 #include "hit.h"
 
 /******************************************************************************/
 
-std::vector<Hit> fast_align(const std::string &query, const std::string &ref, 
-	const Hit &orig, int kmer_size);
+std::vector<Hit> fast_align(const std::string &query, const std::string &ref,
+                            const Hit &orig, int kmer_size);

@@ -11,17 +11,15 @@
 
 /******************************************************************************/
 
-#include <list>
-#include <vector>
-#include <string>
 #include <cmath>
+#include <list>
+#include <string>
+#include <vector>
 
 #include "common.h"
 #include "search.h"
 
 /******************************************************************************/
 
-std::pair<bool, std::string> filter(
-	const std::string &q, int q_pos, int q_end, 
-	const std::string &r, int r_pos, int r_end);
-
+std::pair<bool, std::string> filter(const std::string &q, int q_pos, int q_end,
+                                    const std::string &r, int r_pos, int r_end);

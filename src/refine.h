@@ -11,17 +11,15 @@
 
 /******************************************************************************/
 
-#include <list>
-#include <vector>
-#include <string>
 #include <cmath>
+#include <list>
+#include <string>
+#include <vector>
 
 #include "common.h"
 #include "hit.h"
 
 /******************************************************************************/
 
-void refine_chains(std::vector<Hit> &anchors, 
-	const std::string &qseq, 
-	const std::string &rseq,
-	const Hit &orig);
+void refine_chains(std::vector<Hit> &anchors, const std::string &qseq,
+                   const std::string &rseq, const Hit &orig);

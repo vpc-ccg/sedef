@@ -20,5 +20,4 @@
 /******************************************************************************/
 
 void search_main(int argc, char **argv);
-
-
+void trans_main(int argc, char **argv);
