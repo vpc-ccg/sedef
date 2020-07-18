@@ -309,11 +309,16 @@ void process(Hit hs, string cigar, FastaReference &fr) {
       h.comment = "";
 #pragma omp critical
       prn("{}\t"
-          "{}\t{}\t{}\t{}\t{}\t{}\t"
-          "{}\t{}\t{}\t{}\t{}\t{}\t"
+          "{}\t{}\t"
           "{}\t{}\t{}\t"
-          "{}\t{}\t{}\t{}\t"
-          "{}\t{}\t{}",
+          "{}\t{}\t"
+          "{}\t{}\t"
+          "{}\t{}\t"
+          "{}\t"
+          "{}\t{}\t{}\t"
+          "{}\t{}\t{}\t"
+          "{}\t"
+          "{}\t{}",
           h.to_bed(false, false, &fr),              // 1-13
           indel_a, indel_b,                         // 15-16
           alignB, matchB, mismatchB,                // 17-19
@@ -371,7 +376,7 @@ void stats(const string &ref_path, const string &bed_path) {
   string prev;
 
   prn("#chr1\tstart1\tend1\tchr2\tstart2\tend2\tname\tscore\tstrand1\tstrand2\t"
-      "max_len\taln_len\tcomment\t"                          // 1-13
+      "max_len\taln_len\tcomment\t"                 // 1-13
       "indel_a\tindel_b\talnB\tmatchB\tmismatchB\t" // 14-19
       "transitionsB\ttransversions\tfracMatch\tfracMatchIndel\tjck\tk2K\t" // 20-25
       "aln_gaps\tuppercaseA\tuppercaseB\tuppercaseMatches\t"   // 26-29

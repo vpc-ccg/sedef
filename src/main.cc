@@ -94,9 +94,9 @@ void print_help() {
        "    --max-error \n"
        "      maximum wgac-scaled error rate allowed for SD (default: 0.5) \n"
        // "- translate [fasta] [new_fasta] \n"
-       // "  merge [old_fasta] chromosomes to larger chromosomes in [new_fasta] \n"
-       // "  each chromosome is of size [max_size] which is by default 100 MB \n"
-       // "  useful for incomplete assemblies with lots of small contigs"
+       // "  merge [old_fasta] chromosomes to larger chromosomes in [new_fasta]
+       // \n" "  each chromosome is of size [max_size] which is by default 100
+       // MB \n" "  useful for incomplete assemblies with lots of small contigs"
        // "  params: \n"
        // "    -m, --max-size \n"
        // "      maximum chromosome size \n"

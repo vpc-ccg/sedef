@@ -169,9 +169,9 @@ void search_single(const string &ref_path, const string &query_chr,
   }
   eprn("Building index took {:.1f}s", elapsed(T)), T = cur_time();
 
-  for (auto &r: rr) {
+  for (auto &r : rr) {
     auto ref_hash = indices[{r, is_ref_complement}];
-    for (auto &q: qr) {
+    for (auto &q : qr) {
       auto query_hash = indices[{q, false}];
       bool is_same_genome = (q == r) && !is_ref_complement;
       total += initial_search(
