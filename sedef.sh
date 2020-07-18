@@ -168,6 +168,11 @@ if [ ! -f "${output}/bucket.joblog.ok" ] || [ "${force}" == "y" ]; then
 	mkdir -p "${output}/align"
 	${TIME} -f'Bucketing time: %E' sedef align bucket -n 1000 "${output}/seeds" "${output}/align" "${input}" 2>"${output}/log/bucket.log"
 
+	if [ $? -ne 0 ]; then
+		echo "Error: bucketing failed; exiting..."
+		exit 2
+	fi
+
 	touch "${output}/bucket.joblog.ok"
 fi
 
@@ -222,6 +227,11 @@ if [ ! -f "${output}/report.joblog.ok" ] || [ "${force}" == "y" ]; then
 		sedef stats generate ${stat_params} "${input}" "${output}/aligned.bed" |\
 		sort -k1,1V -k9,9r -k10,10r -k4,4V -k2,2n -k3,3n -k5,5n -k6,6n |\
 		uniq > "${output}/final.bed") 2>&1 | sed 1d
+
+	if [ $? -ne 0 ]; then
+		echo "Error: filtering failed; exiting..."
+		exit 2
+	fi
 
 	echo "Line counts:"
 	wc -l "${output}/"*.bed	
