@@ -1,6 +1,7 @@
 CXX=g++
-CPPFLAGS=-c -I fmt -I . -std=c++14 -I src -fopenmp -fdiagnostics-color -march=native
-LDFLAGS=-lz -fopenmp  
+OPENMP?=-fopenmp
+CPPFLAGS=-c -I fmt -I . -std=c++14 -I src $(OPENMP) -fdiagnostics-color -march=native
+LDFLAGS=-lz $(OPENMP) 
 # -lboost_system -lboost_thread-mt
 
 UNAME_S := $(shell uname -s)

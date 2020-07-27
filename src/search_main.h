@@ -19,6 +19,7 @@
 
 /******************************************************************************/
 
+std::vector<std::vector<std::string>>
+generate_translation(const std::string &ref_path, bool print = false);
 void search_main(int argc, char **argv);
-
-
+void trans_main(int argc, char **argv);
