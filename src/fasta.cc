@@ -95,27 +95,6 @@ FastaReference::FastaReference(string filename) {
   filesize = sb.st_size;
   // map the whole file
   filemm = mmap(NULL, filesize, PROT_READ, MAP_SHARED, fd, 0);
-
-  FILE *tfile;
-  if (tfile = fopen(fmt::format("{}.sedef-translate", filename).c_str(), "r")) {
-    eprn("Detected FASTA translation index for {}", filename);
-    char *buf = 0;
-    size_t sz = 0;
-    while (getline(&buf, &sz, tfile) != -1) {
-      string s = string(buf);
-      if (s.size() && s.back() == '\n')
-        s = s.substr(0, s.size() - 1);
-      auto ss = split(string(buf), '\t');
-      assert(ss.size() == 3);
-      translation_index[ss[1]].push_back(
-          make_pair(atoi(ss[2].c_str()), string(ss[0])));
-    }
-    for (auto &t : translation_index) {
-      sort(t.second.begin(), t.second.end());
-      assert(t.second.size());
-      assert(t.second[0].first == 0);
-    }
-  }
 }
 
 FastaReference::~FastaReference(void) {

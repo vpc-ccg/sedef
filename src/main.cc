@@ -93,14 +93,6 @@ void print_help() {
        "(default: 100) \n"
        "    --max-error \n"
        "      maximum wgac-scaled error rate allowed for SD (default: 0.5) \n"
-       // "- translate [fasta] [new_fasta] \n"
-       // "  merge [old_fasta] chromosomes to larger chromosomes in [new_fasta]
-       // \n" "  each chromosome is of size [max_size] which is by default 100
-       // MB \n" "  useful for incomplete assemblies with lots of small contigs"
-       // "  params: \n"
-       // "    -m, --max-size \n"
-       // "      maximum chromosome size \n"
-
        "- help \n"
        "  Displays this help message \n"
        "\n"
@@ -147,8 +139,9 @@ int main(int argc, char **argv) {
       align_main(argc - 2, argv + 2);
     } else if (command == "stats") {
       stats_main(argc - 2, argv + 2);
-    } else if (command == "translate") {
-      trans_main(argc - 2, argv + 2);
+      // } else if (command == "translate") {
+      // Used for debugging
+      // trans_main(argc - 2, argv + 2);
     } else {
       eprn("Whoops, invalid command!");
     }

@@ -147,7 +147,6 @@ void search_single(const string &ref_path, const string &query_chr,
     auto ref = generate_translation(ref_path);
     qr = ref[std::stoi(query_chr)];
     rr = ref[std::stoi(ref_chr)];
-    // eprn("Transform: {} to {}", v2s(qr), v2s(rr));
   }
 
   // q < r ?
