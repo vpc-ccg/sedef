@@ -139,9 +139,8 @@ int main(int argc, char **argv) {
       align_main(argc - 2, argv + 2);
     } else if (command == "stats") {
       stats_main(argc - 2, argv + 2);
-      // } else if (command == "translate") {
-      // Used for debugging
-      // trans_main(argc - 2, argv + 2);
+    } else if (command == "translate") {
+      trans_main(argc - 2, argv + 2);
     } else {
       eprn("Whoops, invalid command!");
     }
