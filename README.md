@@ -1,3 +1,6 @@
+# 🔴 ⚠️ SEDEF has been deprecated. Please use [BISER](https://github.com/0xTCG/biser/) (SEDEF's successor) instead. ⚠️ 🔴
+
+
 # SEDEF: <u>Se</u>gmental <u>D</u>uplication <u>E</u>valuation <u>F</u>ramework
 
 SEDEF is a tool for quick detection of segmental duplications in a genome.
